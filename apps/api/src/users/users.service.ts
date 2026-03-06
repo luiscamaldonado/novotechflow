@@ -40,4 +40,27 @@ export class UsersService {
             },
         });
     }
+
+    async findAll() {
+        return this.prisma.user.findMany({
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                nomenclature: true,
+                isActive: true,
+                createdAt: true,
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+    }
+
+    async deleteUser(id: string) {
+        return this.prisma.user.delete({
+            where: { id }
+        });
+    }
 }

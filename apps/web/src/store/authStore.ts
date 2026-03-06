@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { api } from '../lib/api';
 
 interface User {
     id: string;
@@ -43,7 +42,6 @@ export const useAuthStore = create<AuthState>((set) => ({
 
         if (token && userStr) {
             try {
-                const user = JSON.stringify(userStr);
                 set({ token, user: JSON.parse(userStr), isAuthenticated: true, isLoading: false });
             } catch (e) {
                 set({ token: null, user: null, isAuthenticated: false, isLoading: false });
