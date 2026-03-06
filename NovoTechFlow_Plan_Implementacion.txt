@@ -1,0 +1,867 @@
+NOVOTECHFLOW
+
+Sistema de Propuestas Comerciales
+
+PLAN DE IMPLEMENTACIÓN
+
+NOVOTECHNO DE COLOMBIA
+
+Canal de cómputo empresarial, software, servicios y accesorios
+
+Dell | Lenovo | HP | Otras marcas
+
+Versión 1.0 — Marzo 2026
+
+Documento Confidencial
+
+CONTENIDO
+
+1. Resumen Ejecutivo
+
+2. Arquitectura del Sistema
+
+3. Stack Tecnológico
+
+4. Modelo de Datos (Base de Datos)
+
+5. Módulos y Pantallas de la Aplicación
+
+6. Aplicativo de Escritorio (Tauri + Rust)
+
+7. Generación de PDF
+
+8. Sistema de Versionado de Propuestas
+
+9. Identidad Visual y Paleta de Colores
+
+10. Fases de Implementación y Cronograma
+
+11. Estructura del Monorepo
+
+12. Pruebas y Calidad
+
+13. Despliegue e Infraestructura
+
+14. Riesgos y Mitigación
+
+15. Entregables por Fase
+
+1. Resumen Ejecutivo
+
+NovoTechFlow es una aplicación web diseñada específicamente para NOVOTECHNO DE COLOMBIA, un canal de cómputo empresarial que comercializa laptops, servidores, workstations, software, servicios y accesorios de marcas como Dell, Lenovo y HP. La herramienta permitirá a los equipos comerciales crear, versionar y exportar propuestas comerciales profesionales en formato PDF, con cálculo automático de márgenes, costos y precios de venta.
+
+El sistema incluye una aplicación web principal y un aplicativo de escritorio (Tauri + Rust) para sincronización de archivos locales con el servidor.
+
+Objetivos principales
+
+-   Centralizar la creación de propuestas comerciales en una sola plataforma.
+
+-   Automatizar el cálculo de márgenes, impuestos (IVA) y precios de venta.
+
+-   Generar PDFs profesionales con branding corporativo consistente.
+
+-   Controlar versiones de propuestas de forma inmutable.
+
+-   Sincronizar archivos locales con el servidor mediante la app de escritorio.
+
+-   Dashboard de seguimiento con exportación de informes a Excel.
+
+2. Arquitectura del Sistema
+
+El sistema sigue una arquitectura cliente-servidor con monorepo, separando frontend, backend y aplicativo de escritorio en paquetes independientes gestionados por Turborepo.
+
+2.1 Diagrama de alto nivel
+
+[Navegador Web] ↔ [React + Vite (SPA)] ↔ [NestJS API REST] ↔ [PostgreSQL]
+
+[Tauri Desktop App] ↔ [NestJS API REST] ↔ [File Storage / S3]
+
+2.2 Componentes principales
+
+-   Frontend Web (React 18 + Vite): SPA con enrutamiento protegido por roles. Comunicación vía REST API con el backend. UI responsiva con Tailwind CSS.
+
+-   Backend API (NestJS 10): API RESTful con autenticación JWT, controladores por módulo (auth, users, proposals, products, pdf-generation, file-sync). Validación con class-validator y class-transformer.
+
+-   Base de Datos (PostgreSQL 15 + Prisma ORM): Modelo relacional normalizado. Migraciones versionadas con Prisma Migrate.
+
+-   Aplicativo de Escritorio (Tauri + Rust): App nativa liviana para sincronización bidireccional de archivos. Login con credenciales del sistema web.
+
+3. Stack Tecnológico
+
+  --------------------- --------------------------------- ------------------------
+  Capa                  Tecnología                        Versión
+
+  Runtime               Node.js LTS                       v24.14.0
+
+  Gestor de paquetes    pnpm                              v8.15.5
+
+  Monorepo              Turborepo                         v1.12.4
+
+  Lenguaje              TypeScript (unificado)            v5.3.3
+
+  Frontend              React + Vite                      v18.2.0 + v5.1.6
+
+  UI/Estilos            Tailwind CSS + shadcn/ui          Última estable
+
+  Backend               NestJS                            v10.0.0
+
+  ORM                   Prisma ORM                        v5.10.2
+
+  Base de datos         PostgreSQL (Docker Alpine)        v15
+
+  Desktop App           Tauri + Rust                      Última estable
+
+  Build Tools           Visual Studio C++ Build Tools     2022
+
+  PDF Generation        Puppeteer / @react-pdf/renderer   Última estable
+
+  Autenticación         JWT (passport-jwt)                Última estable
+
+  Exportación Excel     ExcelJS / SheetJS                 Última estable
+  --------------------- --------------------------------- ------------------------
+
+4. Modelo de Datos (Base de Datos)
+
+A continuación se describen las entidades principales del sistema con sus campos y relaciones clave. Este modelo se implementará en PostgreSQL vía Prisma ORM.
+
+4.1 Tabla: users
+
+  ---------------- -------------- ------------------ -------------------------------
+  Campo            Tipo           Restricción        Descripción
+
+  id               UUID           PK, auto           Identificador único
+
+  name             VARCHAR(100)   NOT NULL           Nombre completo del usuario
+
+  email            VARCHAR(150)   UNIQUE, NOT NULL   Correo electrónico
+
+  password_hash    VARCHAR(255)   NOT NULL           Contraseña hasheada (bcrypt)
+
+  role             ENUM           NOT NULL           ADMIN | COMMERCIAL
+
+  nomenclature     VARCHAR(10)    UNIQUE, NOT NULL   Siglas del comercial (ej: LM)
+
+  is_active        BOOLEAN        DEFAULT true       Estado del usuario
+
+  created_at       TIMESTAMP      DEFAULT NOW()      Fecha de creación
+
+  updated_at       TIMESTAMP      ON UPDATE          Fecha de actualización
+  ---------------- -------------- ------------------ -------------------------------
+
+4.2 Tabla: proposals
+
+  ------------------ -------------- --------------- ------------------------------
+  Campo              Tipo           Restricción     Descripción
+
+  id                 UUID           PK, auto        Identificador único
+
+  proposal_code      VARCHAR(20)    UNIQUE          Código COT-LM0001
+
+  user_id            UUID           FK → users      Comercial creador
+
+  client_name        VARCHAR(200)   NOT NULL        Nombre del cliente
+
+  subject            TEXT           NOT NULL        Asunto de la propuesta
+
+  issue_date         DATE           NOT NULL        Fecha de emisión
+
+  validity_days      INT                            Validez en días
+
+  validity_date      DATE                           Fecha de vigencia
+
+  status             ENUM           NOT NULL        DRAFT | COMPLETED | ARCHIVED
+
+  current_version    INT            DEFAULT 1       Versión activa
+
+  is_locked          BOOLEAN        DEFAULT false   Bloqueo al completar
+
+  created_at         TIMESTAMP      DEFAULT NOW()   Fecha creación
+
+  updated_at         TIMESTAMP      ON UPDATE       Fecha actualización
+  ------------------ -------------- --------------- ------------------------------
+
+4.3 Tabla: proposal_versions
+
+  ------------------ -------------- ---------------- ----------------------------------
+  Campo              Tipo           Restricción      Descripción
+
+  id                 UUID           PK, auto         Identificador único
+
+  proposal_id        UUID           FK → proposals   Propuesta padre
+
+  version_number     INT            NOT NULL         Número de versión
+
+  snapshot_data      JSONB          NOT NULL         Snapshot inmutable del contenido
+
+  pdf_url            VARCHAR(500)                    URL del PDF generado
+
+  is_locked          BOOLEAN        DEFAULT true     Inmutable al crear
+
+  created_at         TIMESTAMP      DEFAULT NOW()    Fecha de creación
+  ------------------ -------------- ---------------- ----------------------------------
+
+4.4 Tabla: proposal_items (Artículos/Productos)
+
+  ------------------- --------------- ---------------- ------------------------------
+  Campo               Tipo            Restricción      Descripción
+
+  id                  UUID            PK, auto         Identificador único
+
+  proposal_id         UUID            FK → proposals   Propuesta asociada
+
+  section_id          UUID            FK → sections    Sección contenedora
+
+  item_type           ENUM            NOT NULL         PRODUCT | SOFTWARE | SERVICE
+
+  name                VARCHAR(300)    NOT NULL         Nombre del artículo
+
+  description         TEXT                             Descripción técnica
+
+  brand               VARCHAR(50)                      Marca (Dell, Lenovo, HP...)
+
+  part_number         VARCHAR(50)                      Número de parte
+
+  quantity            INT             DEFAULT 1        Cantidad
+
+  unit_cost           DECIMAL(15,2)   NOT NULL         Costo unitario
+
+  margin_pct          DECIMAL(5,2)                     Porcentaje de margen
+
+  unit_price          DECIMAL(15,2)                    Precio de venta unitario
+
+  is_taxable          BOOLEAN         DEFAULT true     Gravado con IVA (19%)
+
+  sort_order          INT             DEFAULT 0        Orden de visualización
+
+  created_at          TIMESTAMP       DEFAULT NOW()    Fecha creación
+  ------------------- --------------- ---------------- ------------------------------
+
+4.5 Tabla: proposal_sections
+
+Permite organizar el contenido de la propuesta en secciones ordenables: páginas de texto, imágenes, tablas y descripciones técnicas.
+
+  ------------------ -------------- ---------------- ---------------------------------------------------
+  Campo              Tipo           Restricción      Descripción
+
+  id                 UUID           PK, auto         Identificador único
+
+  proposal_id        UUID           FK → proposals   Propuesta asociada
+
+  section_type       ENUM           NOT NULL         TEXT | IMAGE | TABLE | TECH_SPECS | COVER | TERMS
+
+  title              VARCHAR(200)                    Título de la sección
+
+  content            JSONB                           Contenido dinámico (rich text, URLs, datos tabla)
+
+  sort_order         INT            DEFAULT 0        Orden de la sección en el PDF
+
+  created_at         TIMESTAMP      DEFAULT NOW()    Fecha creación
+  ------------------ -------------- ---------------- ---------------------------------------------------
+
+4.6 Tabla: scenarios (Escenarios de cotización)
+
+  ------------------ -------------- ---------------- ---------------------------
+  Campo              Tipo           Restricción      Descripción
+
+  id                 UUID           PK, auto         Identificador único
+
+  proposal_id        UUID           FK → proposals   Propuesta asociada
+
+  name               VARCHAR(100)   NOT NULL         Nombre del escenario
+
+  description        TEXT                            Descripción del escenario
+
+  sort_order         INT            DEFAULT 0        Orden del escenario
+  ------------------ -------------- ---------------- ---------------------------
+
+4.7 Tabla: scenario_items
+
+Tabla pivote que vincula los artículos de la propuesta con cada escenario, permitiendo que un mismo producto aparezca en múltiples escenarios con diferentes cantidades o precios.
+
+  --------------------- --------------- --------------------- ----------------------------
+  Campo                 Tipo            Restricción           Descripción
+
+  id                    UUID            PK, auto              Identificador único
+
+  scenario_id           UUID            FK → scenarios        Escenario asociado
+
+  item_id               UUID            FK → proposal_items   Artículo de la propuesta
+
+  quantity              INT             DEFAULT 1             Cantidad en este escenario
+
+  unit_cost_override    DECIMAL(15,2)   NULLABLE              Costo personalizado
+
+  margin_pct_override   DECIMAL(5,2)    NULLABLE              Margen personalizado
+
+  unit_price_override   DECIMAL(15,2)   NULLABLE              Precio personalizado
+  --------------------- --------------- --------------------- ----------------------------
+
+4.8 Tabla: pdf_templates
+
+Permite al administrador diseñar y organizar las páginas estándar del PDF (introducción, términos y condiciones, etc.) que serán reutilizables por todos los usuarios.
+
+  ------------------ -------------- --------------- --------------------------------
+  Campo              Tipo           Restricción     Descripción
+
+  id                 UUID           PK, auto        Identificador único
+
+  name               VARCHAR(100)   NOT NULL        Nombre de la plantilla
+
+  template_type      ENUM           NOT NULL        COVER | INTRO | TERMS | CUSTOM
+
+  content            JSONB          NOT NULL        Contenido de la plantilla
+
+  sort_order         INT            DEFAULT 0       Orden por defecto
+
+  is_active          BOOLEAN        DEFAULT true    Activa/Inactiva
+
+  created_by         UUID           FK → users      Admin que la creó
+  ------------------ -------------- --------------- --------------------------------
+
+4.9 Tabla: synced_files
+
+  ------------------ -------------- ---------------- -------------------------------
+  Campo              Tipo           Restricción      Descripción
+
+  id                 UUID           PK, auto         Identificador único
+
+  user_id            UUID           FK → users       Usuario que sincronizó
+
+  proposal_id        UUID           FK → proposals   Propuesta asociada (opcional)
+
+  file_name          VARCHAR(255)   NOT NULL         Nombre del archivo
+
+  file_path          VARCHAR(500)   NOT NULL         Ruta en servidor
+
+  local_path         VARCHAR(500)                    Ruta local del usuario
+
+  file_size          BIGINT                          Tamaño en bytes
+
+  checksum           VARCHAR(64)                     Hash SHA-256 para integridad
+
+  sync_status        ENUM           DEFAULT SYNCED   SYNCED | PENDING | ERROR
+
+  synced_at          TIMESTAMP      DEFAULT NOW()    Fecha de sincronización
+  ------------------ -------------- ---------------- -------------------------------
+
+4.10 Diagrama de Relaciones (ERD resumido)
+
+users 1 ─── N proposals
+
+proposals 1 ─── N proposal_versions
+
+proposals 1 ─── N proposal_sections
+
+proposals 1 ─── N proposal_items
+
+proposals 1 ─── N scenarios
+
+scenarios N ─── N proposal_items (via scenario_items)
+
+users 1 ─── N synced_files
+
+users (ADMIN) 1 ─── N pdf_templates
+
+5. Módulos y Pantallas de la Aplicación
+
+5.1 Pantalla 1 — Login
+
+Pantalla de inicio de sesión unificada para todos los perfiles de usuario.
+
+Funcionalidades:
+
+-   Campos: correo electrónico y contraseña.
+
+-   Autenticación JWT con tokens de acceso y refresh token.
+
+-   Redirección automática según rol: Admin ve panel completo, Comercial ve dashboard.
+
+-   Branding NovoTechFlow con paleta corporativa.
+
+Especificaciones técnicas:
+
+-   Endpoint: POST /api/auth/login → devuelve { accessToken, refreshToken, user }.
+
+-   Guards de NestJS: AuthGuard (JWT) y RolesGuard (ADMIN/COMMERCIAL).
+
+-   Frontend: React Router con rutas protegidas (PrivateRoute component).
+
+5.2 Pantalla 2 — Panel de Administración (solo Admin)
+
+Panel exclusivo para usuarios con rol ADMIN. Contiene dos módulos principales: gestión de usuarios y acceso al generador de propuestas.
+
+Módulo 2.1 — Gestión de Usuarios:
+
+-   Formulario de creación: nombre, correo, contraseña, rol (Admin/Comercial), nomenclatura.
+
+-   Validación de nomenclatura única: se genera automáticamente de las iniciales del nombre (ej: Luis Maldonado → LM) con posibilidad de edición.
+
+-   Vista previa del formato de propuesta: COT-[NOMENCLATURA]####. Ejemplo: COT-LM0001.
+
+-   Tabla de usuarios existentes con acciones: editar, activar/desactivar, resetear contraseña.
+
+-   Endpoints: GET/POST/PATCH /api/users (protegidos con RolesGuard ADMIN).
+
+Módulo 2.2 — Acceso a Propuestas:
+
+-   Acceso directo al dashboard de propuestas (Pantalla 3).
+
+-   El admin puede ver todas las propuestas de todos los comerciales.
+
+5.3 Pantalla 3 — Dashboard de Propuestas
+
+Panel principal que muestra el resumen consolidado de todas las propuestas comerciales.
+
+Componentes del Dashboard:
+
+-   Tarjetas de resumen (KPIs): total propuestas, valor total cotizado, propuestas activas, propuestas completadas, margen promedio.
+
+-   Tabla de propuestas: código (COT-XX####), cliente, asunto, fecha emisión, fecha actualización, estado (borrador/completada/archivada), versión actual, valor total.
+
+-   Filtros avanzados: por comercial, por cliente, por rango de fechas, por estado, por rango de valor.
+
+-   Botón de exportación a Excel: genera archivo .xlsx con los datos filtrados.
+
+-   Acciones rápidas por fila: ver, editar (si está en borrador), clonar, descargar PDF, crear nueva versión.
+
+Especificaciones técnicas:
+
+-   Endpoint: GET /api/proposals?filters=... con paginación, ordenamiento y filtros.
+
+-   Endpoint export: GET /api/proposals/export-excel con los mismos filtros.
+
+-   Frontend: React Table (TanStack Table) con virtualización, Recharts para gráficos.
+
+5.4 Pantalla 4 — Constructor de Propuesta Comercial
+
+Pantalla principal de creación y edición del contenido de la propuesta. Aquí se definen los artículos, secciones, escenarios y el contenido que conformará el PDF final.
+
+Encabezado de la propuesta:
+
+-   Código autogenerado (COT-[NOMENCLATURA]####).
+
+-   Nombre del cliente (campo de texto con autocompletado de clientes previos).
+
+-   Asunto de la propuesta.
+
+-   Fecha de emisión, validez en días y fecha de vigencia.
+
+Configurador de artículos:
+
+-   Campos seleccionables: tipo (producto/software/servicio), marca, nombre, part number, descripción técnica.
+
+-   Cuadros de texto enriquecido para características detalladas.
+
+-   Acciones por artículo: clonar, editar, eliminar, reordenar (drag & drop).
+
+Botones flotantes (Floating Action Buttons):
+
+-   Agregar Sección: añade una nueva sección de contenido.
+
+-   Agregar Escenario: crea un escenario alternativo de cotización.
+
+-   Crear Versión: genera una nueva versión de la propuesta.
+
+-   Agregar Página: inserta páginas de texto, imágenes o tablas.
+
+Secciones de contenido para el PDF:
+
+-   Páginas de texto: editor rich text (TipTap/Slate) con formato básico.
+
+-   Páginas de imágenes: upload de imágenes con posicionamiento y título.
+
+-   Páginas de tablas: tablas personalizables con datos editables.
+
+-   Descripción técnica: autogenerada desde los artículos configurados.
+
+5.5 Pantalla 5 — Calculadora de Costos y Márgenes
+
+Tabla dinámica interconectada con los artículos creados en la Pantalla 4. Todos los cálculos se actualizan en tiempo real.
+
+Funcionalidades:
+
+-   Tabla editable en línea: cada fila es un artículo con columnas para costo, margen %, precio unitario, cantidad, subtotal, IVA, total.
+
+-   Cálculo automático de margen: Precio = Costo / (1 - Margen%). Al modificar uno se recalculan los demás.
+
+-   Selector de escenarios: vista por escenario con totales independientes.
+
+-   Indicador de productos gravados (IVA 19%) vs no gravados.
+
+Totales calculados en tiempo real:
+
+-   Subtotal antes de impuestos (gravados + no gravados).
+
+-   Base gravable e IVA (19%).
+
+-   Total IVA incluido.
+
+-   Margen total de la propuesta (promedio ponderado).
+
+-   Costo total vs precio total (resumen de rentabilidad).
+
+Restricciones:
+
+-   Solo se pueden agregar artículos previamente creados en la Pantalla 4.
+
+-   Los cambios de precio/margen en esta pantalla se reflejan en el PDF de venta.
+
+Especificaciones técnicas:
+
+-   Frontend: estado centralizado con Zustand o React Context. Cálculos en cliente con debounce para autosave.
+
+-   Backend: validación de cálculos en servidor antes de guardar (doble verificación).
+
+6. Aplicativo de Escritorio (Tauri + Rust)
+
+Aplicación nativa liviana construida con Tauri y Rust, con interfaz web embebida. Su única función es la sincronización bidireccional de archivos con el servidor de la aplicación web.
+
+6.1 Funcionalidades
+
+-   Login: inicio de sesión con las mismas credenciales de la app web (JWT compartido).
+
+-   Creación automática de estructura de carpetas: Propuestas/{COT-XX####}/{Versión}/{Archivos}.
+
+-   Sincronización ascendente: sube archivos locales nuevos/modificados al servidor.
+
+-   Sincronización descendente: descarga archivos del servidor al equipo local.
+
+-   Verificación de integridad: comparación por checksum SHA-256.
+
+-   Indicador de estado: sincronizado, pendiente, error.
+
+6.2 Arquitectura técnica
+
+-   Core en Rust: manejo de filesystem, cálculo de hashes, upload/download HTTP.
+
+-   Frontend embebido: React (compartido del monorepo) con vista mínima.
+
+-   Comunicación: Tauri Commands (invoke) para llamar funciones Rust desde JS.
+
+-   Endpoints del backend: POST /api/files/upload, GET /api/files/download/:id, GET /api/files/sync-status.
+
+6.3 Estructura de carpetas locales
+
+NovoTechFlow/
+
+├── COT-LM0001/
+
+│ ├── v1/
+
+│ │ ├── propuesta.pdf
+
+│ │ └── anexos/
+
+│ └── v2/
+
+└── COT-LM0002/
+
+7. Generación de PDF
+
+El sistema genera documentos PDF profesionales a partir del contenido configurado en la propuesta. El administrador puede diseñar y organizar las páginas plantilla que estarán disponibles para todos los usuarios.
+
+7.1 Estructura del PDF
+
+-   Portada: branding corporativo, nombre del cliente, asunto, fecha, código de propuesta.
+
+-   Páginas de introducción: plantilla configurable por el administrador.
+
+-   Páginas de contenido: texto, imágenes y tablas configuradas en Pantalla 4.
+
+-   Descripción técnica: ficha de cada artículo con especificaciones detalladas.
+
+-   Tabla de precios por escenario: productos, cantidades, precios unitarios, subtotales, separación gravados/no gravados, base gravable, IVA 19%, total IVA incluido.
+
+-   Términos y condiciones: plantilla estándar configurable.
+
+7.2 Motor de generación
+
+Se recomienda un enfoque híbrido: React PDF (@react-pdf/renderer) para templates programables en JSX, con Puppeteer como fallback para rendering complejo con CSS avanzado. El backend genera el PDF y lo almacena vinculado a la versión de la propuesta.
+
+7.3 Administración de plantillas PDF
+
+-   El administrador accede a un editor de plantillas donde puede crear, editar y ordenar las páginas estándar.
+
+-   Tipos de plantilla: portada, introducción, términos y condiciones, páginas personalizadas.
+
+-   Las plantillas se almacenan como JSONB y se renderizan como componentes React al generar el PDF.
+
+8. Sistema de Versionado de Propuestas
+
+El versionado es un pilar fundamental de NovoTechFlow. Garantiza trazabilidad y previene modificaciones accidentales a propuestas ya entregadas.
+
+8.1 Reglas de versionado
+
+-   Una propuesta en estado DRAFT puede editarse libremente.
+
+-   Al completar una propuesta (estado COMPLETED), se genera un snapshot JSONB inmutable de todo el contenido y se bloquea (is_locked = true).
+
+-   Para modificar una propuesta completada, el usuario debe crear una nueva versión. Esto clona el contenido actual como base editable.
+
+-   Cada versión tiene su propio PDF asociado.
+
+-   Alternativa: crear una propuesta completamente nueva (nuevo código COT).
+
+8.2 Flujo de estados
+
+DRAFT ──[completar]──▶ COMPLETED (locked) ──[nueva versión]──▶ DRAFT (v2)
+
+COMPLETED ──[archivar]──▶ ARCHIVED
+
+9. Identidad Visual y Paleta de Colores
+
+  ------------------ ---------------- -------------------------------------------------------------
+  Color              Hex              Uso
+
+  Violeta primario   #713AEC          Botones principales, encabezados, enlaces activos, acentos.
+
+  Azul oscuro        #10082B          Fondo del sidebar, navbar, fondos oscuros.
+
+  Violeta medio      #2E1F56          Fondos secundarios, hover states, cards oscuras.
+
+  Gris claro         #FAF9FB          Fondo principal del contenido, backgrounds claros.
+
+  Violeta acento     #6E36E7          Iconos activos, badges, indicadores, highlights.
+
+  Blanco             #FFFFFF          Texto sobre fondo oscuro, cards, formularios.
+
+  Negro              #000000          Texto principal sobre fondo claro, datos en tablas.
+  ------------------ ---------------- -------------------------------------------------------------
+
+La interfaz seguirá un esquema de tema oscuro para el sidebar/navegación (#10082B) y tema claro para el área de contenido (#FAF9FB), con acentos en violeta (#713AEC) para elementos interactivos.
+
+10. Fases de Implementación y Cronograma
+
+El desarrollo se divide en 6 fases progresivas. Cada fase produce entregables funcionales y testeables.
+
+Fase 1 — Fundación (Semanas 1–3)
+
+Alcance:
+
+-   Configuración del monorepo Turborepo con pnpm workspaces.
+
+-   Setup del backend NestJS con módulos base, Prisma ORM y PostgreSQL en Docker.
+
+-   Modelo de datos inicial: users, proposals, proposal_versions.
+
+-   Autenticación JWT completa (login, refresh, guards por rol).
+
+-   Frontend React + Vite con Tailwind CSS, login funcional y rutas protegidas.
+
+-   Pantalla de login (Pantalla 1) completa.
+
+Entregable: Sistema de autenticación funcional con login y gestión de roles.
+
+Fase 2 — Gestión de Usuarios y Dashboard (Semanas 4–6)
+
+Alcance:
+
+-   Panel de administración (Pantalla 2): CRUD de usuarios, asignación de nomenclatura.
+
+-   Lógica de generación automática de códigos COT-[XX]####.
+
+-   Dashboard de propuestas (Pantalla 3): tabla con filtros, KPIs, paginación.
+
+-   Exportación a Excel de informes filtrados.
+
+Entregable: Panel admin funcional y dashboard con KPIs y exportación.
+
+Fase 3 — Constructor de Propuestas (Semanas 7–11)
+
+Alcance:
+
+-   Constructor de propuestas (Pantalla 4): encabezado, configurador de artículos, secciones.
+
+-   Editor de secciones: páginas de texto (rich text), imágenes, tablas.
+
+-   Botones flotantes para agregar secciones, escenarios, versiones.
+
+-   Acciones de artículos: clonar, editar, eliminar, drag & drop.
+
+-   Modelo de datos de escenarios y scenario_items.
+
+-   Autoguardado con debounce.
+
+Entregable: Constructor completo de propuestas con secciones y escenarios.
+
+Fase 4 — Calculadora y Generación PDF (Semanas 12–16)
+
+Alcance:
+
+-   Calculadora de costos y márgenes (Pantalla 5): tabla dinámica en tiempo real.
+
+-   Lógica fiscal colombiana: IVA 19%, separación gravados/no gravados.
+
+-   Motor de generación PDF con @react-pdf/renderer + Puppeteer.
+
+-   Administrador de plantillas PDF (portada, introducción, términos).
+
+-   Sistema de versionado inmutable completo.
+
+Entregable: Flujo completo de cotización: crear → calcular → generar PDF → versionar.
+
+Fase 5 — Aplicativo de Escritorio (Semanas 17–20)
+
+Alcance:
+
+-   Configuración de Tauri + Rust en el monorepo.
+
+-   Login compartido con la app web (JWT).
+
+-   Motor de sincronización de archivos (Rust): upload, download, checksum.
+
+-   Creación automática de estructura de carpetas locales.
+
+-   Endpoints de file sync en el backend NestJS.
+
+-   Empaquetado con instalador Windows (.msi).
+
+Entregable: App de escritorio Windows con sincronización funcional.
+
+Fase 6 — Pulido, Testing y Despliegue (Semanas 21–24)
+
+Alcance:
+
+-   Testing integral: unitario (Jest), integración (Supertest), E2E (Playwright).
+
+-   Optimización de rendimiento y UX.
+
+-   Documentación técnica y de usuario.
+
+-   Configuración de CI/CD y despliegue a producción.
+
+-   Capacitación de usuarios finales.
+
+Entregable: Sistema en producción con documentación completa.
+
+Resumen de cronograma
+
+  ---------- --------------------------- ------------------ ------------------
+  Fase       Nombre                      Duración           Semanas
+
+  1          Fundación                   3 semanas          S1 – S3
+
+  2          Usuarios y Dashboard        3 semanas          S4 – S6
+
+  3          Constructor de Propuestas   5 semanas          S7 – S11
+
+  4          Calculadora y PDF           5 semanas          S12 – S16
+
+  5          App de Escritorio           4 semanas          S17 – S20
+
+  6          Pulido y Despliegue         4 semanas          S21 – S24
+  ---------- --------------------------- ------------------ ------------------
+
+Duración total estimada: 24 semanas (aproximadamente 6 meses).
+
+11. Estructura del Monorepo
+
+novotechflow/
+
+├── apps/
+
+│ ├── web/ # React + Vite (frontend web)
+
+│ ├── api/ # NestJS (backend API)
+
+│ └── desktop/ # Tauri + Rust (app escritorio)
+
+├── packages/
+
+│ ├── shared/ # Tipos TypeScript compartidos
+
+│ ├── ui/ # Componentes React reutilizables
+
+│ └── pdf-templates/ # Componentes React PDF
+
+├── prisma/
+
+│ ├── schema.prisma # Esquema de BD
+
+│ └── migrations/ # Migraciones
+
+├── docker/
+
+│ └── docker-compose.yml # PostgreSQL + servicios
+
+├── turbo.json # Config Turborepo
+
+├── pnpm-workspace.yaml # Workspaces
+
+└── tsconfig.base.json # TS config base
+
+12. Pruebas y Calidad
+
+  ---------------- ------------------ ------------------------------------------------------
+  Tipo             Herramienta        Alcance
+
+  Unitarias        Jest + Vitest      Servicios NestJS, utilidades, cálculos de margen/IVA
+
+  Integración      Supertest          Endpoints API, flujos de autenticación, CRUD
+
+  E2E              Playwright         Flujos completos: login → crear propuesta → PDF
+
+  Componentes      Testing Library    Componentes React, formularios, tablas dinámicas
+
+  Desktop          Tauri test utils   Sincronización de archivos, manejo de errores
+  ---------------- ------------------ ------------------------------------------------------
+
+13. Despliegue e Infraestructura
+
+Opción recomendada: VPS / Cloud
+
+-   Servidor: VPS Linux (Ubuntu 22.04 LTS) con Docker Compose.
+
+-   PostgreSQL 15 en contenedor Docker con volúmenes persistentes.
+
+-   Backend NestJS: contenedor Docker con Node.js LTS.
+
+-   Frontend React: build estático servido por Nginx o Caddy.
+
+-   Almacenamiento de archivos: S3-compatible (MinIO self-hosted o AWS S3).
+
+-   SSL/TLS: Let’s Encrypt con Caddy o Certbot.
+
+-   CI/CD: GitHub Actions para build, test y deploy automático.
+
+-   Backups automáticos: pg_dump diario + copias S3.
+
+14. Riesgos y Mitigación
+
+  ---------------------------- ----------- ----------------------------------------------------------------------------------------------------------
+  Riesgo                       Impacto     Mitigación
+
+  Complejidad del PDF          Alto        Prototipar la generación PDF desde la Fase 1 con un template básico. Iterar incrementalmente.
+
+  Rendimiento tabla dinámica   Medio       Virtualizar la tabla con TanStack Virtual. Debounce en cálculos. Optimistic updates.
+
+  Sincronización de archivos   Medio       Implementar checksums SHA-256, reintentos automáticos, cola de sincronización.
+
+  Migraciones de BD            Medio       Usar Prisma Migrate con revisión en PR. Backups antes de cada migración.
+
+  Concurrencia de edición      Bajo        Bloqueo optimista con campo updated_at. Notificación si otro usuario modificó.
+
+  Compatibilidad Windows       Medio       Probar Tauri en múltiples versiones de Windows. Incluir Visual Studio C++ Build Tools como prerequisito.
+  ---------------------------- ----------- ----------------------------------------------------------------------------------------------------------
+
+15. Entregables por Fase
+
+  --------- ------------------------------ ----------------------------------------------------------------
+  Fase      Entregable                     Criterio de aceptación
+
+  1         Auth + Login funcional         Login exitoso con JWT, redirección por rol, rutas protegidas
+
+  2         Admin Panel + Dashboard        CRUD usuarios, nomenclatura, tabla propuestas, export Excel
+
+  3         Constructor propuestas         Crear artículos, secciones, escenarios. Clonar/editar/borrar
+
+  4         Calculadora + PDF              Cálculos tiempo real, IVA, PDF completo con plantillas
+
+  5         App escritorio                 Login, sync archivos, estructura carpetas, instalador .msi
+
+  6         Sistema en producción          Despliegue, testing >80% coverage, documentación, capacitación
+  --------- ------------------------------ ----------------------------------------------------------------
+
+NovoTechFlow — NOVOTECHNO DE COLOMBIA
+
+Plan de Implementación v1.0 — Marzo 2026
