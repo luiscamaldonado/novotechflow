@@ -862,6 +862,27 @@ Opción recomendada: VPS / Cloud
   6         Sistema en producción          Despliegue, testing >80% coverage, documentación, capacitación
   --------- ------------------------------ ----------------------------------------------------------------
 
-NovoTechFlow — NOVOTECHNO DE COLOMBIA
+16. Estándares de Codificación y Mejores Prácticas (Senior Level)
 
-Plan de Implementación v1.0 — Marzo 2026
+Para asegurar la escalabilidad, mantenibilidad y calidad técnica de NovoTechFlow, todo el código debe cumplir con:
+
+16.1 Principios SOLID y Arquitectura
+- Responsabilidad Única (SRP): Cada clase, módulo o función debe tener una única razón para cambiar.
+- Abierto/Cerrado (OCP): El sistema debe permitir extender funcionalidades sin modificar el código existente.
+- Segregación de Interfaces e Inyección de Dependencias: Uso extensivo de DI para desacoplar lógica de infraestructura.
+
+16.2 Diseño y Limpieza (Clean Code)
+- Legibilidad: Nombres de variables, funciones y clases descriptivos (evitar siglas o nombres genéricos).
+- Early Returns: Evitar anidamientos profundos de estructuras 'if/else' para mejorar la claridad del flujo.
+- Comentarios de Contexto: Documentar el "por qué" de decisiones técnicas complejas, dejando que el código explique el "qué".
+
+16.3 Documentación Profesional
+- Backend (NestJS/TS): Uso obligatorio de TSDoc para todos los métodos, controladores y servicios, especificando parámetros, tipos y excepciones.
+- Frontend (React): Documentación de Props, Componentes de alto nivel y Hooks personalizados.
+
+16.4 Arquitectura de Software
+- Separación de Responsabilidades: Clara distinción entre controladores (infraestructura), servicios (lógica de negocio) y entidades/repositorios (acceso a datos).
+
+NovoTechFlow — NOVOTECHNO DE COLOMBIA
+Plan de Implementación v1.1 — Marzo 2026
+Estándares Senior Engineering actualizados.

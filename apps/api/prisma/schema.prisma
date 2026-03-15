@@ -19,9 +19,12 @@ enum ProposalStatus {
 }
 
 enum ItemType {
-  PRODUCT
+  PCS
+  ACCESSORIES
+  PC_SERVICES
   SOFTWARE
-  SERVICE
+  INFRASTRUCTURE
+  INFRA_SERVICES
 }
 
 enum SectionType {
@@ -69,6 +72,7 @@ model Proposal {
   id             String         @id @default(uuid()) @db.Uuid
   proposalCode   String?        @unique @map("proposal_code") @db.VarChar(20)
   userId         String         @map("user_id") @db.Uuid
+  clientId       String?        @map("client_id") @db.Uuid
   clientName     String         @map("client_name") @db.VarChar(200)
   subject        String         @db.Text
   issueDate      DateTime       @map("issue_date") @db.Date
@@ -81,6 +85,7 @@ model Proposal {
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
   user             User              @relation(fields: [userId], references: [id])
+  client           Client?           @relation(fields: [clientId], references: [id])
   proposalVersions ProposalVersion[]
   proposalItems    ProposalItem[]
   proposalSections ProposalSection[]
@@ -138,9 +143,10 @@ model ProposalItem {
   marginPct     Decimal? @map("margin_pct") @db.Decimal(5, 2)
   unitPrice     Decimal? @map("unit_price") @db.Decimal(15, 2)
 
-  isTaxable Boolean  @default(true) @map("is_taxable")
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
+  isTaxable      Boolean  @default(true) @map("is_taxable")
+  sortOrder      Int      @default(0) @map("sort_order")
+  technicalSpecs Json?    @map("technical_specs")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   proposal      Proposal         @relation(fields: [proposalId], references: [id])
   section       ProposalSection? @relation(fields: [sectionId], references: [id])
@@ -229,4 +235,27 @@ model EmailLog {
   proposalVersion ProposalVersion? @relation(fields: [proposalVersionId], references: [id])
 
   @@map("email_logs")
+}
+
+model Client {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(200)
+  nit       String?  @db.VarChar(20)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  proposals Proposal[]
+  @@map("clients")
+}
+
+model Catalog {
+  id        String   @id @default(uuid()) @db.Uuid
+  category  String   @db.VarChar(50) // e.g., "FABRICANTE", "PROCESADOR"
+  value     String   @db.VarChar(200)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([category, value])
+  @@map("catalogs")
 }
