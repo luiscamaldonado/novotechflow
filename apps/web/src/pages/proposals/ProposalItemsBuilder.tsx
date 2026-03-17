@@ -157,11 +157,29 @@ export default function ProposalItemsBuilder() {
         });
     };
 
+    const TECH_ABBR = new Set([
+        'DDR','DDR3','DDR4','DDR5','DDR6',
+        'LPDDR','LPDDR3','LPDDR4','LPDDR4X','LPDDR5','LPDDR5X','LPDDR6',
+        'UDIMM','SODIMM','RDIMM','LRDIMM','ECC','DIMM',
+        'SSD','HDD','SATA','SAS','NVME','BGA','EMMC',
+        'RJ45','WIFI','LAN','WAN','NFC','USB','HDMI','DP','VGA','BIOS','UEFI','PCIE',
+        'TPM','IR',
+        'NVIDIA','AMD','INTEL','RTX','GTX','RX','RDNA',
+        'OS','IOT','CPU','GPU','NPU','RAM','ROM',
+        'GB','TB','MB','GHZ','MHZ','HP','IBM','ASUS'
+    ]);
     const toProperTitleCase = (str: string) => {
         if (!str) return '';
-        return str.toLowerCase()
-            .replace(/(^|[\s\(\/])(\w)/g, (match) => match.toUpperCase())
+        const titled = str.toLowerCase()
+            .replace(/(^|[\s\(\+\/\-])(\w)/g, (match) => match.toUpperCase())
             .trim();
+        return titled.replace(/[\w.\-]+/g, (token) => {
+            const upper = token.toUpperCase();
+            if (TECH_ABBR.has(upper)) return upper;
+            const withoutDigits = upper.replace(/\d+[A-Z]?$/, '');
+            if (withoutDigits && TECH_ABBR.has(withoutDigits)) return upper;
+            return token;
+        });
     };
 
     const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -400,15 +418,15 @@ export default function ProposalItemsBuilder() {
                                                     fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
                                                     modelo: { label: 'Modelo', cat: 'MODELO' },
                                                     procesador: { label: 'Procesador', cat: 'PROCESADOR' },
-                                                    sistemaOperativo: { label: 'OS', cat: 'SISTEMA_OPERATIVO' },
+                                                    sistemaOperativo: { label: 'Sistema Operativo', cat: 'SISTEMA_OPERATIVO' },
                                                     graficos: { label: 'Gráficos', cat: 'GRAFICOS' },
-                                                    memoriaRam: { label: 'RAM', cat: 'MEMORIA_RAM' },
-                                                    almacenamiento: { label: 'Disco', cat: 'ALMACENAMIENTO' },
+                                                    memoriaRam: { label: 'Memoria RAM', cat: 'MEMORIA_RAM' },
+                                                    almacenamiento: { label: 'Almacenamiento', cat: 'ALMACENAMIENTO' },
                                                     pantalla: { label: 'Pantalla', cat: 'PANTALLA' },
-                                                    network: { label: 'Net', cat: 'NETWORK' },
-                                                    seguridad: { label: 'Seg', cat: 'SEGURIDAD' },
-                                                    garantiaBateria: { label: 'G. Batería', cat: 'GARANTIA_BATERIA' },
-                                                    garantiaEquipo: { label: 'G. Equipo', cat: 'GARANTIA_EQUIPO' },
+                                                    network: { label: 'Network', cat: 'NETWORK' },
+                                                    seguridad: { label: 'Seguridad', cat: 'SEGURIDAD' },
+                                                    garantiaBateria: { label: 'Garantía Batería', cat: 'GARANTIA_BATERIA' },
+                                                    garantiaEquipo: { label: 'Garantía Equipo', cat: 'GARANTIA_EQUIPO' },
                                                 }).map(([field, spec]) => {
                                                     //@ts-ignore
                                                     const currentVal = itemForm.technicalSpecs?.[field] || '';
