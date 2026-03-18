@@ -34,7 +34,8 @@ export class ClientsService {
    * 3. Prioridad BAJA: Nombres que CONTIENEN el término en cualquier parte.
    */
   async search(query: string): Promise<ISearchResponse> {
-    const rawQuery = query?.toUpperCase() || '';
+    const normalizedQuery = query?.normalize("NFD").replace(/[\u0300-\u036f]/g, "") || '';
+    const rawQuery = normalizedQuery.toUpperCase();
 
     if (rawQuery.trim().length < 2) {
       return { results: [], suggestion: null };
