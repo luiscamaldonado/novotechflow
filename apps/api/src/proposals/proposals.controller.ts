@@ -86,6 +86,17 @@ export class ProposalsController {
     }
 
     /**
+     * Actualiza un ítem específico de una propuesta.
+     *
+     * @param {string} itemId - UUID del ítem a actualizar.
+     * @param {any} itemData - Datos del ítem a actualizar.
+     */
+    @Patch('items/:itemId')
+    async updateItem(@Param('itemId') itemId: string, @Body() itemData: any) {
+        return this.proposalsService.updateProposalItem(itemId, itemData);
+    }
+
+    /**
      * Lista todas las propuestas: ADMIN ve todas, COMERCIAL solo las propias.
      *
      * @param {Request} req - Request con el usuario autenticado.

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Package, Code, Wrench, Save, Loader2, ArrowRight,
     Plus, Trash2, Lock, Monitor, Laptop, Settings, Cpu,
-    Calendar, Clock, FileText, ChevronRight, Search
+    Calendar, Clock, FileText, ChevronRight, Search, Edit2, Copy
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -35,11 +35,15 @@ interface ProposalItem {
     description: string;
     brand: string;
     partNumber: string;
-    quantity: number;
-    unitCost: number;
-    marginPct: number;
-    unitPrice: number;
+    quantity: number | string;
+    unitCost: number | string;
+    marginPct: number | string;
+    unitPrice: number | string;
     technicalSpecs?: PcSpecs;
+    internalCosts?: {
+        proveedor?: string;
+        fletePct?: number | string;
+    };
 }
 
 const ITEM_TYPE_LABELS: Record<ItemType, string> = {
@@ -66,6 +70,7 @@ export default function ProposalItemsBuilder() {
     // Artículos
     const [items, setItems] = useState<ProposalItem[]>([]);
     const [isAddingItem, setIsAddingItem] = useState(false);
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
     // Formulario de artículo actual
     const initialItemForm: ProposalItem = {
@@ -75,10 +80,14 @@ export default function ProposalItemsBuilder() {
         brand: '',
         partNumber: '',
         quantity: 1,
-        unitCost: 0,
+        unitCost: '',
         marginPct: 20,
-        unitPrice: 0,
-        technicalSpecs: {}
+        unitPrice: '',
+        technicalSpecs: {},
+        internalCosts: {
+            proveedor: 'MAYORISTA',
+            fletePct: 1.5
+        }
     };
     const [itemForm, setItemForm] = useState<ProposalItem>(initialItemForm);
 
@@ -185,6 +194,24 @@ export default function ProposalItemsBuilder() {
     const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         let { name, value } = e.target;
 
+        // Convertir coma a punto y dejar solo números y un punto
+        if (['unitCost', 'marginPct', 'unitPrice', 'internal.fletePct', 'quantity'].includes(name)) {
+            value = value.replace(/,/g, '.');
+            value = value.replace(/[^\d.]/g, '');
+            const parts = value.split('.');
+            // Asegurar 1 solo punto
+            if (parts.length > 2) {
+                value = parts[0] + '.' + parts.slice(1).join('');
+            }
+            // Limitar a 2 decimales (Excepto cantidad que puede ser un entero o ignorar)
+            if (name !== 'quantity') {
+                const decParts = value.split('.');
+                if (decParts.length === 2 && decParts[1].length > 2) {
+                    value = decParts[0] + '.' + decParts[1].substring(0, 2);
+                }
+            }
+        }
+
         setItemForm(prev => {
             let next = { ...prev };
             
@@ -192,23 +219,59 @@ export default function ProposalItemsBuilder() {
                 const specField = name.split('.')[1];
                 next.technicalSpecs = { ...prev.technicalSpecs, [specField]: value };
                 setActiveSuggestion({ field: specField, index: -1 });
+            } else if (name.startsWith('internal.')) {
+                const internalField = name.split('.')[1];
+                let val: string | number = value;
+
+                // Dependencia directa de proveedor a flete
+                if (internalField === 'proveedor') {
+                    next.internalCosts = { 
+                        ...prev.internalCosts, 
+                        proveedor: value,
+                        fletePct: value === 'MAYORISTA' ? 1.5 : 0 
+                    };
+                } else {
+                    next.internalCosts = {
+                        ...prev.internalCosts,
+                        [internalField]: value
+                    };
+                }
             } else {
                 // @ts-ignore
-                next[name] = ['quantity', 'unitCost', 'marginPct', 'unitPrice'].includes(name) ? Number(value) : value;
+                next[name] = value;
             }
 
-            // Lógica de cálculo automático
-            if (name === 'unitCost' || name === 'marginPct') {
-                const cost = name === 'unitCost' ? Number(value) : next.unitCost;
-                const margin = name === 'marginPct' ? Number(value) : next.marginPct;
-                if (margin < 100) {
-                    next.unitPrice = cost / (1 - (margin / 100));
+            // Lógica de cálculo automático con Costo Landed (Márgen sobre costo + flete)
+            const cost = ['unitCost'].includes(name) ? Number(value) : Number(next.unitCost || 0);
+            const margin = ['marginPct'].includes(name) ? Number(value) : Number(next.marginPct || 0);
+            
+            let fleteValue = Number(next.internalCosts?.fletePct || 0);
+            if (name === 'internal.proveedor') {
+                fleteValue = value === 'MAYORISTA' ? 1.5 : 0;
+            } else if (name === 'internal.fletePct') {
+                fleteValue = Number(value);
+            }
+            const flete = fleteValue;
+            
+            const landedCost = cost * (1 + (flete / 100));
+
+            // Disparar cálculos bidireccionales de manera robusta
+            if (name === 'unitCost' || name === 'marginPct' || name === 'internal.fletePct' || name === 'internal.proveedor') {
+                if (margin < 100 && landedCost > 0) {
+                    const priceVal = landedCost / (1 - (margin / 100));
+                    next.unitPrice = priceVal.toFixed(2);
+                } else if (landedCost === 0) {
+                    next.unitPrice = ''; // En caso de que no haya costo, limpiamos
                 }
             } else if (name === 'unitPrice') {
                 const price = Number(value);
-                const cost = next.unitCost;
-                if (price > 0) {
-                    next.marginPct = ((price - cost) / price) * 100;
+                if (price > 0 && landedCost > 0) {
+                    // Calculamos margen en base a qué tan grande es el precio vs landed cost
+                    const marginVal = ((price - landedCost) / price) * 100;
+                    next.marginPct = marginVal.toFixed(2);
+                } else if (price > 0 && landedCost === 0) {
+                    // Si ya le puso precio de venta y no hay costo, el margen teóricamente es 100%
+                    next.marginPct = '100.00';
                 }
             }
 
@@ -231,16 +294,39 @@ export default function ProposalItemsBuilder() {
         e.preventDefault();
         try {
             setSaving(true);
-            const res = await api.post(`/proposals/${id}/items`, itemForm);
-            setItems(prev => [...prev, res.data]);
+            if (editingItemId) {
+                const res = await api.patch(`/proposals/items/${editingItemId}`, itemForm);
+                setItems(prev => prev.map(i => i.id === editingItemId ? res.data : i));
+            } else {
+                const res = await api.post(`/proposals/${id}/items`, itemForm);
+                setItems(prev => [...prev, res.data]);
+            }
             setIsAddingItem(false);
+            setEditingItemId(null);
             setItemForm(initialItemForm);
         } catch (error) {
             console.error(error);
-            alert("Error al agregar artículo.");
+            alert(`Error al ${editingItemId ? 'actualizar' : 'agregar'} artículo.`);
         } finally {
             setSaving(false);
         }
+    };
+
+    const editItem = (item: ProposalItem) => {
+        setItemForm(item);
+        setEditingItemId(item.id || null);
+        setIsAddingItem(true);
+        // Scroll to top or to the form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const duplicateItem = (item: ProposalItem) => {
+        const newItem = { ...item };
+        delete newItem.id;
+        setItemForm(newItem);
+        setEditingItemId(null);
+        setIsAddingItem(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const deleteItem = async (itemId: string) => {
@@ -262,9 +348,7 @@ export default function ProposalItemsBuilder() {
         );
     }
 
-    const totalCost = items.reduce((acc, i) => acc + (i.unitCost * i.quantity), 0);
-    const totalPrice = items.reduce((acc, i) => acc + (i.unitPrice * i.quantity), 0);
-    const totalMargin = totalPrice > 0 ? ((totalPrice - totalCost) / totalPrice) * 100 : 0;
+    // Se ha removido la totalización por petición del usuario
 
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
@@ -306,8 +390,8 @@ export default function ProposalItemsBuilder() {
 
                 {/* Ajustes Horizontales */}
                 <div className="lg:col-span-9 bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6">
-                    <form onSubmit={handleUpdateProposal} className="flex flex-col md:flex-row items-end gap-6">
-                        <div className="flex-1 space-y-2 w-full">
+                    <form onSubmit={handleUpdateProposal} className="flex flex-col gap-6">
+                        <div className="w-full space-y-2">
                             <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                 <FileText className="h-3 w-3 mr-1.5" /> Asunto
                             </label>
@@ -315,12 +399,12 @@ export default function ProposalItemsBuilder() {
                                 name="subject" 
                                 value={proposal.subject} 
                                 onChange={handleDateChange} 
-                                className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 font-bold text-slate-700 h-12 resize-none leading-relaxed" 
+                                className="block w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 font-bold text-slate-700 min-h-[96px] resize-none leading-relaxed" 
                                 placeholder="Especifique el asunto del requerimiento..."
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full md:w-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
                             <div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                     <Calendar className="h-3 w-3 mr-1.5" /> Emisión
@@ -332,6 +416,12 @@ export default function ProposalItemsBuilder() {
                                     <Clock className="h-3 w-3 mr-1.5" /> Días Validez
                                 </label>
                                 <input type="number" name="validityDays" value={proposal.validityDays} onChange={handleDateChange} className="block w-full px-4 py-3 bg-indigo-50 border-none rounded-2xl text-sm text-center focus:ring-2 focus:ring-indigo-600/20 font-black text-indigo-600" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                    <Calendar className="h-3 w-3 mr-1.5" /> Fecha Validez
+                                </label>
+                                <input type="date" name="validityDate" value={proposal.validityDate} onChange={handleDateChange} className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px]" />
                             </div>
                             <div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-emerald-500">
@@ -364,12 +454,27 @@ export default function ProposalItemsBuilder() {
                                 <p className="text-sm text-slate-500 font-medium">Configuración técnica de componentes y servicios.</p>
                             </div>
                         </div>
-                        {!isAddingItem && (
-                            <button onClick={() => setIsAddingItem(true)} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
-                                <Plus className="h-5 w-5" />
-                                <span>AÑADIR ITEM</span>
-                            </button>
-                        )}
+                        <div className="flex items-center space-x-3">
+                            {isAddingItem ? (
+                                <button onClick={() => setIsAddingItem(false)} className="flex items-center space-x-2 text-slate-500 hover:text-slate-700 transition-colors px-5 py-3.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-sm">
+                                     <ChevronRight className="h-4 w-4 -rotate-90" />
+                                     <span>CONTRAER</span>
+                                </button>
+                            ) : (
+                                <>
+                                    {(itemForm.name !== '' || editingItemId) && (
+                                        <button onClick={() => setIsAddingItem(true)} className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 transition-colors px-6 py-4 font-black text-xs uppercase tracking-widest border-2 border-indigo-200 rounded-2xl bg-indigo-50 hover:bg-indigo-100 shadow-sm">
+                                             <ChevronRight className="h-5 w-5 rotate-90" />
+                                             <span>EXPANDIR</span>
+                                        </button>
+                                    )}
+                                    <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
+                                        <Plus className="h-5 w-5" />
+                                        <span>NUEVO ITEM</span>
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
 
                     {/* Formulario de Configuración Dinámica */}
@@ -382,7 +487,9 @@ export default function ProposalItemsBuilder() {
                                         <div className="md:col-span-2 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">ITEM #</label>
                                             <div className="w-full px-5 py-4 rounded-2xl bg-slate-100 border-2 border-slate-200 text-sm font-black text-slate-400 flex items-center justify-center">
-                                                {items.length + 1}
+                                                {editingItemId 
+                                                    ? items.findIndex(i => i.id === editingItemId) + 1 
+                                                    : items.length + 1}
                                             </div>
                                         </div>
 
@@ -479,35 +586,46 @@ export default function ProposalItemsBuilder() {
                                         </div>
 
                                         {/* Estructura Comercial */}
-                                        <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl">
+                                        <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-6 gap-6 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl">
+                                             <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Origen (Prov)</label>
+                                                <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none">
+                                                    <option value="MAYORISTA">MAYORISTA</option>
+                                                    <option value="FABRICANTE">FABRICANTE</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Flete (%)</label>
+                                                <input type="text" inputMode="decimal" name="internal.fletePct" value={itemForm.internalCosts?.fletePct !== undefined ? itemForm.internalCosts.fletePct : 1.5} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 text-center focus:ring-2 focus:ring-slate-700" />
+                                            </div>
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Costo Unitario ($)</label>
-                                                <input type="number" step="0.01" name="unitCost" value={itemForm.unitCost} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-emerald-400 text-right focus:ring-2 focus:ring-emerald-500/20" />
+                                                <input type="text" inputMode="decimal" name="unitCost" value={itemForm.unitCost !== undefined ? itemForm.unitCost : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-emerald-400 text-right focus:ring-2 focus:ring-emerald-500/20" />
                                             </div>
                                             <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Margen Objetivo (%)</label>
-                                                <input type="number" step="0.01" name="marginPct" value={itemForm.marginPct} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-indigo-400 text-right focus:ring-2 focus:ring-indigo-500/20" />
+                                                <input type="text" inputMode="decimal" name="marginPct" value={itemForm.marginPct !== undefined ? itemForm.marginPct : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-indigo-400 text-right focus:ring-2 focus:ring-indigo-500/20" />
                                             </div>
                                             <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Precio de Venta ($)</label>
-                                                <input type="number" step="0.01" name="unitPrice" value={itemForm.unitPrice} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-indigo-600 border-none text-sm font-black text-white text-right shadow-lg shadow-indigo-500/20 focus:ring-2 focus:ring-white/20" />
+                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Precio Venta ($)</label>
+                                                <input type="text" inputMode="decimal" name="unitPrice" value={itemForm.unitPrice !== undefined ? itemForm.unitPrice : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-indigo-600 border-none text-sm font-black text-white text-right shadow-lg shadow-indigo-500/20 focus:ring-2 focus:ring-white/20" />
                                             </div>
                                             <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Cantidad Solicitada</label>
-                                                <input type="number" name="quantity" value={itemForm.quantity} min="1" onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-white border-none text-sm font-black text-slate-900 text-center" />
+                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Cantidad Solic.</label>
+                                                <input type="text" inputMode="decimal" name="quantity" value={itemForm.quantity !== undefined ? itemForm.quantity : 1} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-white border-none text-sm font-black text-slate-900 text-center" />
                                             </div>
                                         </div>
                                     </div>
 
                                     <div className="flex justify-end space-x-4 pt-4">
-                                        <button type="button" onClick={() => setIsAddingItem(false)} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
+                                        <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
                                             Descartar
                                         </button>
                                         <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
                                             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-3" /> : (
                                                 <>
                                                     <Save className="h-4 w-4 mr-3" />
-                                                    INSERTAR_VALORES
+                                                    {editingItemId ? 'GUARDAR_CAMBIOS' : 'INSERTAR_VALORES'}
                                                 </>
                                             )}
                                         </button>
@@ -538,7 +656,7 @@ export default function ProposalItemsBuilder() {
                                             <div className="max-w-xs mx-auto space-y-4 grayscale opacity-40">
                                                 <Cpu className="h-20 w-20 mx-auto text-indigo-300" />
                                                 <p className="text-sm font-bold text-slate-400">Su arquitectura aún no tiene componentes definidos.</p>
-                                                <button onClick={() => setIsAddingItem(true)} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>
+                                                <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>
                                             </div>
                                         </td>
                                     </tr>
@@ -563,46 +681,35 @@ export default function ProposalItemsBuilder() {
                                                     {i.itemType === 'PCS' && i.technicalSpecs && (
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
                                                             {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
+                                                            {i.technicalSpecs.modelo && <span className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-rose-100/50">{i.technicalSpecs.modelo}</span>}
                                                             {i.technicalSpecs.procesador && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.procesador}</span>}
                                                             {i.technicalSpecs.memoriaRam && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.memoriaRam}</span>}
+                                                            {i.technicalSpecs.almacenamiento && <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-amber-100/50">{i.technicalSpecs.almacenamiento}</span>}
+                                                            {i.technicalSpecs.garantiaEquipo && <span className="px-2.5 py-1 bg-cyan-50 text-cyan-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-cyan-100/50">{i.technicalSpecs.garantiaEquipo}</span>}
                                                         </div>
                                                     )}
                                                 </div>
                                             </td>
                                             <td className="px-4 py-8 text-right font-black text-slate-900 text-base">x{i.quantity}</td>
                                             <td className="px-4 py-8 text-right font-mono text-[13px] text-slate-400 tracking-tighter">${Number(i.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                            <td className="px-4 py-8 text-right font-mono text-lg font-black text-indigo-600 tracking-tighter">${(Number(i.unitPrice) * i.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td className="px-4 py-8 text-right font-mono text-lg font-black text-indigo-600 tracking-tighter">${(Number(i.unitPrice) * Number(i.quantity)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                             <td className="px-8 py-8 text-center">
-                                                <button onClick={() => i.id && deleteItem(i.id)} className="p-3 text-slate-200 hover:text-red-500 hover:bg-red-50 hover:shadow-lg hover:shadow-red-100 rounded-2xl transition-all border border-transparent hover:border-red-100">
-                                                    <Trash2 className="h-5 w-5" />
-                                                </button>
+                                                <div className="flex items-center justify-center space-x-1">
+                                                    <button onClick={() => editItem(i)} title="Editar" className="p-2 sm:p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 hover:shadow-lg hover:shadow-indigo-100 rounded-2xl transition-all border border-transparent hover:border-indigo-100">
+                                                        <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                                                    </button>
+                                                    <button onClick={() => duplicateItem(i)} title="Duplicar" className="p-2 sm:p-3 text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-lg hover:shadow-emerald-100 rounded-2xl transition-all border border-transparent hover:border-emerald-100">
+                                                        <Copy className="h-4 w-4 sm:h-5 sm:w-5" />
+                                                    </button>
+                                                    <button onClick={() => i.id && deleteItem(i.id)} title="Eliminar" className="p-2 sm:p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 hover:shadow-lg hover:shadow-red-100 rounded-2xl transition-all border border-transparent hover:border-red-100">
+                                                        <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
                                 )}
                             </tbody>
-                            {items.length > 0 && (
-                                <tfoot className="bg-slate-900 sticky bottom-0 z-20">
-                                    <tr>
-                                        <td colSpan={5} className="px-8 py-10 text-right">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.3em]">VALORIZACIÓN TOTAL EX-VAT</span>
-                                                <div className="flex items-center justify-end space-x-4 mt-2">
-                                                     <span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest whitespace-nowrap">Margen Ponderado:</span>
-                                                     <span className="text-xl font-mono font-black text-emerald-400">{totalMargin.toFixed(1)}%</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td colSpan={2} className="px-8 py-10 text-right bg-indigo-600 relative overflow-hidden group">
-                                            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                            <span className="text-4xl font-mono font-black text-white relative z-10 tracking-tighter">
-                                                ${totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </span>
-                                            <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em] mt-1 relative z-10">Total Cotización</p>
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            )}
                         </table>
                     </div>
                 </div>

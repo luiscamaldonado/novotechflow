@@ -217,6 +217,7 @@ export class ProposalsService {
         unitPrice: parseFloat(data.unitPrice) || 0,
         isTaxable: data.isTaxable ?? true,
         technicalSpecs: data.technicalSpecs || {},
+        internalCosts: data.internalCosts || {},
         sortOrder: nextOrder,
       }
     });
@@ -228,6 +229,29 @@ export class ProposalsService {
   async removeProposalItem(itemId: string) {
     return this.prisma.proposalItem.delete({
       where: { id: itemId }
+    });
+  }
+
+  /**
+   * Actualiza un ítem específico de una propuesta.
+   */
+  async updateProposalItem(itemId: string, data: any) {
+    return this.prisma.proposalItem.update({
+      where: { id: itemId },
+      data: {
+        itemType: data.itemType,
+        name: data.name,
+        description: data.description,
+        brand: data.brand,
+        partNumber: data.partNumber,
+        quantity: data.quantity !== undefined ? parseFloat(data.quantity) : undefined,
+        unitCost: data.unitCost !== undefined ? parseFloat(data.unitCost) : undefined,
+        marginPct: data.marginPct !== undefined ? parseFloat(data.marginPct) : undefined,
+        unitPrice: data.unitPrice !== undefined ? parseFloat(data.unitPrice) : undefined,
+        isTaxable: data.isTaxable,
+        technicalSpecs: data.technicalSpecs,
+        internalCosts: data.internalCosts,
+      }
     });
   }
 
