@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Package, Code, Wrench, Save, Loader2, ArrowRight,
-    Plus, Trash2, Lock, Monitor, Laptop, Settings, Cpu,
-    Calendar, Clock, FileText, ChevronRight, Search, Edit2, Copy
+    Package, Save, Loader2, ArrowRight,
+    Plus, Trash2, Lock, Monitor, Cpu,
+    Calendar, Clock, FileText, ChevronRight, Edit2, Copy
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -166,30 +166,6 @@ export default function ProposalItemsBuilder() {
         });
     };
 
-    const TECH_ABBR = new Set([
-        'DDR','DDR3','DDR4','DDR5','DDR6',
-        'LPDDR','LPDDR3','LPDDR4','LPDDR4X','LPDDR5','LPDDR5X','LPDDR6',
-        'UDIMM','SODIMM','RDIMM','LRDIMM','ECC','DIMM',
-        'SSD','HDD','SATA','SAS','NVME','BGA','EMMC',
-        'RJ45','WIFI','LAN','WAN','NFC','USB','HDMI','DP','VGA','BIOS','UEFI','PCIE',
-        'TPM','IR',
-        'NVIDIA','AMD','INTEL','RTX','GTX','RX','RDNA',
-        'OS','IOT','CPU','GPU','NPU','RAM','ROM',
-        'GB','TB','MB','GHZ','MHZ','HP','IBM','ASUS'
-    ]);
-    const toProperTitleCase = (str: string) => {
-        if (!str) return '';
-        const titled = str.toLowerCase()
-            .replace(/(^|[\s\(\+\/\-])(\w)/g, (match) => match.toUpperCase())
-            .trim();
-        return titled.replace(/[\w.\-]+/g, (token) => {
-            const upper = token.toUpperCase();
-            if (TECH_ABBR.has(upper)) return upper;
-            const withoutDigits = upper.replace(/\d+[A-Z]?$/, '');
-            if (withoutDigits && TECH_ABBR.has(withoutDigits)) return upper;
-            return token;
-        });
-    };
 
     const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         let { name, value } = e.target;
@@ -221,7 +197,7 @@ export default function ProposalItemsBuilder() {
                 setActiveSuggestion({ field: specField, index: -1 });
             } else if (name.startsWith('internal.')) {
                 const internalField = name.split('.')[1];
-                let val: string | number = value;
+
 
                 // Dependencia directa de proveedor a flete
                 if (internalField === 'proveedor') {
