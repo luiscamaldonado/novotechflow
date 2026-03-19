@@ -45,6 +45,7 @@ interface ProposalItem {
     marginPct: number | string;
     unitPrice: number | string;
     technicalSpecs?: PcSpecs;
+    isTaxable?: boolean;
     internalCosts?: {
         proveedor?: string;
         fletePct?: number | string;
@@ -89,6 +90,7 @@ export default function ProposalItemsBuilder() {
         marginPct: 20,
         unitPrice: '',
         technicalSpecs: {},
+        isTaxable: true,
         internalCosts: {
             proveedor: 'MAYORISTA',
             fletePct: 1.5
@@ -949,6 +951,19 @@ export default function ProposalItemsBuilder() {
                                                 <input type="text" inputMode="decimal" name="unitPrice" value={itemForm.unitPrice !== undefined ? itemForm.unitPrice : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-indigo-600 border-none text-sm font-black text-white text-right shadow-lg shadow-indigo-500/20 focus:ring-2 focus:ring-white/20" />
                                             </div>
                                             <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Impuestos</label>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setItemForm(prev => ({ ...prev, isTaxable: !prev.isTaxable }))}
+                                                    className={cn(
+                                                        "w-full px-5 py-4 rounded-2xl border-none text-[10px] font-black tracking-widest uppercase transition-all",
+                                                        itemForm.isTaxable ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-300"
+                                                    )}
+                                                >
+                                                    {itemForm.isTaxable ? 'Gravado 19%' : 'No Gravado'}
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Cantidad Solic.</label>
                                                 <input type="text" inputMode="decimal" name="quantity" value={itemForm.quantity !== undefined ? itemForm.quantity : 1} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-white border-none text-sm font-black text-slate-900 text-center" />
                                             </div>
@@ -1064,8 +1079,8 @@ export default function ProposalItemsBuilder() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-8 text-right font-black text-slate-900 text-base">x{i.quantity}</td>
-                                            <td className="px-4 py-8 text-right font-mono text-[13px] text-slate-400 tracking-tighter">${Number(i.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                            <td className="px-4 py-8 text-right font-mono text-lg font-black text-indigo-600 tracking-tighter">${(Number(i.unitPrice) * Number(i.quantity)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td className="px-4 py-8 text-right font-mono text-[13px] text-slate-400 tracking-tighter">${Number(i.unitPrice).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                                            <td className="px-4 py-8 text-right font-mono text-lg font-black text-indigo-600 tracking-tighter">${(Number(i.unitPrice) * Number(i.quantity)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                             <td className="px-8 py-8 text-center">
                                                 <div className="flex items-center justify-center space-x-1">
                                                     <button onClick={() => editItem(i)} title="Editar" className="p-2 sm:p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 hover:shadow-lg hover:shadow-indigo-100 rounded-2xl transition-all border border-transparent hover:border-indigo-100">
@@ -1097,10 +1112,10 @@ export default function ProposalItemsBuilder() {
                     </button>
                     <button
                         disabled={items.length === 0}
-                        onClick={() => alert("Generando flujo de PDF corporativo...")}
+                        onClick={() => navigate(`/proposals/${id}/calculations`)}
                         className="flex items-center space-x-4 bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-200 text-white px-16 py-6 rounded-[2rem] transition-all font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-slate-200 group active:scale-95"
                     >
-                        <span>Finalizar & Generar PDF</span>
+                        <span>Ir a Ventana de Cálculos</span>
                         <ArrowRight className="h-5 w-5 group-hover:translate-x-3 transition-transform" />
                     </button>
                 </div>

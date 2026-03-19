@@ -1,5 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 import { ProposalStatus } from '@prisma/client';
 
 /**
@@ -280,10 +282,199 @@ export class ProposalsService {
    * Implementa limpieza manual de ítems previa a la eliminación de la cabecera.
    */
   async deleteProposal(id: string) {
-    // 1. Eliminar ítems hijos
-    await this.prisma.proposalItem.deleteMany({ where: { proposalId: id } });
+    // Delete linked scenario items first
+    await this.prisma.scenarioItem.deleteMany({
+      where: { scenario: { proposalId: id } }
+    });
 
-    // 2. Eliminar cabecera
-    return this.prisma.proposal.delete({ where: { id } });
+    // Delete scenarios
+    await this.prisma.scenario.deleteMany({
+      where: { proposalId: id }
+    });
+
+    // Delete regular items
+    await this.prisma.proposalItem.deleteMany({
+      where: { proposalId: id },
+    });
+
+    // Delete proposal
+    return this.prisma.proposal.delete({
+      where: { id },
+    });
+  }
+
+  /**
+   * Obtiene valores extra de TRM (Promedio SET-ICAP y Spot Wilkinson)
+   */
+  async getExtraTrmValues() {
+    const today = new Date().toISOString().split('T')[0];
+    const results = {
+      setIcapAverage: null,
+      wilkinsonSpot: null
+    };
+
+    // 1. SET-ICAP Average (POST API)
+    try {
+      const setIcapRes = await axios.post('https://proxy.set-icap.com/seticap/api/estadisticas/estadisticasPromedioCierre/', {
+        fecha: today,
+        mercado: 71,
+        delay: 15
+      }, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://dolar.set-icap.com/'
+        },
+        timeout: 5000
+      });
+      if (setIcapRes.data?.data?.avg) {
+        results.setIcapAverage = this.parseCurrencyString(setIcapRes.data.data.avg);
+      }
+    } catch (e) {
+      console.error("Error fetching SET-ICAP average:", e.message);
+    }
+
+    // 2. Wilkinson Spot Average (Scraping)
+    try {
+      const wilkinsonRes = await axios.get('https://dolar.wilkinsonpc.com.co/dolar-hoy-spot-minuto-a-minuto/', {
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
+        },
+        timeout: 5000
+      });
+      const $ = cheerio.load(wilkinsonRes.data);
+      const spotText = $('.display-5.fw-bold.text-dark.lh-1.my-1 span').first().text();
+      if (spotText) {
+        results.wilkinsonSpot = this.parseCurrencyString(spotText);
+      }
+    } catch (e) {
+      console.error("Error fetching Wilkinson spot:", e.message);
+    }
+
+    return results;
+  }
+
+  /**
+   * Normaliza y parsea cadenas de moneda (pudiendo tener . o , como separadores)
+   */
+  private parseCurrencyString(val: string): number {
+    if (!val) return 0;
+    // Remueve todo menos dígitos, puntos y comas
+    let clean = val.replace(/[^0-9.,]/g, '');
+    
+    // Si tiene coma Y punto: la última suele ser el decimal
+    const lastComma = clean.lastIndexOf(',');
+    const lastPoint = clean.lastIndexOf('.');
+    
+    if (lastComma > lastPoint) {
+      // Formato latino 3.704,17
+      clean = clean.replace(/\./g, '').replace(',', '.');
+    } else if (lastPoint > lastComma) {
+      // Formato USA 3,704.17
+      clean = clean.replace(/,/g, '');
+    } else {
+      // Solo uno de los dos o ninguno
+      if (lastComma !== -1) clean = clean.replace(',', '.');
+    }
+    
+    return parseFloat(clean);
+  }
+
+  // --- MÉTODOS DE ESCENARIOS ---
+
+  /**
+   * Recupera todos los escenarios para una propuesta con sus ítems asociados.
+   */
+  async getScenariosByProposalId(proposalId: string) {
+    return this.prisma.scenario.findMany({
+      where: { proposalId },
+      include: {
+        scenarioItems: {
+          include: {
+            item: true
+          }
+        }
+      },
+      orderBy: { sortOrder: 'asc' }
+    });
+  }
+
+  /**
+   * Crea un nuevo escenario para una propuesta.
+   */
+  async createScenario(proposalId: string, data: any) {
+    const aggregate = await this.prisma.scenario.aggregate({
+      where: { proposalId },
+      _max: { sortOrder: true }
+    });
+
+    const nextOrder = (aggregate._max.sortOrder || 0) + 1;
+
+    return this.prisma.scenario.create({
+      data: {
+        proposalId,
+        name: data.name,
+        currency: data.currency || 'COP',
+        description: data.description,
+        sortOrder: nextOrder
+      }
+    });
+  }
+
+  /**
+   * Actualiza un escenario existente.
+   */
+  async updateScenario(id: string, data: any) {
+    return this.prisma.scenario.update({
+      where: { id },
+      data: {
+        name: data.name,
+        currency: data.currency,
+        description: data.description
+      }
+    });
+  }
+
+  /**
+   * Elimina un escenario y sus items vinculados.
+   */
+  async deleteScenario(id: string) {
+    await this.prisma.scenarioItem.deleteMany({ where: { scenarioId: id } });
+    return this.prisma.scenario.delete({ where: { id } });
+  }
+
+  /**
+   * Vincula un item de propuesta a un escenario.
+   */
+  async addScenarioItem(scenarioId: string, data: any) {
+    return this.prisma.scenarioItem.create({
+      data: {
+        scenarioId,
+        itemId: data.itemId,
+        quantity: parseInt(data.quantity, 10) || 1,
+        marginPctOverride: data.marginPct ? parseFloat(data.marginPct) : undefined,
+      }
+    });
+  }
+
+  /**
+   * Actualiza un ítem dentro de un escenario.
+   */
+  async updateScenarioItem(id: string, data: any) {
+    return this.prisma.scenarioItem.update({
+      where: { id },
+      data: {
+        quantity: data.quantity !== undefined ? parseInt(data.quantity, 10) : undefined,
+        marginPctOverride: data.marginPct !== undefined ? parseFloat(data.marginPct) : undefined,
+      }
+    });
+  }
+
+  /**
+   * Elimina un ítem específico de un escenario.
+   */
+  async removeScenarioItem(id: string) {
+    return this.prisma.scenarioItem.delete({
+      where: { id }
+    });
   }
 }

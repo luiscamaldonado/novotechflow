@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Users from './pages/Users';
 import NewProposal from './pages/proposals/NewProposal';
 import ProposalItemsBuilder from './pages/proposals/ProposalItemsBuilder';
+import ProposalCalculations from './pages/proposals/ProposalCalculations';
 import Dashboard from './pages/Dashboard';
 
 // Placeholder components for the main routes
@@ -62,6 +63,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/proposals/new" element={<NewProposal />} />
             <Route path="/proposals/:id/builder" element={<ProposalItemsBuilder />} />
+            <Route path="/proposals/:id/calculations" element={<ProposalCalculations />} />
             <Route path="/pdf-editor" element={<PdfEditor />} />
 
             {/* Rutas exclusivas de Administrador */}

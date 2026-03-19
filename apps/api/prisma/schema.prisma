@@ -159,6 +159,7 @@ model Scenario {
   id          String  @id @default(uuid()) @db.Uuid
   proposalId  String  @map("proposal_id") @db.Uuid
   name        String  @db.VarChar(100)
+  currency    String  @default("COP") @db.VarChar(5)
   description String? @db.Text
   sortOrder   Int     @default(0) @map("sort_order")
 
