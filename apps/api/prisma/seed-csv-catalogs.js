@@ -92,7 +92,22 @@ const CATEGORY_MAP = {
   'NETWORK': ['network'],
   'SEGURIDAD': ['security'],
   'GARANTIA_BATERIA': ['garantia base'],
-  'GARANTIA_EQUIPO': ['garantia base', 'servicios warranty pcs']
+  'GARANTIA_EQUIPO': ['garantia base', 'servicios warranty pcs'],
+  'ACC_TIPO': [
+    'network', 'display', 'almacenamiento', 'memorias', 'graficas', 
+    'monitores asus', 'monitores dell', 'monitores hp', 'options', 
+    'options lenovo', 'monitores lenovo wd', 'monitores lenovo'
+  ],
+  'SVC_TIPO': ['servicios warranty pcs', 'svs pcs'],
+  'SVC_RESPONSABLE': ['fabricantes'],
+  'SW_TIPO': ['software', 'microsoft dc_1', 'microsoft user_1', 'OS'],
+  'INFRA_TIPO': [
+    'almacenamiento', 'memorias', 'graficas', 'options', 'options lenovo', 
+    'datacenter', 'infraestructura CISCO', 'infraestructura dell', 
+    'infraestructura HP', 'infraestructura IBM', 'infraestructura lenovo'
+  ],
+  'INFRA_SVC_TIPO': ['servicios warranty pcs', 'svs pcs', 'servicios datacenter'],
+  'INFRA_SVC_RESPONSABLE': ['fabricantes']
 };
 
 // Encabezados de CSV que deben descartarse
@@ -139,6 +154,42 @@ async function main() {
       skipDuplicates: true
     });
   }
+
+  // Insertar catálogos manuales
+  const manualData = [];
+
+  // 1. Garantía Accesorios & Infraestructura
+  for (let i = 1; i <= 11; i++) {
+    const val = `${i} Mes${i > 1 ? 'es' : ''}`;
+    manualData.push({ category: 'ACC_GARANTIA', value: val, isActive: true });
+    manualData.push({ category: 'INFRA_GARANTIA', value: val, isActive: true });
+  }
+  for (let i = 1; i <= 5; i++) {
+    const val = `${i} Año${i > 1 ? 's' : ''}`;
+    manualData.push({ category: 'ACC_GARANTIA', value: val, isActive: true });
+    manualData.push({ category: 'INFRA_GARANTIA', value: val, isActive: true });
+  }
+  
+  // 2. Responsable Servicios PC & Infraestructura
+  manualData.push({ category: 'SVC_RESPONSABLE', value: 'Novotechno', isActive: true });
+  manualData.push({ category: 'INFRA_SVC_RESPONSABLE', value: 'Novotechno', isActive: true });
+
+  // 3. Unidad de Medida (Servicios PC)
+  const umSvc = ['Unidad', 'Servicio realizado', 'Hora', 'Hora habil', 'Dia', 'Dia habil', 'Semana', 'Semana hábil', 'Mes', 'Año'];
+  umSvc.forEach(um => manualData.push({ category: 'SVC_UM', value: toProperTitleCase(um), isActive: true }));
+
+  // 4. Unidad de Medida (Servicios Infraestructura)
+  umSvc.forEach(um => manualData.push({ category: 'INFRA_SVC_UM', value: toProperTitleCase(um), isActive: true }));
+
+  // 5. Unidad de Medida (Software)
+  const umSw = ['Unidad', 'Mes', 'Año'];
+  umSw.forEach(um => manualData.push({ category: 'SW_UM', value: toProperTitleCase(um), isActive: true }));
+
+  console.log(`MANUAL_DATA: Insertando ${manualData.length} registros (Garantías, Resp. SVC, UM's)...`);
+  await prisma.catalog.createMany({
+    data: manualData,
+    skipDuplicates: true
+  });
 
   console.log('Sincronización terminada con éxito.');
 }

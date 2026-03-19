@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Package, Save, Loader2, ArrowRight,
     Plus, Trash2, Lock, Monitor, Cpu,
-    Calendar, Clock, FileText, ChevronRight, Edit2, Copy
+    Calendar, Clock, FileText, ChevronRight, Edit2, Copy,
+    Settings, Server
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -26,6 +27,10 @@ interface PcSpecs {
     seguridad?: string;
     garantiaBateria?: string;
     garantiaEquipo?: string;
+    tipo?: string;
+    garantia?: string;
+    responsable?: string;
+    unidadMedida?: string;
 }
 
 interface ProposalItem {
@@ -264,6 +269,31 @@ export default function ProposalItemsBuilder() {
             }
         }));
         setActiveSuggestion(null);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent, field: string, suggestions: string[]) => {
+        if (!suggestions.length) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActiveSuggestion(prev => {
+                if (!prev || prev.field !== field) return { field, index: 0 };
+                return { ...prev, index: Math.min(prev.index + 1, suggestions.length - 1) };
+            });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActiveSuggestion(prev => {
+                if (!prev || prev.field !== field) return { field, index: -1 };
+                return { ...prev, index: Math.max(prev.index - 1, -1) };
+            });
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (activeSuggestion && activeSuggestion.field === field && activeSuggestion.index >= 0) {
+                e.preventDefault();
+                selectSuggestion(field, suggestions[activeSuggestion.index]);
+            }
+        } else if (e.key === 'Escape') {
+            setActiveSuggestion(null);
+        }
     };
 
     const saveItem = async (e: React.FormEvent) => {
@@ -522,12 +552,14 @@ export default function ProposalItemsBuilder() {
                                                     return (
                                                         <div key={field} className="space-y-1.5 relative group">
                                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-indigo-400 transition-colors">{spec.label}</label>
-                                                            <div className="relative">
+                                                                    <div className="relative">
                                                                 <input 
                                                                     type="text"
                                                                     name={`spec.${field}`}
                                                                     value={currentVal}
                                                                     onChange={handleItemChange}
+                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
+                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
                                                                     onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
                                                                     placeholder={`Escriba ${spec.label}...`}
                                                                     autoComplete="off"
@@ -540,10 +572,338 @@ export default function ProposalItemsBuilder() {
                                                                                 key={i}
                                                                                 type="button"
                                                                                 onClick={() => selectSuggestion(field, s)}
-                                                                                className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-between group"
+                                                                                className={cn(
+                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-between group",
+                                                                                    activeSuggestion?.index === i && "bg-indigo-50 text-indigo-600"
+                                                                                )}
                                                                             >
                                                                                 <span>{s}</span>
-                                                                                <Plus className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </motion.div>
+                                        )}
+
+                                        {/* SECCIÓN ESPECIAL PARA ACCESORIOS */}
+                                        {itemForm.itemType === 'ACCESSORIES' && (
+                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-inner">
+                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
+                                                    <div className="bg-indigo-600 p-2 rounded-xl shadow-md"><Package className="h-5 w-5 text-white" /></div>
+                                                    <div>
+                                                         <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Especificaciones de Accesorio</h4>
+                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo, marca y respaldo del accesorio u opción.</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                {Object.entries({
+                                                    tipo: { label: 'Tipo', cat: 'ACC_TIPO' },
+                                                    fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+                                                    garantia: { label: 'Garantía', cat: 'ACC_GARANTIA' },
+                                                }).map(([field, spec]) => {
+                                                    //@ts-ignore
+                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
+                                                    const suggestions = currentVal.trim().length > 0 
+                                                        ? catalogs[spec.cat]?.filter(v => 
+                                                            v.toLowerCase().includes(currentVal.toLowerCase())
+                                                          ).slice(0, 20) || []
+                                                        : [];
+
+                                                    return (
+                                                        <div key={field} className="space-y-1.5 relative group">
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-indigo-400 transition-colors">{spec.label}</label>
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="text"
+                                                                    name={`spec.${field}`}
+                                                                    value={currentVal}
+                                                                    onChange={handleItemChange}
+                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
+                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
+                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                                                                    placeholder={`Escriba ${spec.label}...`}
+                                                                    autoComplete="off"
+                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
+                                                                />
+                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
+                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                        {suggestions.map((s, i) => (
+                                                                            <button
+                                                                                key={i}
+                                                                                type="button"
+                                                                                onClick={() => selectSuggestion(field, s)}
+                                                                                className={cn(
+                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-between group",
+                                                                                    activeSuggestion?.index === i && "bg-indigo-50 text-indigo-600"
+                                                                                )}
+                                                                            >
+                                                                                <span>{s}</span>
+                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </motion.div>
+                                        )}
+
+                                        {/* SECCIÓN ESPECIAL PARA SERVICIOS PC */}
+                                        {itemForm.itemType === 'PC_SERVICES' && (
+                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-inner">
+                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
+                                                    <div className="bg-indigo-600 p-2 rounded-xl shadow-md"><FileText className="h-5 w-5 text-white" /></div>
+                                                    <div>
+                                                         <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Configuración de Servicio</h4>
+                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el alcance, responsable y métricas del servicio.</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                {Object.entries({
+                                                    tipo: { label: 'Tipo de Servicio', cat: 'SVC_TIPO' },
+                                                    responsable: { label: 'Responsable', cat: 'SVC_RESPONSABLE' },
+                                                    unidadMedida: { label: 'Unidad de Medida', cat: 'SVC_UM' },
+                                                }).map(([field, spec]) => {
+                                                    //@ts-ignore
+                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
+                                                    const suggestions = currentVal.trim().length > 0 
+                                                        ? catalogs[spec.cat]?.filter(v => 
+                                                            v.toLowerCase().includes(currentVal.toLowerCase())
+                                                          ).slice(0, 20) || []
+                                                        : [];
+
+                                                    return (
+                                                        <div key={field} className="space-y-1.5 relative group">
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-indigo-400 transition-colors">{spec.label}</label>
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="text"
+                                                                    name={`spec.${field}`}
+                                                                    value={currentVal}
+                                                                    onChange={handleItemChange}
+                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
+                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
+                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                                                                    placeholder={`Escriba ${spec.label}...`}
+                                                                    autoComplete="off"
+                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
+                                                                />
+                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
+                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                        {suggestions.map((s, i) => (
+                                                                            <button
+                                                                                key={i}
+                                                                                type="button"
+                                                                                onClick={() => selectSuggestion(field, s)}
+                                                                                className={cn(
+                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-between group",
+                                                                                    activeSuggestion?.index === i && "bg-indigo-50 text-indigo-600"
+                                                                                )}
+                                                                            >
+                                                                                <span>{s}</span>
+                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </motion.div>
+                                        )}
+
+                                        {/* SECCIÓN ESPECIAL PARA SOFTWARE */}
+                                        {itemForm.itemType === 'SOFTWARE' && (
+                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-inner">
+                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
+                                                    <div className="bg-purple-600 p-2 rounded-xl shadow-md"><Package className="h-5 w-5 text-white" /></div>
+                                                    <div>
+                                                         <h4 className="text-[11px] font-black text-purple-600 uppercase tracking-widest">Configuración de Software</h4>
+                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo de licencia, fabricante y periodicidad.</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                {Object.entries({
+                                                    tipo: { label: 'Tipo de Software', cat: 'SW_TIPO' },
+                                                    fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+                                                    unidadMedida: { label: 'Unidad de Medida', cat: 'SW_UM' },
+                                                }).map(([field, spec]) => {
+                                                    //@ts-ignore
+                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
+                                                    const suggestions = currentVal.trim().length > 0 
+                                                        ? catalogs[spec.cat]?.filter(v => 
+                                                            v.toLowerCase().includes(currentVal.toLowerCase())
+                                                          ).slice(0, 20) || []
+                                                        : [];
+
+                                                    return (
+                                                        <div key={field} className="space-y-1.5 relative group">
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-purple-400 transition-colors">{spec.label}</label>
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="text"
+                                                                    name={`spec.${field}`}
+                                                                    value={currentVal}
+                                                                    onChange={handleItemChange}
+                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
+                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
+                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                                                                    placeholder={`Escriba ${spec.label}...`}
+                                                                    autoComplete="off"
+                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-purple-600 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
+                                                                />
+                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
+                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                        {suggestions.map((s, i) => (
+                                                                            <button
+                                                                                key={i}
+                                                                                type="button"
+                                                                                onClick={() => selectSuggestion(field, s)}
+                                                                                className={cn(
+                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center justify-between group",
+                                                                                    activeSuggestion?.index === i && "bg-purple-50 text-purple-600"
+                                                                                )}
+                                                                            >
+                                                                                <span>{s}</span>
+                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </motion.div>
+                                        )}
+
+                                        {/* SECCIÓN ESPECIAL PARA INFRAESTRUCTURA */}
+                                        {itemForm.itemType === 'INFRASTRUCTURE' && (
+                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-slate-200 shadow-inner">
+                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
+                                                    <div className="bg-slate-800 p-2 rounded-xl shadow-md"><Server className="h-5 w-5 text-white" /></div>
+                                                    <div>
+                                                         <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Configuración de Infraestructura</h4>
+                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo de equipo, fabricante y periodo de soporte.</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                {Object.entries({
+                                                    tipo: { label: 'Tipo de Infraestructura', cat: 'INFRA_TIPO' },
+                                                    fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+                                                    garantia: { label: 'Garantía', cat: 'INFRA_GARANTIA' },
+                                                }).map(([field, spec]) => {
+                                                    //@ts-ignore
+                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
+                                                    const suggestions = currentVal.trim().length > 0 
+                                                        ? catalogs[spec.cat]?.filter(v => 
+                                                            v.toLowerCase().includes(currentVal.toLowerCase())
+                                                          ).slice(0, 20) || []
+                                                        : [];
+
+                                                    return (
+                                                        <div key={field} className="space-y-1.5 relative group">
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-slate-600 transition-colors">{spec.label}</label>
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="text"
+                                                                    name={`spec.${field}`}
+                                                                    value={currentVal}
+                                                                    onChange={handleItemChange}
+                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
+                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
+                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                                                                    placeholder={`Escriba ${spec.label}...`}
+                                                                    autoComplete="off"
+                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-slate-800 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
+                                                                />
+                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
+                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                        {suggestions.map((s, i) => (
+                                                                            <button
+                                                                                key={i}
+                                                                                type="button"
+                                                                                onClick={() => selectSuggestion(field, s)}
+                                                                                className={cn(
+                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors flex items-center justify-between group",
+                                                                                    activeSuggestion?.index === i && "bg-slate-50 text-slate-900"
+                                                                                )}
+                                                                            >
+                                                                                <span>{s}</span>
+                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </motion.div>
+                                        )}
+
+                                        {/* SECCIÓN ESPECIAL PARA SERVICIOS DE INFRAESTRUCTURA */}
+                                        {itemForm.itemType === 'INFRA_SERVICES' && (
+                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-slate-700 shadow-inner">
+                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
+                                                    <div className="bg-slate-900 p-2 rounded-xl shadow-md"><Settings className="h-5 w-5 text-white" /></div>
+                                                    <div>
+                                                         <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Configuración de Servicios Infra.</h4>
+                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo de servicio especializado y responsable.</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                {Object.entries({
+                                                    tipo: { label: 'Tipo de Servicio', cat: 'INFRA_SVC_TIPO' },
+                                                    responsable: { label: 'Responsable', cat: 'INFRA_SVC_RESPONSABLE' },
+                                                    unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
+                                                }).map(([field, spec]) => {
+                                                    //@ts-ignore
+                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
+                                                    const suggestions = currentVal.trim().length > 0 
+                                                        ? catalogs[spec.cat]?.filter(v => 
+                                                            v.toLowerCase().includes(currentVal.toLowerCase())
+                                                          ).slice(0, 20) || []
+                                                        : [];
+
+                                                    return (
+                                                        <div key={field} className="space-y-1.5 relative group">
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-slate-900 transition-colors">{spec.label}</label>
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="text"
+                                                                    name={`spec.${field}`}
+                                                                    value={currentVal}
+                                                                    onChange={handleItemChange}
+                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
+                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
+                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                                                                    placeholder={`Escriba ${spec.label}...`}
+                                                                    autoComplete="off"
+                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-slate-900 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
+                                                                />
+                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
+                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                        {suggestions.map((s, i) => (
+                                                                            <button
+                                                                                key={i}
+                                                                                type="button"
+                                                                                onClick={() => selectSuggestion(field, s)}
+                                                                                className={cn(
+                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-900 hover:text-white transition-colors flex items-center justify-between group",
+                                                                                    activeSuggestion?.index === i && "bg-slate-900 text-white"
+                                                                                )}
+                                                                            >
+                                                                                <span>{s}</span>
+                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
                                                                             </button>
                                                                         ))}
                                                                     </div>
@@ -568,6 +928,8 @@ export default function ProposalItemsBuilder() {
                                                 <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none">
                                                     <option value="MAYORISTA">MAYORISTA</option>
                                                     <option value="FABRICANTE">FABRICANTE</option>
+                                                    <option value="NOVOTECHNO">NOVOTECHNO</option>
+                                                    <option value="OTROS">OTROS</option>
                                                 </select>
                                             </div>
                                             <div className="space-y-2">
@@ -662,6 +1024,41 @@ export default function ProposalItemsBuilder() {
                                                             {i.technicalSpecs.memoriaRam && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.memoriaRam}</span>}
                                                             {i.technicalSpecs.almacenamiento && <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-amber-100/50">{i.technicalSpecs.almacenamiento}</span>}
                                                             {i.technicalSpecs.garantiaEquipo && <span className="px-2.5 py-1 bg-cyan-50 text-cyan-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-cyan-100/50">{i.technicalSpecs.garantiaEquipo}</span>}
+                                                        </div>
+                                                    )}
+                                                    {i.itemType === 'ACCESSORIES' && i.technicalSpecs && (
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
+                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.fabricante}</span>}
+                                                            {i.technicalSpecs.garantia && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.garantia}</span>}
+                                                        </div>
+                                                    )}
+                                                    {i.itemType === 'PC_SERVICES' && i.technicalSpecs && (
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
+                                                            {i.technicalSpecs.responsable && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.responsable}</span>}
+                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-amber-100/50">{i.technicalSpecs.unidadMedida}</span>}
+                                                        </div>
+                                                    )}
+                                                    {i.itemType === 'SOFTWARE' && i.technicalSpecs && (
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-purple-50 text-purple-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-purple-100/50">{i.technicalSpecs.tipo}</span>}
+                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
+                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.unidadMedida}</span>}
+                                                        </div>
+                                                    )}
+                                                    {i.itemType === 'INFRASTRUCTURE' && i.technicalSpecs && (
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm">{i.technicalSpecs.tipo}</span>}
+                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
+                                                            {i.technicalSpecs.garantia && <span className="px-2.5 py-1 bg-orange-50 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-orange-100/50">{i.technicalSpecs.garantia}</span>}
+                                                        </div>
+                                                    )}
+                                                    {i.itemType === 'INFRA_SERVICES' && i.technicalSpecs && (
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
+                                                            {i.technicalSpecs.responsable && <span className="px-2.5 py-1 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm">{i.technicalSpecs.responsable}</span>}
+                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.unidadMedida}</span>}
                                                         </div>
                                                     )}
                                                 </div>
