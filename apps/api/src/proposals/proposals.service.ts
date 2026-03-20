@@ -477,4 +477,17 @@ export class ProposalsService {
       where: { id }
     });
   }
+
+  /**
+   * Aplica un margen global a todos los ítems de un escenario específico.
+   * Esto sobreescribe cualquier margen individual previo.
+   */
+  async applyMarginToEntireScenario(scenarioId: string, marginPct: number) {
+    return this.prisma.scenarioItem.updateMany({
+      where: { scenarioId },
+      data: {
+        marginPctOverride: marginPct
+      }
+    });
+  }
 }

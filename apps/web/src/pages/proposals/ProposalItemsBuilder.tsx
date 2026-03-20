@@ -924,7 +924,7 @@ export default function ProposalItemsBuilder() {
                                         </div>
 
                                         {/* Estructura Comercial */}
-                                        <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-6 gap-6 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl">
+                                        <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl">
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Origen (Prov)</label>
                                                 <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none">
@@ -951,17 +951,16 @@ export default function ProposalItemsBuilder() {
                                                 <input type="text" inputMode="decimal" name="unitPrice" value={itemForm.unitPrice !== undefined ? itemForm.unitPrice : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-indigo-600 border-none text-sm font-black text-white text-right shadow-lg shadow-indigo-500/20 focus:ring-2 focus:ring-white/20" />
                                             </div>
                                             <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Impuestos</label>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => setItemForm(prev => ({ ...prev, isTaxable: !prev.isTaxable }))}
-                                                    className={cn(
-                                                        "w-full px-5 py-4 rounded-2xl border-none text-[10px] font-black tracking-widest uppercase transition-all",
-                                                        itemForm.isTaxable ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-300"
-                                                    )}
+                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">IVA (%)</label>
+                                                <select 
+                                                    name="isTaxable" 
+                                                    value={itemForm.isTaxable ? "true" : "false"} 
+                                                    onChange={(e) => setItemForm(prev => ({ ...prev, isTaxable: e.target.value === "true" }))}
+                                                    className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none shadow-xl"
                                                 >
-                                                    {itemForm.isTaxable ? 'Gravado 19%' : 'No Gravado'}
-                                                </button>
+                                                    <option value="true">19%</option>
+                                                    <option value="false">0%</option>
+                                                </select>
                                             </div>
                                             <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Cantidad Solic.</label>

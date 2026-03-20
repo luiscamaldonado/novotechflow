@@ -114,4 +114,9 @@ export class ProposalsController {
         return this.proposalsService.removeScenarioItem(itemId);
     }
 
+    @UseGuards(JwtAuthGuard)
+    @Patch('scenarios/:scenarioId/apply-margin')
+    async applyMarginToScenario(@Param('scenarioId') id: string, @Body() data: { marginPct: number }) {
+        return this.proposalsService.applyMarginToEntireScenario(id, data.marginPct);
+    }
 }

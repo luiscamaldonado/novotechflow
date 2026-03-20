@@ -5,7 +5,7 @@ import {
     Calculator, Plus, Trash2, ChevronRight,
     ArrowLeft, Loader2, Package,
     CheckCircle2, AlertCircle, TrendingUp,
-    Percent
+    Percent, RotateCcw
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -53,10 +53,13 @@ export default function ProposalCalculations() {
     const [trm, setTrm] = useState<{ valor: number, fechaActualizacion: string } | null>(null);
     const [extraTrm, setExtraTrm] = useState<{ setIcapAverage: number | null, wilkinsonSpot: number | null } | null>(null);
 
-    // Form states
     const [isCreatingScenario, setIsCreatingScenario] = useState(false);
     const [newScenarioName, setNewScenarioName] = useState('');
     const [isPickingItems, setIsPickingItems] = useState(false);
+
+    // Buffers para edición fluida
+    const [editingCell, setEditingCell] = useState<{ id: string, field: string, value: string } | null>(null);
+    const [globalMarginBuffer, setGlobalMarginBuffer] = useState<string | null>(null);
 
     useEffect(() => {
         loadData();
@@ -227,9 +230,68 @@ export default function ProposalCalculations() {
         }
     };
 
+    const handleUpdateUnitPrice = async (siId: string, price: string) => {
+        const val = parseFloat(price.replace(',', '.'));
+        if (isNaN(val) || val <= 0) return;
+
+        // Necesitamos calcular el nuevo margen basado en el costo landed
+        const scenario = scenarios.find(s => s.scenarioItems.some(si => si.id === siId));
+        if (!scenario) return;
+        const si = scenario.scenarioItems.find(i => i.id === siId);
+        if (!si) return;
+
+        const cost = Number(si.item.unitCost);
+        const flete = Number(si.item.internalCosts?.fletePct || 0);
+        const landedCost = cost * (1 + flete / 100);
+        
+        const newMargin = ((val - landedCost) / val) * 100;
+
+        try {
+            // Internamente actualizamos el margen override
+            await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: newMargin });
+            setScenarios(prev => prev.map(s => ({
+                ...s,
+                scenarioItems: s.scenarioItems.map(i => 
+                    i.id === siId ? { ...i, marginPctOverride: newMargin } : i
+                )
+            })));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleUpdateGlobalMargin = async (margin: string) => {
+        const val = parseFloat(margin.replace(',', '.'));
+        if (isNaN(val)) return;
+        if (!activeScenarioId) return;
+
+        try {
+            // Actualizar todos los items del escenario con este nuevo margen
+            await api.patch(`/proposals/scenarios/${activeScenarioId}/apply-margin`, { marginPct: val });
+            
+            // Actualizar estado local
+            setScenarios(prev => prev.map(s => {
+                if (s.id === activeScenarioId) {
+                    return {
+                        ...s,
+                        scenarioItems: s.scenarioItems.map(si => ({
+                            ...si,
+                            marginPctOverride: val
+                        }))
+                    };
+                }
+                return s;
+            }));
+        } catch (error) {
+            console.error(error);
+            alert("No se pudo aplicar el margen global.");
+        }
+    };
+
     const calculateTotals = (scenario: Scenario) => {
         let beforeVat = 0;
         let nonTaxed = 0;
+        let totalCost = 0;
 
         scenario.scenarioItems.forEach(si => {
             const item = si.item;
@@ -245,6 +307,8 @@ export default function ProposalCalculations() {
             }
 
             const totalItem = unitPrice * si.quantity;
+            totalCost += landedCost * si.quantity;
+
             if (item.isTaxable) {
                 beforeVat += totalItem;
             } else {
@@ -252,10 +316,13 @@ export default function ProposalCalculations() {
             }
         });
 
+        const totalPrice = beforeVat + nonTaxed;
+        const globalMarginPct = totalPrice > 0 ? ((totalPrice - totalCost) / totalPrice) * 100 : 0;
+        const subtotal = beforeVat + nonTaxed;
         const vat = beforeVat * 0.19;
         const total = (beforeVat + vat) + nonTaxed;
 
-        return { beforeVat, nonTaxed, vat, total };
+        return { beforeVat, nonTaxed, subtotal, vat, total, globalMarginPct };
     };
 
     if (loading || !proposal) {
@@ -267,7 +334,7 @@ export default function ProposalCalculations() {
     }
 
     const activeScenario = scenarios.find(s => s.id === activeScenarioId);
-    const totals = activeScenario ? calculateTotals(activeScenario) : { beforeVat: 0, nonTaxed: 0, vat: 0, total: 0 };
+    const totals = activeScenario ? calculateTotals(activeScenario) : { beforeVat: 0, nonTaxed: 0, subtotal: 0, vat: 0, total: 0, globalMarginPct: 0 };
 
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
@@ -302,10 +369,19 @@ export default function ProposalCalculations() {
                                                 Vigencia Oficial:
                                             </span>
                                             <span className="text-[11px] font-bold text-indigo-600">
-                                                Vigencia: {trm.fechaActualizacion ? new Date(trm.fechaActualizacion).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' }) : new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                {new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}
                                             </span>
                                         </div>
                                     </div>
+
+                                    <button 
+                                        onClick={loadData}
+                                        disabled={loading}
+                                        className="p-3 bg-white hover:bg-emerald-100 text-emerald-600 rounded-2xl border border-emerald-100 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                                        title="Actualizar TRM"
+                                    >
+                                        <RotateCcw className={cn("h-4 w-4", loading && "animate-spin")} />
+                                    </button>
                                     
                                     {(extraTrm?.setIcapAverage || extraTrm?.wilkinsonSpot) && (
                                         <>
@@ -447,6 +523,24 @@ export default function ProposalCalculations() {
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-6">
+                                        <div className="flex flex-col items-end mr-4">
+                                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Margen Global</span>
+                                            <div className="flex items-center bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 shadow-sm">
+                                                <input 
+                                                    type="text"
+                                                    value={globalMarginBuffer !== null ? globalMarginBuffer : totals.globalMarginPct.toFixed(2)}
+                                                    onFocus={() => setGlobalMarginBuffer(totals.globalMarginPct.toFixed(2))}
+                                                    onChange={(e) => setGlobalMarginBuffer(e.target.value)}
+                                                    onBlur={(e) => {
+                                                        handleUpdateGlobalMargin(e.target.value);
+                                                        setGlobalMarginBuffer(null);
+                                                    }}
+                                                    className="w-16 bg-transparent border-none text-right font-black text-emerald-700 p-0 focus:ring-0 text-sm"
+                                                />
+                                                <span className="ml-1 text-xs font-black text-emerald-600">%</span>
+                                            </div>
+                                        </div>
+
                                         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                                             <button 
                                                 onClick={() => handleChangeCurrency('COP')}
@@ -482,7 +576,8 @@ export default function ProposalCalculations() {
                                     <table className="w-full text-left border-collapse">
                                         <thead className="bg-slate-50 border-y border-slate-100">
                                             <tr>
-                                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Item</th>
+                                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ITEM #</th>
+                                                <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Configuración de Item</th>
                                                 <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Cant.</th>
                                                 <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Margen (%)</th>
                                                 <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Unitario ($)</th>
@@ -501,8 +596,11 @@ export default function ProposalCalculations() {
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                activeScenario.scenarioItems.map((si) => {
+                                                activeScenario.scenarioItems.map((si, idx) => {
                                                     const item = si.item;
+                                                    const globalItemIdx = proposal?.proposalItems.findIndex((pi: any) => pi.id === si.itemId) ?? -1;
+                                                    const displayIdx = globalItemIdx !== -1 ? globalItemIdx + 1 : idx + 1;
+                                                    
                                                     const cost = Number(item.unitCost);
                                                     const flete = Number(item.internalCosts?.fletePct || 0);
                                                     const landedCost = cost * (1 + flete / 100);
@@ -513,8 +611,11 @@ export default function ProposalCalculations() {
                                                     }
 
                                                     return (
-                                                        <tr key={si.id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <tr key={si.id} className="group hover:bg-slate-50 transition-colors">
                                                             <td className="px-8 py-6">
+                                                                <span className="text-[11px] font-black text-indigo-400 bg-indigo-50 px-2 py-1 rounded-lg">#{displayIdx}</span>
+                                                            </td>
+                                                            <td className="px-4 py-6">
                                                                 <div className="flex flex-col">
                                                                     <span className="font-black text-slate-900 text-sm">{item.name}</span>
                                                                     <span className="text-[10px] text-slate-400 font-bold uppercase">{item.itemType} {item.isTaxable ? '(Gravado 19%)' : '(No Gravado)'}</span>
@@ -532,8 +633,18 @@ export default function ProposalCalculations() {
                                                                 <div className="relative w-24 mx-auto">
                                                                     <input 
                                                                         type="text" 
-                                                                        value={(si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct}
-                                                                        onChange={(e) => handleUpdateMargin(si.id!, e.target.value)}
+                                                                        value={editingCell?.id === si.id && editingCell?.field === 'margin' 
+                                                                            ? editingCell.value 
+                                                                            : Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct).toFixed(2)}
+                                                                        onFocus={() => {
+                                                                            const val = Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct);
+                                                                            setEditingCell({ id: si.id!, field: 'margin', value: val.toFixed(2) });
+                                                                        }}
+                                                                        onChange={(e) => setEditingCell({ id: si.id!, field: 'margin', value: e.target.value })}
+                                                                        onBlur={(e) => {
+                                                                            handleUpdateMargin(si.id!, e.target.value);
+                                                                            setEditingCell(null);
+                                                                        }}
                                                                         className={cn(
                                                                             "w-full bg-indigo-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6",
                                                                             (si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? "text-indigo-600" : "text-slate-400"
@@ -543,7 +654,19 @@ export default function ProposalCalculations() {
                                                                 </div>
                                                             </td>
                                                             <td className="px-4 py-6 text-right font-mono text-xs text-slate-500">
-                                                                ${unitPrice.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                <input 
+                                                                    type="text"
+                                                                    value={editingCell?.id === si.id && editingCell?.field === 'price' 
+                                                                        ? editingCell.value 
+                                                                        : unitPrice.toFixed(2)}
+                                                                    onFocus={() => setEditingCell({ id: si.id!, field: 'price', value: unitPrice.toFixed(2) })}
+                                                                    onChange={(e) => setEditingCell({ id: si.id!, field: 'price', value: e.target.value })}
+                                                                    onBlur={(e) => {
+                                                                        handleUpdateUnitPrice(si.id!, e.target.value);
+                                                                        setEditingCell(null);
+                                                                    }}
+                                                                    className="w-24 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20"
+                                                                />
                                                             </td>
                                                             <td className="px-4 py-6 text-right font-mono font-black text-indigo-600">
                                                                 ${(unitPrice * si.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -566,32 +689,39 @@ export default function ProposalCalculations() {
                             </div>
 
                             {/* Resumen de Totales */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-1">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Antes de IVA (19%)</span>
-                                    <p className="text-2xl font-black text-slate-900">
-                                        <span className="text-sm font-bold text-slate-300 mr-2">{activeScenario.currency}</span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GRAVADO (19%)</span>
+                                    <p className="text-xl font-black text-slate-900">
+                                        <span className="text-xs font-bold text-slate-300 mr-2">{activeScenario.currency}</span>
                                         ${totals.beforeVat.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
                                 </div>
                                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-1">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Gravados (0%)</span>
-                                    <p className="text-2xl font-black text-slate-900">
-                                        <span className="text-sm font-bold text-slate-300 mr-2">{activeScenario.currency}</span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">NO GRAVADO (0%)</span>
+                                    <p className="text-xl font-black text-slate-900">
+                                        <span className="text-xs font-bold text-slate-300 mr-2">{activeScenario.currency}</span>
                                         ${totals.nonTaxed.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
                                 </div>
-                                <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 shadow-sm space-y-1">
-                                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">IVA Estimado</span>
-                                    <p className="text-2xl font-black text-indigo-600">
-                                        <span className="text-sm font-bold text-indigo-200 mr-2">{activeScenario.currency}</span>
+                                <div className="bg-amber-50 p-6 rounded-[2rem] border-2 border-amber-200 shadow-xl shadow-amber-50/50 space-y-1">
+                                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">SUBTOTAL ANTES DE IVA</span>
+                                    <p className="text-xl font-black text-amber-900">
+                                        <span className="text-xs font-bold text-amber-400 mr-2">{activeScenario.currency}</span>
+                                        ${totals.subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </p>
+                                </div>
+                                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-1">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">IVA ESTIMADO</span>
+                                    <p className="text-xl font-black text-slate-900">
+                                        <span className="text-xs font-bold text-slate-300 mr-2">{activeScenario.currency}</span>
                                         ${totals.vat.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
                                 </div>
                                 <div className="bg-slate-900 p-6 rounded-[2rem] shadow-xl shadow-slate-200 space-y-1">
-                                    <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Total Escenario</span>
-                                    <p className="text-2xl font-black text-white">
-                                        <span className="text-sm font-bold text-slate-600 mr-2">{activeScenario.currency}</span>
+                                    <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">TOTAL ESCENARIO IVA INCLUIDO</span>
+                                    <p className="text-xl font-black text-white">
+                                        <span className="text-xs font-bold text-slate-600 mr-2">{activeScenario.currency}</span>
                                         ${totals.total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
                                 </div>
