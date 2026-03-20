@@ -36,7 +36,7 @@ export default function Users() {
             setIsLoading(true);
             const response = await api.get('/users');
             setUsers(response.data);
-        } catch (err: any) {
+        } catch (err) {
             console.error('Error loading users:', err);
         } finally {
             setIsLoading(false);
@@ -65,8 +65,9 @@ export default function Users() {
             await api.post('/users', data);
             setIsCreating(false);
             loadUsers(); // Recargar usuarios
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Error al crear el usuario. Verifica que el correo o nomenclatura no estén duplicados.');
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setError(axiosErr.response?.data?.message || 'Error al crear el usuario. Verifica que el correo o nomenclatura no estén duplicados.');
         } finally {
             setIsSaving(false);
         }
@@ -80,7 +81,7 @@ export default function Users() {
         try {
             await api.delete(`/users/${id}`);
             loadUsers(); // Recargar la tabla
-        } catch (err: any) {
+        } catch (err) {
             alert('Hubo un error al intentar eliminar el usuario.');
             console.error(err);
         }

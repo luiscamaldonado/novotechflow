@@ -3,18 +3,20 @@ import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { ProposalStatus } from '@prisma/client';
-import { AuthenticatedUser } from '../auth/dto/auth.dto';
-import {
-    CreateProposalDto,
-    UpdateProposalDto,
-    CreateProposalItemDto,
-    UpdateProposalItemDto,
-    CreateScenarioDto,
-    UpdateScenarioDto,
-    AddScenarioItemDto,
-    UpdateScenarioItemDto,
-} from './dto/proposals.dto';
 
+/**
+ * @interface ICreateProposalInput
+ * DTO simplificado para la creación de una propuesta.
+ */
+interface ICreateProposalInput {
+  userId: string;
+  clientId?: string;
+  clientName: string;
+  subject: string;
+  issueDate: string;
+  validityDays: string;
+  validityDate: string;
+}
 
 @Injectable()
 export class ProposalsService {
@@ -63,7 +65,7 @@ export class ProposalsService {
    * @param {ICreateProposalInput} data - Payload con la información de la propuesta.
    * @throws {NotFoundException} Si el usuario no existe.
    */
-  async createProposal(userId: string, data: CreateProposalDto) {
+  async createProposal(userId: string, data: ICreateProposalInput) {
     try {
       const user = await this.validateUserAccess(userId);
       const clientId = await this.ensureClientExists(data.clientName, data.clientId);
@@ -79,7 +81,7 @@ export class ProposalsService {
           issueDate: new Date(data.issueDate),
           validityDays: typeof data.validityDays === 'string' ? parseInt(data.validityDays, 10) : data.validityDays,
           validityDate: new Date(data.validityDate),
-          status: ProposalStatus.ELABORACION,
+          status: ProposalStatus.DRAFT,
         },
       });
     } catch (error) {
@@ -179,18 +181,15 @@ export class ProposalsService {
    * @param {string} id - UUID de la propuesta.
    * @param {any} data - Nuevos datos (asunto, fechas, etc).
    */
-  async updateProposal(id: string, data: UpdateProposalDto) {
+  async updateProposal(id: string, data: any) {
     return this.prisma.proposal.update({
       where: { id },
       data: {
         subject: data.subject,
         issueDate: data.issueDate ? new Date(data.issueDate) : undefined,
-        validityDays: data.validityDays ?? undefined,
+        validityDays: data.validityDays ? parseInt(data.validityDays, 10) : undefined,
         validityDate: data.validityDate ? new Date(data.validityDate) : undefined,
-        status: data.status ?? undefined,
-        closeDate: data.closeDate ? new Date(data.closeDate) : data.closeDate === null ? null : undefined,
-        billingDate: data.billingDate ? new Date(data.billingDate) : data.billingDate === null ? null : undefined,
-      },
+      }
     });
   }
 
@@ -198,7 +197,7 @@ export class ProposalsService {
    * Añade un nuevo ítem (producto/servicio) a la propuesta.
    * Gestiona el correlativo de orden (sortOrder) automáticamente.
    */
-  async addProposalItem(proposalId: string, data: CreateProposalItemDto) {
+  async addProposalItem(proposalId: string, data: any) {
     const aggregate = await this.prisma.proposalItem.aggregate({
       where: { proposalId },
       _max: { sortOrder: true }
@@ -214,13 +213,13 @@ export class ProposalsService {
         description: data.description,
         brand: data.brand,
         partNumber: data.partNumber,
-        quantity: data.quantity || 1,
-        unitCost: data.unitCost || 0,
-        marginPct: data.marginPct || 0,
-        unitPrice: data.unitPrice || 0,
+        quantity: parseFloat(data.quantity) || 1,
+        unitCost: parseFloat(data.unitCost) || 0,
+        marginPct: parseFloat(data.marginPct) || 0,
+        unitPrice: parseFloat(data.unitPrice) || 0,
         isTaxable: data.isTaxable ?? true,
-        technicalSpecs: (data.technicalSpecs || {}) as object,
-        internalCosts: (data.internalCosts || {}) as object,
+        technicalSpecs: data.technicalSpecs || {},
+        internalCosts: data.internalCosts || {},
         sortOrder: nextOrder,
       }
     });
@@ -238,7 +237,7 @@ export class ProposalsService {
   /**
    * Actualiza un ítem específico de una propuesta.
    */
-  async updateProposalItem(itemId: string, data: UpdateProposalItemDto) {
+  async updateProposalItem(itemId: string, data: any) {
     return this.prisma.proposalItem.update({
       where: { id: itemId },
       data: {
@@ -247,13 +246,13 @@ export class ProposalsService {
         description: data.description,
         brand: data.brand,
         partNumber: data.partNumber,
-        quantity: data.quantity,
-        unitCost: data.unitCost,
-        marginPct: data.marginPct,
-        unitPrice: data.unitPrice,
+        quantity: data.quantity !== undefined ? parseFloat(data.quantity) : undefined,
+        unitCost: data.unitCost !== undefined ? parseFloat(data.unitCost) : undefined,
+        marginPct: data.marginPct !== undefined ? parseFloat(data.marginPct) : undefined,
+        unitPrice: data.unitPrice !== undefined ? parseFloat(data.unitPrice) : undefined,
         isTaxable: data.isTaxable,
-        technicalSpecs: data.technicalSpecs as object | undefined,
-        internalCosts: data.internalCosts as object | undefined,
+        technicalSpecs: data.technicalSpecs,
+        internalCosts: data.internalCosts,
       }
     });
   }
@@ -265,154 +264,17 @@ export class ProposalsService {
    * @param {any} user - Objeto del usuario autenticado (proviene del JWT payload).
    * @returns Lista de propuestas con datos del comercial asociado.
    */
-  async findAll(user: AuthenticatedUser) {
+  async findAll(user: any) {
+    // Si es ADMIN, ve todo. Si no, solo lo propio.
     const accessFilter = user.role === 'ADMIN' ? {} : { userId: user.id };
-
+    
     return this.prisma.proposal.findMany({
       where: accessFilter,
       include: {
-        user: { select: { name: true, nomenclature: true } },
-        scenarios: {
-          include: {
-            scenarioItems: {
-              where: { parentId: null },
-              include: {
-                item: true,
-                children: { include: { item: true } },
-              },
-            },
-          },
-        },
+        user: { select: { name: true, nomenclature: true } }
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { createdAt: 'desc' }
     });
-  }
-
-  /**
-   * Clona una propuesta existente incluyendo ítems y escenarios.
-   * NEW_VERSION: incrementa la versión (COT-LM0001-1 → COT-LM0001-2)
-   * NEW_PROPOSAL: genera nuevo código secuencial (COT-LM0002-1)
-   */
-  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') {
-    const original = await this.prisma.proposal.findUnique({
-      where: { id },
-      include: {
-        proposalItems: true,
-        scenarios: {
-          include: {
-            scenarioItems: {
-              include: { children: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!original) throw new NotFoundException('Propuesta no encontrada.');
-
-    let newCode: string;
-
-    if (cloneType === 'NEW_VERSION') {
-      // Increment version: COT-LM0001-1 → COT-LM0001-2
-      const baseParts = original.proposalCode?.match(/^(.+)-(\d+)$/);
-      if (baseParts) {
-        const nextVersion = parseInt(baseParts[2], 10) + 1;
-        newCode = `${baseParts[1]}-${nextVersion}`;
-      } else {
-        newCode = `${original.proposalCode}-2`;
-      }
-    } else {
-      // NEW_PROPOSAL: Generate new sequential code
-      const user = await this.validateUserAccess(userId);
-      newCode = await this.generateProposalCode(user.nomenclature, userId);
-    }
-
-    // Create the new proposal
-    const cloned = await this.prisma.proposal.create({
-      data: {
-        proposalCode: newCode,
-        userId,
-        clientId: original.clientId,
-        clientName: original.clientName,
-        subject: original.subject,
-        issueDate: new Date(),
-        validityDays: original.validityDays,
-        validityDate: original.validityDate,
-        status: ProposalStatus.ELABORACION,
-      },
-    });
-
-    // Clone proposal items, mapping old IDs to new IDs
-    const itemIdMap = new Map<string, string>();
-    for (const item of original.proposalItems) {
-      const newItem = await this.prisma.proposalItem.create({
-        data: {
-          proposalId: cloned.id,
-          itemType: item.itemType,
-          name: item.name,
-          description: item.description,
-          brand: item.brand,
-          partNumber: item.partNumber,
-          quantity: item.quantity,
-          unitCost: item.unitCost,
-          marginPct: item.marginPct,
-          unitPrice: item.unitPrice,
-          isTaxable: item.isTaxable,
-          technicalSpecs: item.technicalSpecs as object | undefined,
-          internalCosts: item.internalCosts as object | undefined,
-          sortOrder: item.sortOrder,
-        },
-      });
-      itemIdMap.set(item.id, newItem.id);
-    }
-
-    // Clone scenarios with items
-    for (const scenario of original.scenarios) {
-      const newScenario = await this.prisma.scenario.create({
-        data: {
-          proposalId: cloned.id,
-          name: scenario.name,
-          currency: scenario.currency,
-          description: scenario.description,
-          sortOrder: scenario.sortOrder,
-        },
-      });
-
-      // Clone root scenario items (parentId = null)
-      const rootItems = scenario.scenarioItems.filter(si => !si.parentId);
-      const scenarioItemIdMap = new Map<string, string>();
-
-      for (const si of rootItems) {
-        const newItemId = itemIdMap.get(si.itemId) || si.itemId;
-        const newSi = await this.prisma.scenarioItem.create({
-          data: {
-            scenarioId: newScenario.id,
-            itemId: newItemId,
-            quantity: si.quantity,
-            marginPctOverride: si.marginPctOverride,
-          },
-        });
-        scenarioItemIdMap.set(si.id, newSi.id);
-      }
-
-      // Clone child scenario items
-      const childItems = scenario.scenarioItems.filter(si => si.parentId);
-      for (const child of childItems) {
-        const newParentId = scenarioItemIdMap.get(child.parentId!) || child.parentId;
-        const newItemId = itemIdMap.get(child.itemId) || child.itemId;
-        await this.prisma.scenarioItem.create({
-          data: {
-            scenarioId: newScenario.id,
-            itemId: newItemId,
-            parentId: newParentId,
-            quantity: child.quantity,
-            marginPctOverride: child.marginPctOverride,
-          },
-        });
-      }
-    }
-
-    return cloned;
   }
 
   /**
@@ -468,7 +330,7 @@ export class ProposalsService {
         results.setIcapAverage = this.parseCurrencyString(setIcapRes.data.data.avg);
       }
     } catch (e) {
-      this.logger.error(`Error fetching SET-ICAP average: ${(e as Error).message}`);
+      console.error("Error fetching SET-ICAP average:", e.message);
     }
 
     // 2. Wilkinson Spot Average (Scraping)
@@ -485,7 +347,7 @@ export class ProposalsService {
         results.wilkinsonSpot = this.parseCurrencyString(spotText);
       }
     } catch (e) {
-      this.logger.error(`Error fetching Wilkinson spot: ${(e as Error).message}`);
+      console.error("Error fetching Wilkinson spot:", e.message);
     }
 
     return results;
@@ -527,23 +389,19 @@ export class ProposalsService {
       where: { proposalId },
       include: {
         scenarioItems: {
-          where: { parentId: null },
           include: {
-            item: true,
-            children: {
-              include: { item: true },
-            },
-          },
-        },
+            item: true
+          }
+        }
       },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { sortOrder: 'asc' }
     });
   }
 
   /**
    * Crea un nuevo escenario para una propuesta.
    */
-  async createScenario(proposalId: string, data: CreateScenarioDto) {
+  async createScenario(proposalId: string, data: any) {
     const aggregate = await this.prisma.scenario.aggregate({
       where: { proposalId },
       _max: { sortOrder: true }
@@ -565,7 +423,7 @@ export class ProposalsService {
   /**
    * Actualiza un escenario existente.
    */
-  async updateScenario(id: string, data: UpdateScenarioDto) {
+  async updateScenario(id: string, data: any) {
     return this.prisma.scenario.update({
       where: { id },
       data: {
@@ -587,31 +445,26 @@ export class ProposalsService {
   /**
    * Vincula un item de propuesta a un escenario.
    */
-  async addScenarioItem(scenarioId: string, data: AddScenarioItemDto) {
+  async addScenarioItem(scenarioId: string, data: any) {
     return this.prisma.scenarioItem.create({
       data: {
         scenarioId,
         itemId: data.itemId,
-        parentId: data.parentId ?? undefined,
-        quantity: data.quantity || 1,
-        marginPctOverride: data.marginPct ?? undefined,
-      },
-      include: {
-        item: true,
-        children: { include: { item: true } },
-      },
+        quantity: parseInt(data.quantity, 10) || 1,
+        marginPctOverride: data.marginPct ? parseFloat(data.marginPct) : undefined,
+      }
     });
   }
 
   /**
    * Actualiza un ítem dentro de un escenario.
    */
-  async updateScenarioItem(id: string, data: UpdateScenarioItemDto) {
+  async updateScenarioItem(id: string, data: any) {
     return this.prisma.scenarioItem.update({
       where: { id },
       data: {
-        quantity: data.quantity,
-        marginPctOverride: data.marginPct,
+        quantity: data.quantity !== undefined ? parseInt(data.quantity, 10) : undefined,
+        marginPctOverride: data.marginPct !== undefined ? parseFloat(data.marginPct) : undefined,
       }
     });
   }
@@ -620,9 +473,9 @@ export class ProposalsService {
    * Elimina un ítem específico de un escenario.
    */
   async removeScenarioItem(id: string) {
-    // Cascade: delete children first, then the item itself
-    await this.prisma.scenarioItem.deleteMany({ where: { parentId: id } });
-    return this.prisma.scenarioItem.delete({ where: { id } });
+    return this.prisma.scenarioItem.delete({
+      where: { id }
+    });
   }
 
   /**

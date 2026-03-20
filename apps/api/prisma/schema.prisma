@@ -13,9 +13,12 @@ enum Role {
 }
 
 enum ProposalStatus {
-  DRAFT
-  COMPLETED
-  ARCHIVED
+  ELABORACION
+  PROPUESTA
+  GANADA
+  PERDIDA
+  PENDIENTE_FACTURAR
+  FACTURADA
 }
 
 enum ItemType {
@@ -78,9 +81,11 @@ model Proposal {
   issueDate      DateTime       @map("issue_date") @db.Date
   validityDays   Int?           @map("validity_days")
   validityDate   DateTime?      @map("validity_date") @db.Date
-  status         ProposalStatus
+  status         ProposalStatus @default(ELABORACION)
   currentVersion Int            @default(1) @map("current_version")
   isLocked       Boolean        @default(false) @map("is_locked")
+  closeDate      DateTime?      @map("close_date") @db.Date
+  billingDate    DateTime?      @map("billing_date") @db.Date
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
@@ -173,13 +178,16 @@ model ScenarioItem {
   id                String   @id @default(uuid()) @db.Uuid
   scenarioId        String   @map("scenario_id") @db.Uuid
   itemId            String   @map("item_id") @db.Uuid
+  parentId          String?  @map("parent_id") @db.Uuid
   quantity          Int      @default(1)
   unitCostOverride  Decimal? @map("unit_cost_override") @db.Decimal(15, 2)
   marginPctOverride Decimal? @map("margin_pct_override") @db.Decimal(5, 2)
   unitPriceOverride Decimal? @map("unit_price_override") @db.Decimal(15, 2)
 
-  scenario Scenario     @relation(fields: [scenarioId], references: [id])
-  item     ProposalItem @relation(fields: [itemId], references: [id])
+  scenario Scenario      @relation(fields: [scenarioId], references: [id])
+  item     ProposalItem  @relation(fields: [itemId], references: [id])
+  parent   ScenarioItem? @relation("ScenarioItemChildren", fields: [parentId], references: [id])
+  children ScenarioItem[] @relation("ScenarioItemChildren")
 
   @@map("scenario_items")
 }

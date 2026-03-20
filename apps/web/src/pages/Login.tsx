@@ -29,7 +29,7 @@ export default function Login() {
             } else {
                 navigate('/dashboard');
             }
-        } catch (err: any) {
+        } catch {
             setError('Credenciales inválidas. Por favor intenta de nuevo.');
         } finally {
             setLoading(false);

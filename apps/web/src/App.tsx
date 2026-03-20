@@ -1,17 +1,19 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { PrivateRoute, AdminRoute } from './components/auth/PrivateRoutes';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import AppLayout from './layouts/AppLayout';
 import Login from './pages/Login';
-import Users from './pages/Users';
-import NewProposal from './pages/proposals/NewProposal';
-import ProposalItemsBuilder from './pages/proposals/ProposalItemsBuilder';
-import ProposalCalculations from './pages/proposals/ProposalCalculations';
-import Dashboard from './pages/Dashboard';
+
+// Lazy-loaded page components (code splitting)
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Users = lazy(() => import('./pages/Users'));
+const NewProposal = lazy(() => import('./pages/proposals/NewProposal'));
+const ProposalItemsBuilder = lazy(() => import('./pages/proposals/ProposalItemsBuilder'));
+const ProposalCalculations = lazy(() => import('./pages/proposals/ProposalCalculations'));
 
 // Placeholder components for the main routes
-
 
 const PdfEditor = () => (
   <div className="space-y-6">
@@ -37,6 +39,13 @@ const AdminPanel = () => (
   </div>
 );
 
+/** Spinner de carga para Suspense fallback. */
+const PageLoader = () => (
+  <div className="flex items-center justify-center p-20">
+    <div className="w-10 h-10 border-4 border-novo-primary/20 border-t-novo-primary rounded-full animate-spin" />
+  </div>
+);
+
 function App() {
   const { checkAuth, isLoading, isAuthenticated, user } = useAuthStore();
 
@@ -54,28 +63,32 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={isAuthenticated ? <Navigate to={user?.role === 'ADMIN' ? '/admin' : '/dashboard'} replace /> : <Login />} />
+      <ErrorBoundary moduleName="Aplicación">
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/login" element={isAuthenticated ? <Navigate to={user?.role === 'ADMIN' ? '/admin' : '/dashboard'} replace /> : <Login />} />
 
-        {/* Rutas protegidas envueltas en el Layout */}
-        <Route element={<PrivateRoute />}>
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/proposals/new" element={<NewProposal />} />
-            <Route path="/proposals/:id/builder" element={<ProposalItemsBuilder />} />
-            <Route path="/proposals/:id/calculations" element={<ProposalCalculations />} />
-            <Route path="/pdf-editor" element={<PdfEditor />} />
+            {/* Rutas protegidas envueltas en el Layout */}
+            <Route element={<PrivateRoute />}>
+              <Route element={<AppLayout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/proposals/new" element={<NewProposal />} />
+                <Route path="/proposals/:id/builder" element={<ProposalItemsBuilder />} />
+                <Route path="/proposals/:id/calculations" element={<ProposalCalculations />} />
+                <Route path="/pdf-editor" element={<PdfEditor />} />
 
-            {/* Rutas exclusivas de Administrador */}
-            <Route element={<AdminRoute />}>
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/users" element={<Users />} />
+                {/* Rutas exclusivas de Administrador */}
+                <Route element={<AdminRoute />}>
+                  <Route path="/admin" element={<AdminPanel />} />
+                  <Route path="/users" element={<Users />} />
+                </Route>
+              </Route>
             </Route>
-          </Route>
-        </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

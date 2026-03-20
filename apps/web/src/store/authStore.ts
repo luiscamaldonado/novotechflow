@@ -1,19 +1,12 @@
 import { create } from 'zustand';
-
-interface User {
-    id: string;
-    name: string;
-    email: string;
-    role: 'ADMIN' | 'COMMERCIAL';
-    nomenclature: string;
-}
+import type { AuthUser } from '../lib/types';
 
 interface AuthState {
-    user: User | null;
+    user: AuthUser | null;
     token: string | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    login: (token: string, user: User) => void;
+    login: (token: string, user: AuthUser) => void;
     logout: () => void;
     checkAuth: () => void;
 }

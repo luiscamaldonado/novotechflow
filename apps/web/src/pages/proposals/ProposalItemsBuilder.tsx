@@ -1,170 +1,62 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Package, Save, Loader2, ArrowRight,
-    Plus, Trash2, Lock, Monitor, Cpu,
+    Plus, Trash2, Lock,
     Calendar, Clock, FileText, ChevronRight, Edit2, Copy,
-    Settings, Server
+    Cpu
 } from 'lucide-react';
-import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
-
-// Tipos para los artículos según nuevos estándares
-type ItemType = 'PCS' | 'ACCESSORIES' | 'PC_SERVICES' | 'SOFTWARE' | 'INFRASTRUCTURE' | 'INFRA_SERVICES';
-
-interface PcSpecs {
-    formato?: string;
-    fabricante?: string;
-    modelo?: string;
-    procesador?: string;
-    sistemaOperativo?: string;
-    graficos?: string;
-    memoriaRam?: string;
-    almacenamiento?: string;
-    pantalla?: string;
-    network?: string;
-    seguridad?: string;
-    garantiaBateria?: string;
-    garantiaEquipo?: string;
-    tipo?: string;
-    garantia?: string;
-    responsable?: string;
-    unidadMedida?: string;
-}
-
-interface ProposalItem {
-    id?: string;
-    itemType: ItemType;
-    name: string;
-    description: string;
-    brand: string;
-    partNumber: string;
-    quantity: number | string;
-    unitCost: number | string;
-    marginPct: number | string;
-    unitPrice: number | string;
-    technicalSpecs?: PcSpecs;
-    isTaxable?: boolean;
-    internalCosts?: {
-        proveedor?: string;
-        fletePct?: number | string;
-    };
-}
-
-const ITEM_TYPE_LABELS: Record<ItemType, string> = {
-    PCS: 'PCs',
-    ACCESSORIES: 'Accesorios y Opciones',
-    PC_SERVICES: 'Servicios PCs',
-    SOFTWARE: 'Software',
-    INFRASTRUCTURE: 'Infraestructura',
-    INFRA_SERVICES: 'Servicios de Infraestructura'
-};
+import type { ProposalItem, ProposalDetail } from '../../lib/types';
+import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../../lib/constants';
+import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
+import { useProposalBuilder } from '../../hooks/useProposalBuilder';
 
 export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
 
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [catalogs, setCatalogs] = useState<Record<string, string[]>>({});
-    const [activeSuggestion, setActiveSuggestion] = useState<{ field: string; index: number } | null>(null);
+    const {
+        loading, saving, catalogs, proposal, setProposal, items,
+        initialItemForm, saveItem, deleteItem, updateProposal,
+    } = useProposalBuilder(id);
 
-    // Propuesta general
-    const [proposal, setProposal] = useState<any>(null);
-
-    // Artículos
-    const [items, setItems] = useState<ProposalItem[]>([]);
+    // UI state
     const [isAddingItem, setIsAddingItem] = useState(false);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
-
-    // Formulario de artículo actual
-    const initialItemForm: ProposalItem = {
-        itemType: 'PCS',
-        name: '',
-        description: '',
-        brand: '',
-        partNumber: '',
-        quantity: 1,
-        unitCost: '',
-        marginPct: 20,
-        unitPrice: '',
-        technicalSpecs: {},
-        isTaxable: true,
-        internalCosts: {
-            proveedor: 'MAYORISTA',
-            fletePct: 1.5
-        }
-    };
     const [itemForm, setItemForm] = useState<ProposalItem>(initialItemForm);
-
-    useEffect(() => {
-        loadProposalData();
-        loadCatalogs();
-    }, [id]);
-
-    const loadProposalData = async () => {
-        try {
-            setLoading(true);
-            const res = await api.get(`/proposals/${id}`);
-            const data = res.data;
-            if (data.issueDate) data.issueDate = data.issueDate.split('T')[0];
-            if (data.validityDate) data.validityDate = data.validityDate.split('T')[0];
-
-            setProposal(data);
-            setItems(data.proposalItems || []);
-        } catch (error) {
-            console.error(error);
-            alert("No se pudo cargar la propuesta");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const loadCatalogs = async () => {
-        try {
-            const res = await api.get('/catalogs/pc-specs');
-            setCatalogs(res.data);
-        } catch (error) {
-            console.error("Error cargando catálogos", error);
-        }
-    };
 
     const handleUpdateProposal = async (e: React.FormEvent) => {
         e.preventDefault();
-        try {
-            setSaving(true);
-            await api.patch(`/proposals/${id}`, {
-                subject: proposal.subject,
-                issueDate: proposal.issueDate,
-                validityDays: parseInt(proposal.validityDays),
-                validityDate: proposal.validityDate
-            });
-        } catch (error) {
-            console.error(error);
-            alert("Error al actualizar la propuesta.");
-        } finally {
-            setSaving(false);
-        }
+        if (!proposal) return;
+        await updateProposal({
+            subject: proposal.subject,
+            issueDate: proposal.issueDate,
+            validityDays: proposal.validityDays,
+            validityDate: proposal.validityDate,
+        });
     };
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setProposal((prev: any) => {
-            const next = { ...prev, [name]: value };
+        setProposal((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev, [name]: value } as ProposalDetail & Record<string, unknown>;
             if (name === 'validityDays') {
                 const days = parseInt(value, 10) || 0;
-                const d = new Date(next.issueDate);
+                const d = new Date(String(next.issueDate));
                 d.setDate(d.getDate() + days);
                 next.validityDate = d.toISOString().split('T')[0];
+                next.validityDays = days;
             } else if (name === 'validityDate') {
-                const start = new Date(next.issueDate);
+                const start = new Date(String(next.issueDate));
                 const end = new Date(value);
                 const diffTime = end.getTime() - start.getTime();
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 next.validityDays = diffDays > 0 ? diffDays : 0;
             } else if (name === 'issueDate') {
-                const days = parseInt(next.validityDays, 10) || 0;
+                const days = next.validityDays || 0;
                 const d = new Date(value);
                 d.setDate(d.getDate() + days);
                 next.validityDate = d.toISOString().split('T')[0];
@@ -201,7 +93,6 @@ export default function ProposalItemsBuilder() {
             if (name.startsWith('spec.')) {
                 const specField = name.split('.')[1];
                 next.technicalSpecs = { ...prev.technicalSpecs, [specField]: value };
-                setActiveSuggestion({ field: specField, index: -1 });
             } else if (name.startsWith('internal.')) {
                 const internalField = name.split('.')[1];
 
@@ -211,7 +102,7 @@ export default function ProposalItemsBuilder() {
                     next.internalCosts = { 
                         ...prev.internalCosts, 
                         proveedor: value,
-                        fletePct: value === 'MAYORISTA' ? 1.5 : 0 
+                        fletePct: value === PROVEEDOR_MAYORISTA ? MAYORISTA_FLETE_PCT : 0 
                     };
                 } else {
                     next.internalCosts = {
@@ -220,8 +111,7 @@ export default function ProposalItemsBuilder() {
                     };
                 }
             } else {
-                // @ts-ignore
-                next[name] = value;
+                (next as Record<string, unknown>)[name] = value;
             }
 
             // Lógica de cálculo automático con Costo Landed (Márgen sobre costo + flete)
@@ -230,7 +120,7 @@ export default function ProposalItemsBuilder() {
             
             let fleteValue = Number(next.internalCosts?.fletePct || 0);
             if (name === 'internal.proveedor') {
-                fleteValue = value === 'MAYORISTA' ? 1.5 : 0;
+                fleteValue = value === PROVEEDOR_MAYORISTA ? MAYORISTA_FLETE_PCT : 0;
             } else if (name === 'internal.fletePct') {
                 fleteValue = Number(value);
             }
@@ -267,56 +157,18 @@ export default function ProposalItemsBuilder() {
             ...prev,
             technicalSpecs: {
                 ...prev.technicalSpecs,
-                [field]: value // Ya viene normalizado de la BD
+                [field]: value
             }
         }));
-        setActiveSuggestion(null);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent, field: string, suggestions: string[]) => {
-        if (!suggestions.length) return;
-
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setActiveSuggestion(prev => {
-                if (!prev || prev.field !== field) return { field, index: 0 };
-                return { ...prev, index: Math.min(prev.index + 1, suggestions.length - 1) };
-            });
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setActiveSuggestion(prev => {
-                if (!prev || prev.field !== field) return { field, index: -1 };
-                return { ...prev, index: Math.max(prev.index - 1, -1) };
-            });
-        } else if (e.key === 'Enter' || e.key === 'Tab') {
-            if (activeSuggestion && activeSuggestion.field === field && activeSuggestion.index >= 0) {
-                e.preventDefault();
-                selectSuggestion(field, suggestions[activeSuggestion.index]);
-            }
-        } else if (e.key === 'Escape') {
-            setActiveSuggestion(null);
-        }
-    };
-
-    const saveItem = async (e: React.FormEvent) => {
+    const handleSaveItem = async (e: React.FormEvent) => {
         e.preventDefault();
-        try {
-            setSaving(true);
-            if (editingItemId) {
-                const res = await api.patch(`/proposals/items/${editingItemId}`, itemForm);
-                setItems(prev => prev.map(i => i.id === editingItemId ? res.data : i));
-            } else {
-                const res = await api.post(`/proposals/${id}/items`, itemForm);
-                setItems(prev => [...prev, res.data]);
-            }
+        const success = await saveItem(itemForm, editingItemId);
+        if (success) {
             setIsAddingItem(false);
             setEditingItemId(null);
             setItemForm(initialItemForm);
-        } catch (error) {
-            console.error(error);
-            alert(`Error al ${editingItemId ? 'actualizar' : 'agregar'} artículo.`);
-        } finally {
-            setSaving(false);
         }
     };
 
@@ -324,7 +176,6 @@ export default function ProposalItemsBuilder() {
         setItemForm(item);
         setEditingItemId(item.id || null);
         setIsAddingItem(true);
-        // Scroll to top or to the form
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -335,17 +186,6 @@ export default function ProposalItemsBuilder() {
         setEditingItemId(null);
         setIsAddingItem(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const deleteItem = async (itemId: string) => {
-        if (!window.confirm("¿Segura que deseas eliminar este item?")) return;
-        try {
-            await api.delete(`/proposals/items/${itemId}`);
-            setItems(prev => prev.filter(i => i.id !== itemId));
-        } catch (error) {
-            console.error(error);
-            alert("Error al eliminar el item.");
-        }
     };
 
     if (loading || !proposal) {
@@ -489,7 +329,7 @@ export default function ProposalItemsBuilder() {
                     <AnimatePresence>
                         {isAddingItem && (
                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="bg-indigo-50/20 overflow-hidden border-b border-indigo-100">
-                                <form onSubmit={saveItem} className="p-8 space-y-8">
+                                <form onSubmit={handleSaveItem} className="p-8 space-y-8">
                                     <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
                                         {/* ITEM # (Solo lectura) */}
                                         <div className="md:col-span-2 space-y-2">
@@ -517,405 +357,14 @@ export default function ProposalItemsBuilder() {
                                             <input type="text" name="name" value={itemForm.name} onChange={handleItemChange} required placeholder="Ej. Laptops Dell Vostro 3400..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all" />
                                         </div>
 
-                                        {/* SECCIÓN ESPECIAL PARA PCs */}
-                                        {itemForm.itemType === 'PCS' && (
-                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-inner">
-                                                <div className="md:col-span-4 lg:col-span-4 flex items-center space-x-3 mb-2">
-                                                    <div className="bg-indigo-600 p-2 rounded-xl shadow-md"><Monitor className="h-5 w-5 text-white" /></div>
-                                                    <div>
-                                                         <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Ficha Técnica Automatizada</h4>
-                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Configure los parámetros del equipo basados en el catálogo maestro.</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                {Object.entries({
-                                                    formato: { label: 'Formato', cat: 'FORMATO' },
-                                                    fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
-                                                    modelo: { label: 'Modelo', cat: 'MODELO' },
-                                                    procesador: { label: 'Procesador', cat: 'PROCESADOR' },
-                                                    sistemaOperativo: { label: 'Sistema Operativo', cat: 'SISTEMA_OPERATIVO' },
-                                                    graficos: { label: 'Gráficos', cat: 'GRAFICOS' },
-                                                    memoriaRam: { label: 'Memoria RAM', cat: 'MEMORIA_RAM' },
-                                                    almacenamiento: { label: 'Almacenamiento', cat: 'ALMACENAMIENTO' },
-                                                    pantalla: { label: 'Pantalla', cat: 'PANTALLA' },
-                                                    network: { label: 'Network', cat: 'NETWORK' },
-                                                    seguridad: { label: 'Seguridad', cat: 'SEGURIDAD' },
-                                                    garantiaBateria: { label: 'Garantía Batería', cat: 'GARANTIA_BATERIA' },
-                                                    garantiaEquipo: { label: 'Garantía Equipo', cat: 'GARANTIA_EQUIPO' },
-                                                }).map(([field, spec]) => {
-                                                    //@ts-ignore
-                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
-                                                    const suggestions = currentVal.trim().length > 0 
-                                                        ? catalogs[spec.cat]?.filter(v => 
-                                                            v.toLowerCase().includes(currentVal.toLowerCase())
-                                                          ).slice(0, 20) || []
-                                                        : [];
-
-                                                    return (
-                                                        <div key={field} className="space-y-1.5 relative group">
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-indigo-400 transition-colors">{spec.label}</label>
-                                                                    <div className="relative">
-                                                                <input 
-                                                                    type="text"
-                                                                    name={`spec.${field}`}
-                                                                    value={currentVal}
-                                                                    onChange={handleItemChange}
-                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
-                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
-                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                                                    placeholder={`Escriba ${spec.label}...`}
-                                                                    autoComplete="off"
-                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
-                                                                />
-                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
-                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                                                        {suggestions.map((s, i) => (
-                                                                            <button
-                                                                                key={i}
-                                                                                type="button"
-                                                                                onClick={() => selectSuggestion(field, s)}
-                                                                                className={cn(
-                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-between group",
-                                                                                    activeSuggestion?.index === i && "bg-indigo-50 text-indigo-600"
-                                                                                )}
-                                                                            >
-                                                                                <span>{s}</span>
-                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-
-                                        {/* SECCIÓN ESPECIAL PARA ACCESORIOS */}
-                                        {itemForm.itemType === 'ACCESSORIES' && (
-                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-inner">
-                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
-                                                    <div className="bg-indigo-600 p-2 rounded-xl shadow-md"><Package className="h-5 w-5 text-white" /></div>
-                                                    <div>
-                                                         <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Especificaciones de Accesorio</h4>
-                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo, marca y respaldo del accesorio u opción.</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                {Object.entries({
-                                                    tipo: { label: 'Tipo', cat: 'ACC_TIPO' },
-                                                    fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
-                                                    garantia: { label: 'Garantía', cat: 'ACC_GARANTIA' },
-                                                }).map(([field, spec]) => {
-                                                    //@ts-ignore
-                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
-                                                    const suggestions = currentVal.trim().length > 0 
-                                                        ? catalogs[spec.cat]?.filter(v => 
-                                                            v.toLowerCase().includes(currentVal.toLowerCase())
-                                                          ).slice(0, 20) || []
-                                                        : [];
-
-                                                    return (
-                                                        <div key={field} className="space-y-1.5 relative group">
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-indigo-400 transition-colors">{spec.label}</label>
-                                                            <div className="relative">
-                                                                <input 
-                                                                    type="text"
-                                                                    name={`spec.${field}`}
-                                                                    value={currentVal}
-                                                                    onChange={handleItemChange}
-                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
-                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
-                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                                                    placeholder={`Escriba ${spec.label}...`}
-                                                                    autoComplete="off"
-                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
-                                                                />
-                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
-                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                                                        {suggestions.map((s, i) => (
-                                                                            <button
-                                                                                key={i}
-                                                                                type="button"
-                                                                                onClick={() => selectSuggestion(field, s)}
-                                                                                className={cn(
-                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-between group",
-                                                                                    activeSuggestion?.index === i && "bg-indigo-50 text-indigo-600"
-                                                                                )}
-                                                                            >
-                                                                                <span>{s}</span>
-                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-
-                                        {/* SECCIÓN ESPECIAL PARA SERVICIOS PC */}
-                                        {itemForm.itemType === 'PC_SERVICES' && (
-                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-inner">
-                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
-                                                    <div className="bg-indigo-600 p-2 rounded-xl shadow-md"><FileText className="h-5 w-5 text-white" /></div>
-                                                    <div>
-                                                         <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Configuración de Servicio</h4>
-                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el alcance, responsable y métricas del servicio.</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                {Object.entries({
-                                                    tipo: { label: 'Tipo de Servicio', cat: 'SVC_TIPO' },
-                                                    responsable: { label: 'Responsable', cat: 'SVC_RESPONSABLE' },
-                                                    unidadMedida: { label: 'Unidad de Medida', cat: 'SVC_UM' },
-                                                }).map(([field, spec]) => {
-                                                    //@ts-ignore
-                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
-                                                    const suggestions = currentVal.trim().length > 0 
-                                                        ? catalogs[spec.cat]?.filter(v => 
-                                                            v.toLowerCase().includes(currentVal.toLowerCase())
-                                                          ).slice(0, 20) || []
-                                                        : [];
-
-                                                    return (
-                                                        <div key={field} className="space-y-1.5 relative group">
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-indigo-400 transition-colors">{spec.label}</label>
-                                                            <div className="relative">
-                                                                <input 
-                                                                    type="text"
-                                                                    name={`spec.${field}`}
-                                                                    value={currentVal}
-                                                                    onChange={handleItemChange}
-                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
-                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
-                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                                                    placeholder={`Escriba ${spec.label}...`}
-                                                                    autoComplete="off"
-                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
-                                                                />
-                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
-                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                                                        {suggestions.map((s, i) => (
-                                                                            <button
-                                                                                key={i}
-                                                                                type="button"
-                                                                                onClick={() => selectSuggestion(field, s)}
-                                                                                className={cn(
-                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center justify-between group",
-                                                                                    activeSuggestion?.index === i && "bg-indigo-50 text-indigo-600"
-                                                                                )}
-                                                                            >
-                                                                                <span>{s}</span>
-                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-
-                                        {/* SECCIÓN ESPECIAL PARA SOFTWARE */}
-                                        {itemForm.itemType === 'SOFTWARE' && (
-                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-indigo-100 shadow-inner">
-                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
-                                                    <div className="bg-purple-600 p-2 rounded-xl shadow-md"><Package className="h-5 w-5 text-white" /></div>
-                                                    <div>
-                                                         <h4 className="text-[11px] font-black text-purple-600 uppercase tracking-widest">Configuración de Software</h4>
-                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo de licencia, fabricante y periodicidad.</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                {Object.entries({
-                                                    tipo: { label: 'Tipo de Software', cat: 'SW_TIPO' },
-                                                    fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
-                                                    unidadMedida: { label: 'Unidad de Medida', cat: 'SW_UM' },
-                                                }).map(([field, spec]) => {
-                                                    //@ts-ignore
-                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
-                                                    const suggestions = currentVal.trim().length > 0 
-                                                        ? catalogs[spec.cat]?.filter(v => 
-                                                            v.toLowerCase().includes(currentVal.toLowerCase())
-                                                          ).slice(0, 20) || []
-                                                        : [];
-
-                                                    return (
-                                                        <div key={field} className="space-y-1.5 relative group">
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-purple-400 transition-colors">{spec.label}</label>
-                                                            <div className="relative">
-                                                                <input 
-                                                                    type="text"
-                                                                    name={`spec.${field}`}
-                                                                    value={currentVal}
-                                                                    onChange={handleItemChange}
-                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
-                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
-                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                                                    placeholder={`Escriba ${spec.label}...`}
-                                                                    autoComplete="off"
-                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-purple-600 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
-                                                                />
-                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
-                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                                                        {suggestions.map((s, i) => (
-                                                                            <button
-                                                                                key={i}
-                                                                                type="button"
-                                                                                onClick={() => selectSuggestion(field, s)}
-                                                                                className={cn(
-                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center justify-between group",
-                                                                                    activeSuggestion?.index === i && "bg-purple-50 text-purple-600"
-                                                                                )}
-                                                                            >
-                                                                                <span>{s}</span>
-                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-
-                                        {/* SECCIÓN ESPECIAL PARA INFRAESTRUCTURA */}
-                                        {itemForm.itemType === 'INFRASTRUCTURE' && (
-                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-slate-200 shadow-inner">
-                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
-                                                    <div className="bg-slate-800 p-2 rounded-xl shadow-md"><Server className="h-5 w-5 text-white" /></div>
-                                                    <div>
-                                                         <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Configuración de Infraestructura</h4>
-                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo de equipo, fabricante y periodo de soporte.</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                {Object.entries({
-                                                    tipo: { label: 'Tipo de Infraestructura', cat: 'INFRA_TIPO' },
-                                                    fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
-                                                    garantia: { label: 'Garantía', cat: 'INFRA_GARANTIA' },
-                                                }).map(([field, spec]) => {
-                                                    //@ts-ignore
-                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
-                                                    const suggestions = currentVal.trim().length > 0 
-                                                        ? catalogs[spec.cat]?.filter(v => 
-                                                            v.toLowerCase().includes(currentVal.toLowerCase())
-                                                          ).slice(0, 20) || []
-                                                        : [];
-
-                                                    return (
-                                                        <div key={field} className="space-y-1.5 relative group">
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-slate-600 transition-colors">{spec.label}</label>
-                                                            <div className="relative">
-                                                                <input 
-                                                                    type="text"
-                                                                    name={`spec.${field}`}
-                                                                    value={currentVal}
-                                                                    onChange={handleItemChange}
-                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
-                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
-                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                                                    placeholder={`Escriba ${spec.label}...`}
-                                                                    autoComplete="off"
-                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-slate-800 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
-                                                                />
-                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
-                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                                                        {suggestions.map((s, i) => (
-                                                                            <button
-                                                                                key={i}
-                                                                                type="button"
-                                                                                onClick={() => selectSuggestion(field, s)}
-                                                                                className={cn(
-                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors flex items-center justify-between group",
-                                                                                    activeSuggestion?.index === i && "bg-slate-50 text-slate-900"
-                                                                                )}
-                                                                            >
-                                                                                <span>{s}</span>
-                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
-
-                                        {/* SECCIÓN ESPECIAL PARA SERVICIOS DE INFRAESTRUCTURA */}
-                                        {itemForm.itemType === 'INFRA_SERVICES' && (
-                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 p-8 bg-white rounded-[2.5rem] border-2 border-slate-700 shadow-inner">
-                                                <div className="md:col-span-3 flex items-center space-x-3 mb-2">
-                                                    <div className="bg-slate-900 p-2 rounded-xl shadow-md"><Settings className="h-5 w-5 text-white" /></div>
-                                                    <div>
-                                                         <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Configuración de Servicios Infra.</h4>
-                                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Defina el tipo de servicio especializado y responsable.</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                {Object.entries({
-                                                    tipo: { label: 'Tipo de Servicio', cat: 'INFRA_SVC_TIPO' },
-                                                    responsable: { label: 'Responsable', cat: 'INFRA_SVC_RESPONSABLE' },
-                                                    unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
-                                                }).map(([field, spec]) => {
-                                                    //@ts-ignore
-                                                    const currentVal = itemForm.technicalSpecs?.[field] || '';
-                                                    const suggestions = currentVal.trim().length > 0 
-                                                        ? catalogs[spec.cat]?.filter(v => 
-                                                            v.toLowerCase().includes(currentVal.toLowerCase())
-                                                          ).slice(0, 20) || []
-                                                        : [];
-
-                                                    return (
-                                                        <div key={field} className="space-y-1.5 relative group">
-                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 group-hover:text-slate-900 transition-colors">{spec.label}</label>
-                                                            <div className="relative">
-                                                                <input 
-                                                                    type="text"
-                                                                    name={`spec.${field}`}
-                                                                    value={currentVal}
-                                                                    onChange={handleItemChange}
-                                                                    onFocus={() => setActiveSuggestion({ field, index: -1 })}
-                                                                    onKeyDown={(e) => handleKeyDown(e, field, suggestions)}
-                                                                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                                                    placeholder={`Escriba ${spec.label}...`}
-                                                                    autoComplete="off"
-                                                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-slate-900 focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none"
-                                                                />
-                                                                {suggestions.length > 0 && activeSuggestion?.field === field && (
-                                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                                                        {suggestions.map((s, i) => (
-                                                                            <button
-                                                                                key={i}
-                                                                                type="button"
-                                                                                onClick={() => selectSuggestion(field, s)}
-                                                                                className={cn(
-                                                                                    "w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-900 hover:text-white transition-colors flex items-center justify-between group",
-                                                                                    activeSuggestion?.index === i && "bg-slate-900 text-white"
-                                                                                )}
-                                                                            >
-                                                                                <span>{s}</span>
-                                                                                <Plus className={cn("h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity", activeSuggestion?.index === i && "opacity-100")} />
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </motion.div>
-                                        )}
+                                        {/* SECCIÓN DE ESPECIFICACIONES TÉCNICAS (data-driven) */}
+                                        <SpecFieldsSection
+                                            itemType={itemForm.itemType}
+                                            technicalSpecs={itemForm.technicalSpecs || {}}
+                                            catalogs={catalogs}
+                                            onChange={handleItemChange}
+                                            onSelectSuggestion={selectSuggestion}
+                                        />
 
                                         {/* Descripción General */}
                                         <div className="md:col-span-12 space-y-2">
