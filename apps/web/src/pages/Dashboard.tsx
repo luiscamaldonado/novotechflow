@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     FileText, PlusCircle, Trash2, Edit2, Loader2, Calendar,
     DollarSign, Clock, Copy, ChevronDown, ChevronUp, Search,
-    Filter, X, TrendingUp, BarChart3
+    Filter, X, TrendingUp, BarChart3, AlertCircle
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
@@ -146,33 +146,69 @@ export default function Dashboard() {
         let facturadoMesActual = 0;
         let facturadoTrimestreActual = 0;
         let proyeccionTrimestreSiguiente = 0;
+        let pendFactMesActual = 0;
+        let pendFactMesSiguiente = 0;
+
+        const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
+        const nextMonthYear = thisMonth === 11 ? thisYear + 1 : thisYear;
+
+        // Helper: parse ISO date string to { month (0-indexed), year } without timezone shift
+        const parseDate = (dateStr: string) => {
+            const [datePart] = dateStr.split('T');
+            const [y, m] = datePart.split('-').map(Number);
+            return { month: m - 1, year: y }; // month is 0-indexed to match JS convention
+        };
 
         for (const p of proposalsWithSubtotals) {
             const sub = p.minSubtotal || 0;
 
+            // FACTURADA — uses billingDate for mes anterior, mes actual, trimestre actual
             if (p.status === 'FACTURADA' && p.billingDate) {
-                const bd = new Date(p.billingDate);
-                if (bd.getMonth() === prevMonth && bd.getFullYear() === prevMonthYear) {
+                const { month, year } = parseDate(p.billingDate);
+                if (month === prevMonth && year === prevMonthYear) {
                     facturadoMesAnterior += sub;
                 }
-                if (bd.getMonth() === thisMonth && bd.getFullYear() === thisYear) {
+                if (month === thisMonth && year === thisYear) {
                     facturadoMesActual += sub;
                 }
-                if (Math.floor(bd.getMonth() / 3) === currentQuarter && bd.getFullYear() === thisYear) {
+                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
                     facturadoTrimestreActual += sub;
                 }
             }
 
-            // Projection: GANADA + PENDIENTE
-            if ((p.status === 'GANADA' || p.status === 'PENDIENTE_FACTURAR') && p.closeDate) {
-                const cd = new Date(p.closeDate);
-                if (Math.floor(cd.getMonth() / 3) === nextQuarter && cd.getFullYear() === nextQuarterYear) {
+            // PENDIENTE_FACTURAR — uses billingDate for trimestre actual, projection, and monthly cards
+            if (p.status === 'PENDIENTE_FACTURAR' && p.billingDate) {
+                const { month, year } = parseDate(p.billingDate);
+
+                // Trimestre actual
+                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
+                    facturadoTrimestreActual += sub;
+                }
+
+                // Proyección trimestre siguiente
+                if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) {
+                    proyeccionTrimestreSiguiente += sub;
+                }
+
+                // Pend. Facturar por mes
+                if (month === thisMonth && year === thisYear) {
+                    pendFactMesActual += sub;
+                }
+                if (month === nextMonth && year === nextMonthYear) {
+                    pendFactMesSiguiente += sub;
+                }
+            }
+
+            // GANADA — uses closeDate for projection
+            if (p.status === 'GANADA' && p.closeDate) {
+                const { month, year } = parseDate(p.closeDate);
+                if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) {
                     proyeccionTrimestreSiguiente += sub;
                 }
             }
         }
 
-        return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente };
+        return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente, pendFactMesActual, pendFactMesSiguiente };
     }, [proposalsWithSubtotals]);
 
     // ── Actions ──
@@ -267,7 +303,7 @@ export default function Dashboard() {
             </div>
 
             {/* Financial Cards */}
-            <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                     <div className="flex items-center space-x-3 mb-3">
                         <div className="h-10 w-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500">
@@ -285,6 +321,24 @@ export default function Dashboard() {
                         <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Fact. Mes Actual</span>
                     </div>
                     <p className="text-lg font-black text-emerald-700">{formatCOP(billingCards.facturadoMesActual)}</p>
+                </div>
+                <div className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 bg-gradient-to-br from-white to-orange-50/40">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="h-10 w-10 bg-orange-50 rounded-xl flex items-center justify-center text-orange-500">
+                            <AlertCircle className="h-5 w-5" />
+                        </div>
+                        <span className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">Pend. Fact. Mes Actual</span>
+                    </div>
+                    <p className="text-lg font-black text-orange-700">{formatCOP(billingCards.pendFactMesActual)}</p>
+                </div>
+                <div className="bg-white rounded-2xl p-5 shadow-sm border border-amber-100 bg-gradient-to-br from-white to-amber-50/40">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="h-10 w-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500">
+                            <Calendar className="h-5 w-5" />
+                        </div>
+                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pend. Fact. Mes Sig.</span>
+                    </div>
+                    <p className="text-lg font-black text-amber-700">{formatCOP(billingCards.pendFactMesSiguiente)}</p>
                 </div>
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                     <div className="flex items-center space-x-3 mb-3">
@@ -436,17 +490,7 @@ export default function Dashboard() {
                                                     onChange={(e) => handleDateChange(p.id, 'closeDate', e.target.value)}
                                                     className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-[120px]"
                                                 />
-                                                {needsBillingDate && (
-                                                    <div className="mt-1">
-                                                        <input
-                                                            type="date"
-                                                            value={p.billingDate ? new Date(p.billingDate).toISOString().split('T')[0] : ''}
-                                                            onChange={(e) => handleDateChange(p.id, 'billingDate', e.target.value)}
-                                                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[120px]"
-                                                            title="Fecha de facturación"
-                                                        />
-                                                    </div>
-                                                )}
+
                                             </td>
                                             <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
                                                 {new Date(p.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
@@ -468,6 +512,17 @@ export default function Dashboard() {
                                                         <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
                                                     ))}
                                                 </select>
+                                                {needsBillingDate && (
+                                                    <div className="mt-2">
+                                                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-0.5">Fecha de facturación</span>
+                                                        <input
+                                                            type="date"
+                                                            value={p.billingDate ? new Date(p.billingDate).toISOString().split('T')[0] : ''}
+                                                            onChange={(e) => handleDateChange(p.id, 'billingDate', e.target.value)}
+                                                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px]"
+                                                        />
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-4 text-center">
                                                 <div className="flex items-center justify-center space-x-1">

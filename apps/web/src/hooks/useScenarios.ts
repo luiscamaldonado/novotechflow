@@ -224,6 +224,35 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
+    const updateChildQuantity = async (parentSiId: string, childId: string, qty: string) => {
+        const val = parseInt(qty, 10);
+        if (isNaN(val) || val < 0) return;
+        try {
+            await api.patch(`/proposals/scenarios/items/${childId}`, { quantity: val });
+            setScenarios(prev =>
+                prev.map(s =>
+                    s.id === activeScenarioId
+                        ? {
+                              ...s,
+                              scenarioItems: s.scenarioItems.map(si =>
+                                  si.id === parentSiId
+                                      ? {
+                                            ...si,
+                                            children: (si.children || []).map(c =>
+                                                c.id === childId ? { ...c, quantity: val } : c,
+                                            ),
+                                        }
+                                      : si,
+                              ),
+                          }
+                        : s,
+                ),
+            );
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const changeCurrency = async (currency: string) => {
         if (!activeScenarioId) return;
         try {
@@ -397,6 +426,7 @@ export function useScenarios(proposalId: string | undefined) {
         removeItemFromScenario,
         addChildItem,
         removeChildItem,
+        updateChildQuantity,
         changeCurrency,
         updateMargin,
         updateQuantity,

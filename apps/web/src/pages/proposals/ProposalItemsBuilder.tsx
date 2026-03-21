@@ -373,7 +373,7 @@ export default function ProposalItemsBuilder() {
                                         </div>
 
                                         {/* Estructura Comercial */}
-                                        <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl">
+                                        <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl">
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Origen (Prov)</label>
                                                 <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none">
@@ -392,12 +392,15 @@ export default function ProposalItemsBuilder() {
                                                 <input type="text" inputMode="decimal" name="unitCost" value={itemForm.unitCost !== undefined ? itemForm.unitCost : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-emerald-400 text-right focus:ring-2 focus:ring-emerald-500/20" />
                                             </div>
                                             <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Margen Objetivo (%)</label>
-                                                <input type="text" inputMode="decimal" name="marginPct" value={itemForm.marginPct !== undefined ? itemForm.marginPct : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-indigo-400 text-right focus:ring-2 focus:ring-indigo-500/20" />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Precio Venta ($)</label>
-                                                <input type="text" inputMode="decimal" name="unitPrice" value={itemForm.unitPrice !== undefined ? itemForm.unitPrice : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-indigo-600 border-none text-sm font-black text-white text-right shadow-lg shadow-indigo-500/20 focus:ring-2 focus:ring-white/20" />
+                                                <label className="text-[10px] font-black text-amber-300 uppercase tracking-widest ml-1">Nuevo Costo Unitario ($)</label>
+                                                <div className="w-full px-5 py-4 rounded-2xl bg-amber-600/20 border-2 border-amber-500/30 text-sm font-black text-amber-300 text-right">
+                                                    {(() => {
+                                                        const cost = Number(itemForm.unitCost || 0);
+                                                        const flete = Number(itemForm.internalCosts?.fletePct || 0);
+                                                        const nuevoCosto = cost * (1 + (flete / 100));
+                                                        return nuevoCosto > 0 ? `$${nuevoCosto.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
+                                                    })()}
+                                                </div>
                                             </div>
                                             <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">IVA (%)</label>
@@ -410,10 +413,6 @@ export default function ProposalItemsBuilder() {
                                                     <option value="true">19%</option>
                                                     <option value="false">0%</option>
                                                 </select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Cantidad Solic.</label>
-                                                <input type="text" inputMode="decimal" name="quantity" value={itemForm.quantity !== undefined ? itemForm.quantity : 1} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-white border-none text-sm font-black text-slate-900 text-center" />
                                             </div>
                                         </div>
                                     </div>
@@ -444,16 +443,14 @@ export default function ProposalItemsBuilder() {
                                     <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ITEM #</th>
                                     <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Categoría</th>
                                     <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Configuración de Item</th>
-                                    <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Cant.</th>
-                                    <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Unitario ($)</th>
-                                    <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Total ($)</th>
+                                    <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Nuevo Costo Unitario ($)</th>
                                     <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Ctrl</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="px-8 py-32 text-center">
+                                        <td colSpan={5} className="px-8 py-32 text-center">
                                             <div className="max-w-xs mx-auto space-y-4 grayscale opacity-40">
                                                 <Cpu className="h-20 w-20 mx-auto text-indigo-300" />
                                                 <p className="text-sm font-bold text-slate-400">Su arquitectura aún no tiene componentes definidos.</p>
@@ -526,9 +523,7 @@ export default function ProposalItemsBuilder() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-8 text-right font-black text-slate-900 text-base">x{i.quantity}</td>
-                                            <td className="px-4 py-8 text-right font-mono text-[13px] text-slate-400 tracking-tighter">${Number(i.unitPrice).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-                                            <td className="px-4 py-8 text-right font-mono text-lg font-black text-indigo-600 tracking-tighter">${(Number(i.unitPrice) * Number(i.quantity)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td className="px-4 py-8 text-right font-mono text-[13px] text-slate-400 tracking-tighter">${(Number(i.unitCost) * (1 + Number(i.internalCosts?.fletePct || 0) / 100)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                             <td className="px-8 py-8 text-center">
                                                 <div className="flex items-center justify-center space-x-1">
                                                     <button onClick={() => editItem(i)} title="Editar" className="p-2 sm:p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 hover:shadow-lg hover:shadow-indigo-100 rounded-2xl transition-all border border-transparent hover:border-indigo-100">

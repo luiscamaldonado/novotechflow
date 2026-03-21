@@ -22,7 +22,7 @@ export default function ProposalCalculations() {
         trm, extraTrm, loadData,
         createScenario, deleteScenario,
         addItemToScenario, removeItemFromScenario,
-        addChildItem, removeChildItem,
+        addChildItem, removeChildItem, updateChildQuantity,
         changeCurrency, updateMargin, updateQuantity,
         updateUnitPrice, updateGlobalMargin,
     } = useScenarios(id);
@@ -474,17 +474,32 @@ export default function ProposalCalculations() {
                                                                                     const cLanded = cCost * (1 + cFlete / 100);
                                                                                     return (
                                                                                         <div key={child.id} className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-violet-100 shadow-sm">
-                                                                                            <div className="flex items-center space-x-3">
-                                                                                                <span className="text-[10px] font-black text-violet-400 bg-violet-100 px-1.5 py-0.5 rounded">#{childDisplayIdx}</span>
-                                                                                                <div>
-                                                                                                    <p className="text-xs font-black text-slate-800">{child.item.name}</p>
-                                                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase">{child.item.itemType} · Cant: {child.quantity} · Costo: ${cLanded.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</p>
+                                                                                            <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                                                                                <span className="text-[10px] font-black text-violet-400 bg-violet-100 px-1.5 py-0.5 rounded shrink-0">#{childDisplayIdx}</span>
+                                                                                                <div className="min-w-0">
+                                                                                                    <p className="text-xs font-black text-slate-800 truncate">{child.item.name}</p>
+                                                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase">{child.item.itemType}</p>
                                                                                                 </div>
                                                                                             </div>
-                                                                                            <div className="flex items-center space-x-3">
-                                                                                                <span className="text-[10px] font-black text-violet-600">
-                                                                                                    Subtotal: ${(cLanded * child.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                                                                                                </span>
+                                                                                            <div className="flex items-center space-x-5 shrink-0">
+                                                                                                <div className="flex flex-col items-center">
+                                                                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Cant.</span>
+                                                                                                    <input
+                                                                                                        type="text"
+                                                                                                        inputMode="numeric"
+                                                                                                        value={child.quantity}
+                                                                                                        onChange={(e) => updateChildQuantity(si.id!, child.id!, e.target.value)}
+                                                                                                        className="w-14 text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-violet-300 border-none px-2 py-1 rounded-lg text-center transition-all"
+                                                                                                    />
+                                                                                                </div>
+                                                                                                <div className="flex flex-col items-end">
+                                                                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Costo Unit.</span>
+                                                                                                    <span className="text-[11px] font-mono font-black text-emerald-600">${cLanded.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                                                </div>
+                                                                                                <div className="flex flex-col items-end">
+                                                                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total</span>
+                                                                                                    <span className="text-[11px] font-mono font-black text-violet-600">${(cLanded * child.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                                                                </div>
                                                                                                 <button
                                                                                                     onClick={() => removeChildItem(si.id!, child.id!)}
                                                                                                     className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
