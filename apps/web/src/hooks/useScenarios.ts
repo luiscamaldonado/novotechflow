@@ -22,6 +22,7 @@ export interface ScenarioItem {
     parentId?: string | null;
     quantity: number;
     marginPctOverride?: number;
+    isDilpidate?: boolean;
     item: ProposalCalcItem;
     children?: ScenarioItem[];
 }
@@ -295,6 +296,32 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
+    const toggleDilpidate = async (siId: string) => {
+        const scenario = scenarios.find(s => s.scenarioItems.some(si => si.id === siId));
+        if (!scenario) return;
+        const si = scenario.scenarioItems.find(i => i.id === siId);
+        if (!si) return;
+        const newVal = !si.isDilpidate;
+        try {
+            // When enabling dilute, force margin to 0
+            const patchData: Record<string, unknown> = { isDilpidate: newVal };
+            if (newVal) patchData.marginPct = 0;
+            await api.patch(`/proposals/scenarios/items/${siId}`, patchData);
+            setScenarios(prev =>
+                prev.map(s => ({
+                    ...s,
+                    scenarioItems: s.scenarioItems.map(item =>
+                        item.id === siId
+                            ? { ...item, isDilpidate: newVal, ...(newVal ? { marginPctOverride: 0 } : {}) }
+                            : item,
+                    ),
+                })),
+            );
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const updateUnitPrice = async (siId: string, price: string) => {
         const val = parseFloat(price.replace(',', '.'));
         if (isNaN(val) || val <= 0) return;
@@ -357,24 +384,50 @@ export function useScenarios(proposalId: string | undefined) {
         let nonTaxed = 0;
         let totalCost = 0;
 
-        scenario.scenarioItems.forEach(si => {
+        // 1. Calculate total diluted cost: unitCost × quantity
+        let totalDilutedCost = 0;
+        const normalItems = scenario.scenarioItems.filter(si => !si.isDilpidate);
+        const dilutedItems = scenario.scenarioItems.filter(si => si.isDilpidate);
+
+        dilutedItems.forEach(si => {
+            totalDilutedCost += Number(si.item.unitCost) * si.quantity;
+        });
+
+        // 2. Calculate total non-diluted subtotal: Σ(unitCost × quantity) for weights
+        let totalNormalSubtotal = 0;
+        normalItems.forEach(si => {
+            totalNormalSubtotal += Number(si.item.unitCost) * si.quantity;
+        });
+
+        // 3. Process normal items: calculate weight, add proportional dilution, then apply margin
+        normalItems.forEach(si => {
             const item = si.item;
             const cost = Number(item.unitCost);
             const flete = Number(item.internalCosts?.fletePct || 0);
             const parentLandedCost = cost * (1 + flete / 100);
 
-            // Sum children landed costs into this parent's effective cost
             let childrenCostPerUnit = 0;
             if (si.children && si.children.length > 0) {
                 si.children.forEach(child => {
                     const childCost = Number(child.item.unitCost);
                     const childFlete = Number(child.item.internalCosts?.fletePct || 0);
-                    const childLanded = childCost * (1 + childFlete / 100);
-                    childrenCostPerUnit += childLanded * child.quantity;
+                    childrenCostPerUnit += childCost * (1 + childFlete / 100) * child.quantity;
                 });
             }
 
-            const effectiveLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
+            const baseLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
+
+            // Weight based on unitCost × quantity
+            const itemWeight = totalNormalSubtotal > 0
+                ? (cost * si.quantity) / totalNormalSubtotal
+                : 0;
+            // Dilution share per unit = (weight × totalDilutedCost) / quantity
+            const dilutionPerUnit = si.quantity > 0
+                ? (itemWeight * totalDilutedCost) / si.quantity
+                : 0;
+            // New effective cost = base landed cost + dilution per unit
+            const effectiveLandedCost = baseLandedCost + dilutionPerUnit;
+
             const marginOverride = si.marginPctOverride;
             const margin = marginOverride !== undefined && marginOverride !== null ? marginOverride : Number(item.marginPct);
 
@@ -392,6 +445,9 @@ export function useScenarios(proposalId: string | undefined) {
                 nonTaxed += totalItem;
             }
         });
+
+        // Diluted cost is already absorbed into normal items' effectiveLandedCost
+        // so no need to add it again here
 
         const totalPrice = beforeVat + nonTaxed;
         const globalMarginPct = totalPrice > 0 ? ((totalPrice - totalCost) / totalPrice) * 100 : 0;
@@ -432,5 +488,6 @@ export function useScenarios(proposalId: string | undefined) {
         updateQuantity,
         updateUnitPrice,
         updateGlobalMargin,
+        toggleDilpidate,
     };
 }

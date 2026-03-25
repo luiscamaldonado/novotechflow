@@ -5,7 +5,7 @@ import {
     Calculator, Plus, Trash2,
     ArrowLeft, Loader2, Package,
     AlertCircle, TrendingUp,
-    Percent, RotateCcw, ChevronDown
+    Percent, RotateCcw, ChevronDown, Layers
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScenarios, type ProposalCalcItem } from '../../hooks/useScenarios';
@@ -24,7 +24,7 @@ export default function ProposalCalculations() {
         addItemToScenario, removeItemFromScenario,
         addChildItem, removeChildItem, updateChildQuantity,
         changeCurrency, updateMargin, updateQuantity,
-        updateUnitPrice, updateGlobalMargin,
+        updateUnitPrice, updateGlobalMargin, toggleDilpidate,
     } = useScenarios(id);
 
     // UI-only state
@@ -308,13 +308,19 @@ export default function ProposalCalculations() {
                                                 <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Margen (%)</th>
                                                 <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Unitario ($)</th>
                                                 <th className="px-4 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Total ($)</th>
+                                                <th className="px-4 py-6 text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] text-center" title="Diluir el costo de este ítem entre los demás">
+                                                    <div className="flex items-center justify-center space-x-1">
+                                                        <Layers className="h-3 w-3" />
+                                                        <span>Diluir</span>
+                                                    </div>
+                                                </th>
                                                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
                                             {activeScenario.scenarioItems.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={6} className="px-8 py-24 text-center">
+                                                    <td colSpan={8} className="px-8 py-24 text-center">
                                                         <div className="max-w-xs mx-auto space-y-4 opacity-30 grayscale">
                                                             <Package className="h-16 w-16 mx-auto text-slate-400" />
                                                             <p className="text-sm font-bold text-slate-500">No hay ítems en este escenario. Realice un picking para empezar.</p>
@@ -322,7 +328,31 @@ export default function ProposalCalculations() {
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                activeScenario.scenarioItems.map((si, idx) => {
+                                                [...activeScenario.scenarioItems]
+                                                    .sort((a, b) => {
+                                                        // Diluted items go first
+                                                        if (a.isDilpidate && !b.isDilpidate) return -1;
+                                                        if (!a.isDilpidate && b.isDilpidate) return 1;
+                                                        return 0;
+                                                    })
+                                                    .map((si, idx) => {
+                                                    // Precompute dilution distribution for the display
+                                                    const allItems = activeScenario.scenarioItems;
+                                                    const dilutedItems = allItems.filter(i => i.isDilpidate);
+                                                    const normalItems = allItems.filter(i => !i.isDilpidate);
+
+                                                    // Total diluted cost: unitCost × quantity
+                                                    let totalDilutedCost = 0;
+                                                    dilutedItems.forEach(di => {
+                                                        totalDilutedCost += Number(di.item.unitCost) * di.quantity;
+                                                    });
+
+                                                    // Total normal subtotal: Σ(unitCost × quantity) for weights
+                                                    let totalNormalSubtotal = 0;
+                                                    normalItems.forEach(ni => {
+                                                        totalNormalSubtotal += Number(ni.item.unitCost) * ni.quantity;
+                                                    });
+
                                                     const item = si.item;
                                                     const globalItemIdx = proposal?.proposalItems.findIndex((pi: ProposalCalcItem) => pi.id === si.itemId) ?? -1;
                                                     const displayIdx = globalItemIdx !== -1 ? globalItemIdx + 1 : idx + 1;
@@ -339,11 +369,20 @@ export default function ProposalCalculations() {
                                                         const cFlete = Number(child.item.internalCosts?.fletePct || 0);
                                                         childrenCostPerUnit += cCost * (1 + cFlete / 100) * child.quantity;
                                                     });
-                                                    const effectiveLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
+                                                    const baseLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
+
+                                                    // For non-diluted items: weight-based proportional share of diluted cost
+                                                    let effectiveLandedCost = baseLandedCost;
+                                                    if (!si.isDilpidate && totalNormalSubtotal > 0 && totalDilutedCost > 0) {
+                                                        const cost = Number(item.unitCost);
+                                                        const itemWeight = (cost * si.quantity) / totalNormalSubtotal;
+                                                        const dilutionPerUnit = (itemWeight * totalDilutedCost) / si.quantity;
+                                                        effectiveLandedCost = baseLandedCost + dilutionPerUnit;
+                                                    }
 
                                                     const margin = si.marginPctOverride !== undefined ? si.marginPctOverride : Number(item.marginPct);
                                                     let unitPrice = 0;
-                                                    if (margin < 100) {
+                                                    if (!si.isDilpidate && margin < 100) {
                                                         unitPrice = effectiveLandedCost / (1 - margin / 100);
                                                     }
 
@@ -352,7 +391,12 @@ export default function ProposalCalculations() {
 
                                                     return (
                                                         <>
-                                                        <tr key={si.id} className="group hover:bg-slate-50 transition-colors">
+                                                        <tr key={si.id} className={cn(
+                                                            "group transition-colors",
+                                                            si.isDilpidate
+                                                                ? "bg-amber-50/70 hover:bg-amber-50"
+                                                                : "hover:bg-slate-50"
+                                                        )}>
                                                             <td className="px-8 py-6">
                                                                 <div className="flex items-center space-x-2">
                                                                     <button
@@ -392,46 +436,82 @@ export default function ProposalCalculations() {
                                                                 />
                                                             </td>
                                                             <td className="px-4 py-6">
-                                                                <div className="relative w-24 mx-auto">
-                                                                    <input 
-                                                                        type="text" 
-                                                                        value={editingCell?.id === si.id && editingCell?.field === 'margin' 
-                                                                            ? editingCell.value 
-                                                                            : Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct).toFixed(2)}
-                                                                        onFocus={() => {
-                                                                            const val = Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct);
-                                                                            setEditingCell({ id: si.id!, field: 'margin', value: val.toFixed(2) });
-                                                                        }}
-                                                                        onChange={(e) => setEditingCell({ id: si.id!, field: 'margin', value: e.target.value })}
-                                                                        onBlur={(e) => {
-                                                                            updateMargin(si.id!, e.target.value);
-                                                                            setEditingCell(null);
-                                                                        }}
-                                                                        className={cn(
-                                                                            "w-full bg-indigo-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6",
-                                                                            (si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? "text-indigo-600" : "text-slate-400"
-                                                                        )}
-                                                                    />
-                                                                    <Percent className="absolute left-2 top-2.5 h-3 w-3 text-indigo-300" />
-                                                                </div>
+                                                                {si.isDilpidate ? (
+                                                                    <div className="relative w-24 mx-auto">
+                                                                        <input 
+                                                                            type="text" 
+                                                                            value="0.00"
+                                                                            disabled
+                                                                            className="w-full bg-amber-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6 text-amber-400 cursor-not-allowed"
+                                                                        />
+                                                                        <Percent className="absolute left-2 top-2.5 h-3 w-3 text-amber-300" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="relative w-24 mx-auto">
+                                                                        <input 
+                                                                            type="text" 
+                                                                            value={editingCell?.id === si.id && editingCell?.field === 'margin' 
+                                                                                ? editingCell.value 
+                                                                                : Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct).toFixed(2)}
+                                                                            onFocus={() => {
+                                                                                const val = Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct);
+                                                                                setEditingCell({ id: si.id!, field: 'margin', value: val.toFixed(2) });
+                                                                            }}
+                                                                            onChange={(e) => setEditingCell({ id: si.id!, field: 'margin', value: e.target.value })}
+                                                                            onBlur={(e) => {
+                                                                                updateMargin(si.id!, e.target.value);
+                                                                                setEditingCell(null);
+                                                                            }}
+                                                                            className={cn(
+                                                                                "w-full bg-indigo-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6",
+                                                                                (si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? "text-indigo-600" : "text-slate-400"
+                                                                            )}
+                                                                        />
+                                                                        <Percent className="absolute left-2 top-2.5 h-3 w-3 text-indigo-300" />
+                                                                    </div>
+                                                                )}
                                                             </td>
                                                             <td className="px-4 py-6 text-right font-mono text-xs text-slate-500">
-                                                                <input 
-                                                                    type="text"
-                                                                    value={editingCell?.id === si.id && editingCell?.field === 'price' 
-                                                                        ? editingCell.value 
-                                                                        : unitPrice.toFixed(2)}
-                                                                    onFocus={() => setEditingCell({ id: si.id!, field: 'price', value: unitPrice.toFixed(2) })}
-                                                                    onChange={(e) => setEditingCell({ id: si.id!, field: 'price', value: e.target.value })}
-                                                                    onBlur={(e) => {
-                                                                        updateUnitPrice(si.id!, e.target.value);
-                                                                        setEditingCell(null);
-                                                                    }}
-                                                                    className="w-24 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20"
-                                                                />
+                                                                {si.isDilpidate ? (
+                                                                    <span className="text-xs font-black text-amber-400">—</span>
+                                                                ) : (
+                                                                    <input 
+                                                                        type="text"
+                                                                        value={editingCell?.id === si.id && editingCell?.field === 'price' 
+                                                                            ? editingCell.value 
+                                                                            : unitPrice.toFixed(2)}
+                                                                        onFocus={() => setEditingCell({ id: si.id!, field: 'price', value: unitPrice.toFixed(2) })}
+                                                                        onChange={(e) => setEditingCell({ id: si.id!, field: 'price', value: e.target.value })}
+                                                                        onBlur={(e) => {
+                                                                            updateUnitPrice(si.id!, e.target.value);
+                                                                            setEditingCell(null);
+                                                                        }}
+                                                                        className="w-24 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20"
+                                                                    />
+                                                                )}
                                                             </td>
                                                             <td className="px-4 py-6 text-right font-mono font-black text-indigo-600">
-                                                                ${(unitPrice * si.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                {si.isDilpidate ? (
+                                                                    <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-3 py-1.5 rounded-lg uppercase tracking-widest">
+                                                                        Diluido
+                                                                    </span>
+                                                                ) : (
+                                                                    <>${ (unitPrice * si.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-6 text-center">
+                                                                <button
+                                                                    onClick={() => toggleDilpidate(si.id!)}
+                                                                    className={cn(
+                                                                        "p-2 rounded-xl transition-all border-2",
+                                                                        si.isDilpidate
+                                                                            ? "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-200 scale-110"
+                                                                            : "bg-white border-slate-200 text-slate-300 hover:border-amber-300 hover:text-amber-500"
+                                                                    )}
+                                                                    title={si.isDilpidate ? 'Quitar dilución de costo' : 'Diluir costo entre los demás ítems'}
+                                                                >
+                                                                    <Layers className="h-3.5 w-3.5" />
+                                                                </button>
                                                             </td>
                                                             <td className="px-8 py-6 text-right">
                                                                 <button 
@@ -445,7 +525,7 @@ export default function ProposalCalculations() {
                                                         {/* Expanded children section */}
                                                         {isExpanded && (
                                                             <tr key={`${si.id}-children`}>
-                                                                <td colSpan={7} className="px-0 py-0">
+                                                                <td colSpan={8} className="px-0 py-0">
                                                                     <motion.div
                                                                         initial={{ height: 0, opacity: 0 }}
                                                                         animate={{ height: 'auto', opacity: 1 }}

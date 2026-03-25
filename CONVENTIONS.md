@@ -235,6 +235,18 @@ quantity: formValue,
 - [ ] **Separación de concerns** — ¿La lógica está en un hook, no en el componente?
 - [ ] **DTOs validados** — ¿El backend usa DTOs con `class-validator`?
 - [ ] **Coerción numérica** — ¿Los inputs se convierten a `Number()` antes de enviar al API?
-- [ ] **Componente < 300 líneas** — Si no, ¿se puede descomponer?
+- [ ] **Componente < 200 líneas** — Si no, ¿se puede descomponer?
 - [ ] **`tsc --noEmit` pasa** — ¿Cero errores de TypeScript?
 - [ ] **Funcionalidad verificada** — ¿Se probó que no se rompió nada?
+
+---
+
+### G. CREDENCIALES DE PRUEBA
+
+Para pruebas locales y verificación en el navegador:
+- **Admin**: `admin@novotechno.com` / `admin123`
+- ⚠️ El dominio `@novotechflow.com` **NO existe**. No usar en pruebas.
+
+**Autocompletado del navegador**: El navegador tiene autocompletado activo, por lo que los campos de email y contraseña pueden prellenarse automáticamente. Al hacer pruebas en el browser:
+- Si el autocompletado ya rellenó los campos correctamente, simplemente hacer clic en el botón de login.
+- Si se necesita escribir las credenciales, **primero borrar/limpiar los campos** (Ctrl+A → Delete) antes de escribir las credenciales para evitar texto duplicado.

@@ -612,6 +612,7 @@ export class ProposalsService {
       data: {
         quantity: data.quantity,
         marginPctOverride: data.marginPct,
+        isDilpidate: data.isDilpidate,
       }
     });
   }

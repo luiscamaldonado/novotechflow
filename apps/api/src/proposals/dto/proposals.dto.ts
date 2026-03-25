@@ -236,6 +236,10 @@ export class UpdateScenarioItemDto {
     @IsOptional()
     @IsNumber()
     marginPct?: number;
+
+    @IsOptional()
+    @IsBoolean()
+    isDilpidate?: boolean;
 }
 
 /**

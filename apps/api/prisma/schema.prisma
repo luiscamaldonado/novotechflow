@@ -183,6 +183,7 @@ model ScenarioItem {
   unitCostOverride  Decimal? @map("unit_cost_override") @db.Decimal(15, 2)
   marginPctOverride Decimal? @map("margin_pct_override") @db.Decimal(5, 2)
   unitPriceOverride Decimal? @map("unit_price_override") @db.Decimal(15, 2)
+  isDilpidate       Boolean  @default(false) @map("is_dilpidate")
 
   scenario Scenario      @relation(fields: [scenarioId], references: [id])
   item     ProposalItem  @relation(fields: [itemId], references: [id])
