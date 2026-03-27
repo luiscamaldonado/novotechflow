@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { ProposalStatus } from '@prisma/client';
+import { ProposalStatus, BlockType, PageType } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import {
     CreateProposalDto,
@@ -13,6 +13,12 @@ import {
     UpdateScenarioDto,
     AddScenarioItemDto,
     UpdateScenarioItemDto,
+    CreatePageDto,
+    UpdatePageDto,
+    ReorderPagesDto,
+    CreateBlockDto,
+    UpdateBlockDto,
+    ReorderBlocksDto,
 } from './dto/proposals.dto';
 
 
@@ -585,6 +591,85 @@ export class ProposalsService {
   }
 
   /**
+   * Clona un escenario existente con todos sus ítems y sub-ítems.
+   */
+  async cloneScenario(scenarioId: string) {
+    const original = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+      include: {
+        scenarioItems: {
+          include: { children: true },
+        },
+      },
+    });
+
+    if (!original) throw new NotFoundException('Escenario no encontrado.');
+
+    const aggregate = await this.prisma.scenario.aggregate({
+      where: { proposalId: original.proposalId },
+      _max: { sortOrder: true },
+    });
+    const nextOrder = (aggregate._max.sortOrder || 0) + 1;
+
+    const cloned = await this.prisma.scenario.create({
+      data: {
+        proposalId: original.proposalId,
+        name: `${original.name} (Copia)`,
+        currency: original.currency,
+        description: original.description,
+        sortOrder: nextOrder,
+      },
+    });
+
+    // Clone root items (parentId = null)
+    const rootItems = original.scenarioItems.filter(si => !si.parentId);
+    const siIdMap = new Map<string, string>();
+
+    for (const si of rootItems) {
+      const newSi = await this.prisma.scenarioItem.create({
+        data: {
+          scenarioId: cloned.id,
+          itemId: si.itemId,
+          quantity: si.quantity,
+          marginPctOverride: si.marginPctOverride,
+          isDilpidate: si.isDilpidate,
+        },
+      });
+      siIdMap.set(si.id, newSi.id);
+    }
+
+    // Clone child items
+    const childItems = original.scenarioItems.filter(si => si.parentId);
+    for (const child of childItems) {
+      const newParentId = siIdMap.get(child.parentId!) || child.parentId;
+      await this.prisma.scenarioItem.create({
+        data: {
+          scenarioId: cloned.id,
+          itemId: child.itemId,
+          parentId: newParentId,
+          quantity: child.quantity,
+          marginPctOverride: child.marginPctOverride,
+          isDilpidate: child.isDilpidate,
+        },
+      });
+    }
+
+    // Return the full cloned scenario with items
+    return this.prisma.scenario.findUnique({
+      where: { id: cloned.id },
+      include: {
+        scenarioItems: {
+          where: { parentId: null },
+          include: {
+            item: true,
+            children: { include: { item: true } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
    * Vincula un item de propuesta a un escenario.
    */
   async addScenarioItem(scenarioId: string, data: AddScenarioItemDto) {
@@ -636,6 +721,163 @@ export class ProposalsService {
       data: {
         marginPctOverride: marginPct
       }
+    });
+  }
+
+  // --- MÉTODOS DE PÁGINAS DE PROPUESTA ---
+
+  /**
+   * Inicializa las páginas predeterminadas para una propuesta.
+   */
+  async initializeDefaultPages(proposalId: string) {
+    const existingLocked = await this.prisma.proposalPage.findMany({
+      where: { proposalId, isLocked: true },
+      select: { pageType: true },
+    });
+    const existingTypes = new Set(existingLocked.map(p => p.pageType));
+
+    const defaults: { pageType: PageType; title: string; sortOrder: number }[] = [
+      { pageType: 'COVER', title: 'Portada', sortOrder: 1 },
+      { pageType: 'INTRO', title: 'Introducción', sortOrder: 2 },
+      { pageType: 'TERMS', title: 'Términos y Condiciones', sortOrder: 1000 },
+    ];
+
+    for (const page of defaults) {
+      if (!existingTypes.has(page.pageType)) {
+        await this.prisma.proposalPage.create({
+          data: { proposalId, ...page, isLocked: true },
+        });
+      }
+    }
+
+    return this.getPagesByProposalId(proposalId);
+  }
+
+  /**
+   * Retorna todas las páginas con sus bloques para una propuesta.
+   */
+  async getPagesByProposalId(proposalId: string) {
+    return this.prisma.proposalPage.findMany({
+      where: { proposalId },
+      include: { blocks: { orderBy: { sortOrder: 'asc' } } },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  /**
+   * Crea una página personalizada.
+   */
+  async createCustomPage(proposalId: string, data: CreatePageDto) {
+    // Insert before TERMS (sortOrder 1000) but after everything else
+    const aggregate = await this.prisma.proposalPage.aggregate({
+      where: { proposalId, pageType: { not: 'TERMS' } },
+      _max: { sortOrder: true },
+    });
+    const nextOrder = (aggregate._max.sortOrder || 0) + 1;
+
+    return this.prisma.proposalPage.create({
+      data: {
+        proposalId,
+        pageType: 'CUSTOM',
+        title: data.title,
+        isLocked: false,
+        sortOrder: nextOrder,
+      },
+      include: { blocks: true },
+    });
+  }
+
+  /**
+   * Actualiza una página (título o variables).
+   */
+  async updatePage(pageId: string, data: UpdatePageDto) {
+    return this.prisma.proposalPage.update({
+      where: { id: pageId },
+      data: {
+        title: data.title,
+        variables: data.variables as object | undefined,
+      },
+      include: { blocks: { orderBy: { sortOrder: 'asc' } } },
+    });
+  }
+
+  /**
+   * Elimina una página (solo si no es predeterminada).
+   */
+  async deletePage(pageId: string) {
+    const page = await this.prisma.proposalPage.findUnique({ where: { id: pageId } });
+    if (!page) throw new NotFoundException('Página no encontrada.');
+    if (page.isLocked) throw new Error('No se puede eliminar una página predeterminada.');
+
+    await this.prisma.proposalPageBlock.deleteMany({ where: { pageId } });
+    return this.prisma.proposalPage.delete({ where: { id: pageId } });
+  }
+
+  /**
+   * Reordena las páginas respetando las posiciones fijas de predeterminadas.
+   */
+  async reorderPages(proposalId: string, data: ReorderPagesDto) {
+    const updates = data.pageIds.map((id, index) =>
+      this.prisma.proposalPage.updateMany({
+        where: { id, proposalId, isLocked: false },
+        data: { sortOrder: index + 100 },
+      }),
+    );
+    await Promise.all(updates);
+    return this.getPagesByProposalId(proposalId);
+  }
+
+  /**
+   * Crea un bloque dentro de una página.
+   */
+  async createBlock(pageId: string, data: CreateBlockDto) {
+    const aggregate = await this.prisma.proposalPageBlock.aggregate({
+      where: { pageId },
+      _max: { sortOrder: true },
+    });
+    const nextOrder = (aggregate._max.sortOrder || 0) + 1;
+
+    return this.prisma.proposalPageBlock.create({
+      data: {
+        pageId,
+        blockType: data.blockType as BlockType,
+        content: (data.content || {}) as object,
+        sortOrder: nextOrder,
+      },
+    });
+  }
+
+  /**
+   * Actualiza el contenido de un bloque.
+   */
+  async updateBlock(blockId: string, data: UpdateBlockDto) {
+    return this.prisma.proposalPageBlock.update({
+      where: { id: blockId },
+      data: { content: data.content as object | undefined },
+    });
+  }
+
+  /**
+   * Elimina un bloque.
+   */
+  async deleteBlock(blockId: string) {
+    return this.prisma.proposalPageBlock.delete({ where: { id: blockId } });
+  }
+
+  /**
+   * Reordena los bloques dentro de una página.
+   */
+  async reorderBlocks(pageId: string, data: ReorderBlocksDto) {
+    const updates = data.blockIds.map((id, index) =>
+      this.prisma.proposalPageBlock.update({
+        where: { id },
+        data: { sortOrder: index + 1 },
+      }),
+    );
+    await Promise.all(updates);
+    return this.prisma.proposalPageBlock.findMany({
+      where: { pageId },
+      orderBy: { sortOrder: 'asc' },
     });
   }
 }

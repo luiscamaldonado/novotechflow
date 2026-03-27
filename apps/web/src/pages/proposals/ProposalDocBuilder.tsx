@@ -1,0 +1,543 @@
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+    FileText, Plus, Trash2, ArrowLeft, Loader2,
+    Lock, GripVertical, Type, ImagePlus,
+    BookOpen, Pencil, Eye,
+} from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { useProposalPages, type ProposalPage, type PageBlock } from '../../hooks/useProposalPages';
+import RichTextEditor from '../../components/proposals/RichTextEditor';
+import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
+
+/** Page type display labels */
+const PAGE_TYPE_LABELS: Record<string, string> = {
+    COVER: 'Portada',
+    INTRO: 'Introducción',
+    TERMS: 'Términos y Condiciones',
+    CUSTOM: 'Página Personalizada',
+};
+
+/** Page type icons & colors */
+const PAGE_TYPE_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+    COVER: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+    INTRO: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
+    TERMS: { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' },
+    CUSTOM: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
+};
+
+export default function ProposalDocBuilder() {
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+
+    const {
+        loading, saving, pages, activePageId, setActivePageId, activePage,
+        loadPages, createPage, updatePage, deletePage,
+        createBlock, updateBlock, deleteBlock, uploadImage,
+    } = useProposalPages(id);
+
+    const [isCreatingPage, setIsCreatingPage] = useState(false);
+    const [newPageTitle, setNewPageTitle] = useState('');
+    const [editingTitle, setEditingTitle] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
+    const [showPreview, setShowPreview] = useState(false);
+
+    useEffect(() => {
+        loadPages();
+    }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleCreatePage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const ok = await createPage(newPageTitle);
+        if (ok) {
+            setNewPageTitle('');
+            setIsCreatingPage(false);
+        }
+    };
+
+    const handleAddTextBlock = async () => {
+        if (!activePageId) return;
+        await createBlock(activePageId, 'RICH_TEXT');
+    };
+
+    const handleAddImageBlock = async () => {
+        if (!activePageId) return;
+        const block = await createBlock(activePageId, 'IMAGE');
+        if (block) {
+            setUploadingBlockId(block.id);
+            fileInputRef.current?.click();
+        }
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !uploadingBlockId) return;
+
+        const url = await uploadImage(file);
+        if (url) {
+            await updateBlock(uploadingBlockId, { url, caption: '' });
+        }
+        setUploadingBlockId(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleImageUploadForBlock = (blockId: string) => {
+        setUploadingBlockId(blockId);
+        fileInputRef.current?.click();
+    };
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
+            {/* Hidden file input for image upload */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+            />
+
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                    <button
+                        onClick={() => navigate(`/proposals/${id}/calculations`)}
+                        className="p-3 bg-white border border-slate-100 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-600 transition-colors"
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                    </button>
+                    <div>
+                        <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center">
+                            <BookOpen className="h-8 w-8 mr-3 text-indigo-600" />
+                            Construcción del Documento
+                        </h2>
+                        <p className="text-slate-500 text-sm font-medium mt-1">
+                            Diseño de páginas y contenido de la propuesta comercial
+                        </p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => setShowPreview(true)}
+                    className="flex items-center space-x-3 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest"
+                >
+                    <Eye className="h-4 w-4" />
+                    <span>Vista Previa PDF</span>
+                </button>
+            </div>
+
+            {/* PDF Preview Modal */}
+            <AnimatePresence>
+                {showPreview && (
+                    <PdfPreviewModal
+                        pages={pages}
+                        onClose={() => setShowPreview(false)}
+                    />
+                )}
+            </AnimatePresence>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Sidebar — Pages */}
+                <div className="lg:col-span-3 space-y-4">
+                    <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Páginas</h3>
+                            <button
+                                onClick={() => setIsCreatingPage(true)}
+                                className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all scale-90"
+                            >
+                                <Plus className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-2">
+                            <AnimatePresence mode="popLayout">
+                                {pages.map(page => {
+                                    const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
+                                    const isActive = activePageId === page.id;
+
+                                    return (
+                                        <motion.div
+                                            key={page.id}
+                                            layout
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: -20 }}
+                                            onClick={() => setActivePageId(page.id)}
+                                            className={cn(
+                                                "group flex items-center justify-between p-4 rounded-2xl cursor-pointer transition-all border-2",
+                                                isActive
+                                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100"
+                                                    : "bg-slate-50 border-transparent hover:bg-white hover:border-indigo-100 text-slate-600"
+                                            )}
+                                        >
+                                            <div className="flex items-center space-x-3 min-w-0">
+                                                {page.isLocked ? (
+                                                    <Lock className={cn("h-4 w-4 shrink-0", isActive ? "text-indigo-200" : "text-slate-400")} />
+                                                ) : (
+                                                    <GripVertical className={cn("h-4 w-4 shrink-0", isActive ? "text-indigo-200" : "text-slate-300")} />
+                                                )}
+                                                <div className="min-w-0">
+                                                    <span className="text-sm font-black tracking-tight truncate block">
+                                                        {page.title || PAGE_TYPE_LABELS[page.pageType]}
+                                                    </span>
+                                                    <span className={cn(
+                                                        "text-[9px] font-black uppercase tracking-widest",
+                                                        isActive ? "text-indigo-200" : "text-slate-400"
+                                                    )}>
+                                                        {PAGE_TYPE_LABELS[page.pageType]}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {!page.isLocked && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
+                                                    className={cn(
+                                                        "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0",
+                                                        isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                                    )}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
+                                        </motion.div>
+                                    );
+                                })}
+                            </AnimatePresence>
+
+                            {isCreatingPage && (
+                                <motion.form
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    onSubmit={handleCreatePage}
+                                    className="p-2 space-y-3"
+                                >
+                                    <input
+                                        autoFocus
+                                        type="text"
+                                        placeholder="Nombre de la página..."
+                                        value={newPageTitle}
+                                        onChange={(e) => setNewPageTitle(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl bg-white border-2 border-indigo-100 text-sm font-bold focus:ring-0"
+                                    />
+                                    <div className="flex space-x-2">
+                                        <button
+                                            type="submit"
+                                            disabled={saving}
+                                            className="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex justify-center items-center"
+                                        >
+                                            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Crear"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCreatingPage(false)}
+                                            className="px-4 py-2 text-slate-400 text-[10px] font-black uppercase tracking-widest"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </motion.form>
+                            )}
+
+                            {pages.length === 0 && !isCreatingPage && (
+                                <div className="py-8 text-center px-4">
+                                    <FileText className="h-10 w-10 mx-auto text-slate-200 mb-3" />
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                                        Cargando páginas...
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Main Content — Page Editor */}
+                <div className="lg:col-span-9 space-y-6">
+                    {activePage ? (
+                        <PageEditor
+                            page={activePage}
+                            editingTitle={editingTitle}
+                            setEditingTitle={setEditingTitle}
+                            onUpdatePage={updatePage}
+                            onCreateBlock={createBlock}
+                            onUpdateBlock={updateBlock}
+                            onDeleteBlock={deleteBlock}
+                            onAddTextBlock={handleAddTextBlock}
+                            onAddImageBlock={handleAddImageBlock}
+                            onUploadImageForBlock={handleImageUploadForBlock}
+                            uploadImage={uploadImage}
+                        />
+                    ) : (
+                        <div className="bg-white rounded-[2.5rem] p-32 text-center border-2 border-dashed border-slate-100">
+                            <BookOpen className="h-20 w-20 mx-auto text-slate-100 mb-6" />
+                            <h4 className="text-xl font-black text-slate-300 uppercase tracking-tight">
+                                Seleccione una página para editar su contenido.
+                            </h4>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Page Editor Sub-Component ────────────────────────────────
+
+interface PageEditorProps {
+    page: ProposalPage;
+    editingTitle: string | null;
+    setEditingTitle: (v: string | null) => void;
+    onUpdatePage: (pageId: string, data: { title?: string }) => void;
+    onCreateBlock: (pageId: string, blockType: 'RICH_TEXT' | 'IMAGE') => Promise<PageBlock | null>;
+    onUpdateBlock: (blockId: string, content: Record<string, unknown>) => void;
+    onDeleteBlock: (pageId: string, blockId: string) => void;
+    onAddTextBlock: () => void;
+    onAddImageBlock: () => void;
+    onUploadImageForBlock: (blockId: string) => void;
+    uploadImage: (file: File) => Promise<string | null>;
+}
+
+function PageEditor({
+    page, editingTitle, setEditingTitle,
+    onUpdatePage, onUpdateBlock, onDeleteBlock,
+    onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage,
+}: PageEditorProps) {
+    const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
+
+    return (
+        <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
+            {/* Page Header */}
+            <div className="p-8 bg-slate-50/50 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <div className={cn("p-3 rounded-2xl shadow-lg", style.bg, style.border, "border")}>
+                            <FileText className={cn("h-6 w-6", style.text)} />
+                        </div>
+                        <div>
+                            {editingTitle !== null ? (
+                                <input
+                                    type="text"
+                                    value={editingTitle}
+                                    onChange={(e) => setEditingTitle(e.target.value)}
+                                    onBlur={() => {
+                                        if (editingTitle.trim() && editingTitle.trim() !== page.title) {
+                                            onUpdatePage(page.id, { title: editingTitle.trim() });
+                                        }
+                                        setEditingTitle(null);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                        if (e.key === 'Escape') setEditingTitle(null);
+                                    }}
+                                    autoFocus
+                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none w-full max-w-md"
+                                />
+                            ) : (
+                                <button
+                                    onClick={() => setEditingTitle(page.title || '')}
+                                    className="group/name flex items-center space-x-2 hover:bg-indigo-50 rounded-xl px-3 py-1 -mx-3 -my-1 transition-colors"
+                                >
+                                    <h4 className="text-xl font-black text-slate-900 tracking-tight">
+                                        {page.title || PAGE_TYPE_LABELS[page.pageType]}
+                                    </h4>
+                                    <Pencil className="h-3.5 w-3.5 text-slate-300 group-hover/name:text-indigo-500 transition-colors" />
+                                </button>
+                            )}
+                            <div className="flex items-center space-x-2 mt-1">
+                                <span className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg", style.bg, style.text)}>
+                                    {PAGE_TYPE_LABELS[page.pageType]}
+                                </span>
+                                {page.isLocked && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center space-x-1">
+                                        <Lock className="h-3 w-3" /> <span>Predeterminada</span>
+                                    </span>
+                                )}
+                                <span className="text-sm text-slate-400 font-medium">
+                                    · {page.blocks.length} bloque{page.blocks.length !== 1 ? 's' : ''}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Add block buttons */}
+                    <div className="flex items-center space-x-3">
+                        <button
+                            onClick={onAddTextBlock}
+                            className="flex items-center space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                        >
+                            <Type className="h-4 w-4" />
+                            <span>Agregar Texto</span>
+                        </button>
+                        <button
+                            onClick={onAddImageBlock}
+                            className="flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                        >
+                            <ImagePlus className="h-4 w-4" />
+                            <span>Agregar Imagen</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Blocks */}
+            <div className="p-8 space-y-6">
+                {page.blocks.length === 0 ? (
+                    <div className="py-16 text-center">
+                        <FileText className="h-16 w-16 mx-auto text-slate-100 mb-4" />
+                        <p className="text-sm font-bold text-slate-400">
+                            Esta página no tiene contenido aún. Use los botones de arriba para agregar texto o imágenes.
+                        </p>
+                    </div>
+                ) : (
+                    <AnimatePresence mode="popLayout">
+                        {page.blocks.map((block, idx) => (
+                            <motion.div
+                                key={block.id}
+                                layout
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                            >
+                                <BlockEditor
+                                    block={block}
+                                    index={idx}
+                                    totalBlocks={page.blocks.length}
+                                    pageId={page.id}
+                                    onUpdate={onUpdateBlock}
+                                    onDelete={() => onDeleteBlock(page.id, block.id)}
+                                    onUploadImage={() => onUploadImageForBlock(block.id)}
+                                    uploadImage={uploadImage}
+                                />
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Block Editor Sub-Component ───────────────────────────────
+
+interface BlockEditorProps {
+    block: PageBlock;
+    index: number;
+    totalBlocks: number;
+    pageId: string;
+    onUpdate: (blockId: string, content: Record<string, unknown>) => void;
+    onDelete: () => void;
+    onUploadImage: () => void;
+    uploadImage: (file: File) => Promise<string | null>;
+}
+
+function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, onUploadImage, uploadImage }: BlockEditorProps) {
+    const [captionBuffer, setCaptionBuffer] = useState(
+        (block.content as Record<string, string>)?.caption || ''
+    );
+    const blockFileRef = useRef<HTMLInputElement>(null);
+
+    const handleInlineUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const url = await uploadImage(file);
+        if (url) {
+            onUpdate(block.id, { ...block.content as object, url });
+        }
+        if (blockFileRef.current) blockFileRef.current.value = '';
+    };
+
+    const isImage = block.blockType === 'IMAGE';
+    const imageUrl = (block.content as Record<string, string>)?.url;
+    const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+
+    return (
+        <div className="group relative bg-slate-50/50 rounded-2xl border-2 border-slate-100 hover:border-indigo-100 transition-all">
+            {/* Block header bar */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2">
+                    <span className={cn(
+                        "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg",
+                        isImage ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"
+                    )}>
+                        {isImage ? 'Imagen' : 'Texto'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold">Bloque {index + 1} de {totalBlocks}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                    {isImage && (
+                        <>
+                            <input ref={blockFileRef} type="file" accept="image/*" className="hidden" onChange={handleInlineUpload} />
+                            <button
+                                onClick={() => blockFileRef.current?.click()}
+                                className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors"
+                                title="Cambiar imagen"
+                            >
+                                <ImagePlus className="h-3.5 w-3.5" />
+                            </button>
+                        </>
+                    )}
+                    <button
+                        onClick={onDelete}
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Eliminar bloque"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            </div>
+
+            {/* Block content */}
+            <div className="p-5">
+                {isImage ? (
+                    <div className="space-y-4">
+                        {imageUrl ? (
+                            <div className="rounded-xl overflow-hidden border border-slate-200 bg-white">
+                                <img
+                                    src={`${apiBase}${imageUrl}`}
+                                    alt={captionBuffer || 'Imagen de propuesta'}
+                                    className="w-full max-h-[500px] object-contain"
+                                />
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => blockFileRef.current?.click()}
+                                className="w-full py-16 border-2 border-dashed border-slate-200 rounded-2xl text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-all"
+                            >
+                                <ImagePlus className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                                <p className="text-sm font-bold text-slate-400">Click para subir una imagen</p>
+                                <p className="text-[10px] text-slate-300 font-bold mt-1">JPG, PNG, GIF, WebP · Máximo 10MB</p>
+                            </button>
+                        )}
+                        {/* Caption */}
+                        <input
+                            type="text"
+                            value={captionBuffer}
+                            onChange={(e) => setCaptionBuffer(e.target.value)}
+                            onBlur={() => {
+                                if (captionBuffer !== (block.content as Record<string, string>)?.caption) {
+                                    onUpdate(block.id, { ...block.content as object, caption: captionBuffer });
+                                }
+                            }}
+                            placeholder="Agregar descripción de la imagen..."
+                            className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:border-indigo-200 focus:ring-0"
+                        />
+                    </div>
+                ) : (
+                    <RichTextEditor
+                        content={block.content as Record<string, unknown> | null}
+                        onUpdate={(content) => onUpdate(block.id, content)}
+                    />
+                )}
+            </div>
+        </div>
+    );
+}

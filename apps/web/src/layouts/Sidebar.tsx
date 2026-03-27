@@ -3,7 +3,6 @@ import { useAuthStore } from '../store/authStore';
 import {
     LayoutDashboard,
     Users,
-    FileText,
     Settings,
     LogOut,
     X,
@@ -32,7 +31,6 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { icon: LayoutDashboard, label: 'Dashboard', path: user?.role === 'ADMIN' ? '/admin' : '/dashboard', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: PlusCircle, label: 'Nueva Propuesta', path: '/proposals/new', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: Calculator, label: 'Calculadora', path: '/calculator', roles: ['ADMIN', 'COMMERCIAL'] },
-        { icon: FileText, label: 'Editor PDF', path: '/pdf-editor', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: Mail, label: 'Envíos (Microsoft 365)', path: '/mail', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: Users, label: 'Usuarios', path: '/users', roles: ['ADMIN'] },
         { icon: Settings, label: 'Configuración', path: '/settings', roles: ['ADMIN'] },

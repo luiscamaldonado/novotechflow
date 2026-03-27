@@ -12,20 +12,8 @@ const Users = lazy(() => import('./pages/Users'));
 const NewProposal = lazy(() => import('./pages/proposals/NewProposal'));
 const ProposalItemsBuilder = lazy(() => import('./pages/proposals/ProposalItemsBuilder'));
 const ProposalCalculations = lazy(() => import('./pages/proposals/ProposalCalculations'));
+const ProposalDocBuilder = lazy(() => import('./pages/proposals/ProposalDocBuilder'));
 
-// Placeholder components for the main routes
-
-const PdfEditor = () => (
-  <div className="space-y-6">
-    <div className="mb-8">
-      <h2 className="text-2xl font-bold tracking-tight text-gray-900">Editor PDF</h2>
-      <p className="text-gray-500">Diseña y edita el diseño de tus propuestas comerciales.</p>
-    </div>
-    <div className="glass rounded-2xl p-8 bg-white text-center">
-      <p className="text-gray-500 py-12">Módulo Editor PDF en Construcción</p>
-    </div>
-  </div>
-);
 
 const AdminPanel = () => (
   <div className="space-y-6">
@@ -75,7 +63,7 @@ function App() {
                 <Route path="/proposals/new" element={<NewProposal />} />
                 <Route path="/proposals/:id/builder" element={<ProposalItemsBuilder />} />
                 <Route path="/proposals/:id/calculations" element={<ProposalCalculations />} />
-                <Route path="/pdf-editor" element={<PdfEditor />} />
+                <Route path="/proposals/:id/document" element={<ProposalDocBuilder />} />
 
                 {/* Rutas exclusivas de Administrador */}
                 <Route element={<AdminRoute />}>

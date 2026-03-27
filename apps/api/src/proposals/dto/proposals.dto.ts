@@ -257,3 +257,67 @@ export class CloneProposalDto {
     @IsIn(['NEW_VERSION', 'NEW_PROPOSAL'])
     cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL';
 }
+
+// ── Proposal Pages DTOs ──────────────────────────────────────
+
+/**
+ * DTO para crear una nueva página personalizada.
+ */
+export class CreatePageDto {
+    @IsString()
+    @MaxLength(200)
+    title: string;
+}
+
+/**
+ * DTO para actualizar una página.
+ */
+export class UpdatePageDto {
+    @IsOptional()
+    @IsString()
+    @MaxLength(200)
+    title?: string;
+
+    @IsOptional()
+    @IsObject()
+    variables?: Record<string, unknown>;
+}
+
+/**
+ * DTO para reordenar páginas.
+ */
+export class ReorderPagesDto {
+    @IsString({ each: true })
+    pageIds: string[];
+}
+
+// ── Proposal Page Blocks DTOs ────────────────────────────────
+
+/**
+ * DTO para crear un bloque dentro de una página.
+ */
+export class CreateBlockDto {
+    @IsIn(['RICH_TEXT', 'IMAGE'])
+    blockType: 'RICH_TEXT' | 'IMAGE';
+
+    @IsOptional()
+    @IsObject()
+    content?: Record<string, unknown>;
+}
+
+/**
+ * DTO para actualizar un bloque.
+ */
+export class UpdateBlockDto {
+    @IsOptional()
+    @IsObject()
+    content?: Record<string, unknown>;
+}
+
+/**
+ * DTO para reordenar bloques.
+ */
+export class ReorderBlocksDto {
+    @IsString({ each: true })
+    blockIds: string[];
+}

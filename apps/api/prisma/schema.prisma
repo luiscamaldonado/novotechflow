@@ -30,20 +30,16 @@ enum ItemType {
   INFRA_SERVICES
 }
 
-enum SectionType {
-  TEXT
-  IMAGE
-  TABLE
-  TECH_SPECS
-  COVER
-  TERMS
-}
-
-enum TemplateType {
+enum PageType {
   COVER
   INTRO
   TERMS
   CUSTOM
+}
+
+enum BlockType {
+  RICH_TEXT
+  IMAGE
 }
 
 enum SyncStatus {
@@ -93,7 +89,7 @@ model Proposal {
   client           Client?           @relation(fields: [clientId], references: [id])
   proposalVersions ProposalVersion[]
   proposalItems    ProposalItem[]
-  proposalSections ProposalSection[]
+  pages            ProposalPage[]
   scenarios        Scenario[]
   syncedFiles      SyncedFile[]
   emailLogs        EmailLog[]
@@ -116,25 +112,40 @@ model ProposalVersion {
   @@map("proposal_versions")
 }
 
-model ProposalSection {
-  id          String      @id @default(uuid()) @db.Uuid
-  proposalId  String      @map("proposal_id") @db.Uuid
-  sectionType SectionType @map("section_type")
-  title       String?     @db.VarChar(200)
-  content     Json?       @db.JsonB
-  sortOrder   Int         @default(0) @map("sort_order")
-  createdAt   DateTime    @default(now()) @map("created_at")
+model ProposalPage {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @map("proposal_id") @db.Uuid
+  pageType   PageType @map("page_type")
+  title      String?  @db.VarChar(200)
+  variables  Json?    @db.JsonB
+  isLocked   Boolean  @default(false) @map("is_locked")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
 
-  proposal      Proposal       @relation(fields: [proposalId], references: [id])
+  proposal      Proposal           @relation(fields: [proposalId], references: [id])
+  blocks        ProposalPageBlock[]
   proposalItems ProposalItem[]
 
-  @@map("proposal_sections")
+  @@map("proposal_pages")
+}
+
+model ProposalPageBlock {
+  id        String    @id @default(uuid()) @db.Uuid
+  pageId    String    @map("page_id") @db.Uuid
+  blockType BlockType @map("block_type")
+  content   Json?     @db.JsonB
+  sortOrder Int       @default(0) @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  page ProposalPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("proposal_page_blocks")
 }
 
 model ProposalItem {
   id          String   @id @default(uuid()) @db.Uuid
   proposalId  String   @map("proposal_id") @db.Uuid
-  sectionId   String?  @map("section_id") @db.Uuid
+  pageId      String?  @map("page_id") @db.Uuid
   itemType    ItemType @map("item_type")
   name        String   @db.VarChar(300)
   description String?  @db.Text
@@ -154,7 +165,7 @@ model ProposalItem {
   createdAt      DateTime @default(now()) @map("created_at")
 
   proposal      Proposal         @relation(fields: [proposalId], references: [id])
-  section       ProposalSection? @relation(fields: [sectionId], references: [id])
+  page          ProposalPage?    @relation(fields: [pageId], references: [id])
   scenarioItems ScenarioItem[]
 
   @@map("proposal_items")
@@ -194,13 +205,13 @@ model ScenarioItem {
 }
 
 model PdfTemplate {
-  id           String       @id @default(uuid()) @db.Uuid
-  name         String       @db.VarChar(100)
-  templateType TemplateType @map("template_type")
-  content      Json         @db.JsonB
-  sortOrder    Int          @default(0) @map("sort_order")
-  isActive     Boolean      @default(true) @map("is_active")
-  createdBy    String       @map("created_by") @db.Uuid
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(100)
+  templateType PageType @map("template_type")
+  content      Json     @db.JsonB
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdBy    String   @map("created_by") @db.Uuid
 
   author User @relation(fields: [createdBy], references: [id])
 

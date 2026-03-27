@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Calculator, Plus, Trash2,
     ArrowLeft, Loader2, Package,
     AlertCircle, TrendingUp,
-    Percent, RotateCcw, ChevronDown, Layers
+    Percent, RotateCcw, ChevronDown, Layers, Pencil, Copy, BookOpen
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScenarios, type ProposalCalcItem } from '../../hooks/useScenarios';
@@ -25,6 +25,8 @@ export default function ProposalCalculations() {
         addChildItem, removeChildItem, updateChildQuantity,
         changeCurrency, updateMargin, updateQuantity,
         updateUnitPrice, updateGlobalMargin, toggleDilpidate,
+        renameScenario,
+        cloneScenario,
     } = useScenarios(id);
 
     // UI-only state
@@ -35,6 +37,8 @@ export default function ProposalCalculations() {
     const [globalMarginBuffer, setGlobalMarginBuffer] = useState<string | null>(null);
     const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
     const [pickingChildrenFor, setPickingChildrenFor] = useState<string | null>(null);
+    const [editingScenarioName, setEditingScenarioName] = useState<string | null>(null);
+    const scenarioNameInputRef = useRef<HTMLInputElement>(null);
 
     const handleCreateScenario = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -146,6 +150,17 @@ export default function ProposalCalculations() {
                 </div>
             </div>
 
+            {/* Navigation to Document Builder */}
+            <div className="flex justify-end">
+                <button 
+                    onClick={() => navigate(`/proposals/${id}/document`)}
+                    className="flex items-center space-x-3 px-6 py-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all font-black text-[10px] uppercase tracking-widest"
+                >
+                    <BookOpen className="h-4 w-4" />
+                    <span>Construir Documento</span>
+                </button>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Sidebar de Escenarios */}
                 <div className="lg:col-span-3 space-y-4">
@@ -181,15 +196,27 @@ export default function ProposalCalculations() {
                                             <TrendingUp className={cn("h-4 w-4", activeScenarioId === s.id ? "text-indigo-200" : "text-slate-400")} />
                                             <span className="text-sm font-black tracking-tight">{s.name}</span>
                                         </div>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); deleteScenario(s.id); }}
-                                            className={cn(
-                                                "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
-                                                activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
-                                            )}
-                                        >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
+                                        <div className="flex items-center space-x-1">
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); cloneScenario(s.id); }}
+                                                className={cn(
+                                                    "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                                    activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-500"
+                                                )}
+                                                title="Clonar escenario"
+                                            >
+                                                <Copy className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); deleteScenario(s.id); }}
+                                                className={cn(
+                                                    "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                                    activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                                )}
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
                                     </motion.div>
                                 ))}
                             </AnimatePresence>
@@ -244,8 +271,40 @@ export default function ProposalCalculations() {
                                             <TrendingUp className="h-6 w-6 text-white" />
                                         </div>
                                         <div>
-                                            <h4 className="text-xl font-black text-slate-900 tracking-tight">{activeScenario.name}</h4>
-                                            <p className="text-sm text-slate-500 font-medium">Modelando {activeScenario.scenarioItems.length} ítems en este escenario.</p>
+                                            {editingScenarioName !== null ? (
+                                                <input
+                                                    ref={scenarioNameInputRef}
+                                                    type="text"
+                                                    value={editingScenarioName}
+                                                    onChange={(e) => setEditingScenarioName(e.target.value)}
+                                                    onBlur={() => {
+                                                        if (editingScenarioName.trim() && editingScenarioName.trim() !== activeScenario.name) {
+                                                            renameScenario(activeScenario.id, editingScenarioName);
+                                                        }
+                                                        setEditingScenarioName(null);
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            (e.target as HTMLInputElement).blur();
+                                                        }
+                                                        if (e.key === 'Escape') {
+                                                            setEditingScenarioName(null);
+                                                        }
+                                                    }}
+                                                    autoFocus
+                                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none w-full max-w-md"
+                                                />
+                                            ) : (
+                                                <button
+                                                    onClick={() => setEditingScenarioName(activeScenario.name)}
+                                                    className="group/name flex items-center space-x-2 hover:bg-indigo-50 rounded-xl px-3 py-1 -mx-3 -my-1 transition-colors"
+                                                    title="Haga clic para editar el nombre del escenario"
+                                                >
+                                                    <h4 className="text-xl font-black text-slate-900 tracking-tight">{activeScenario.name}</h4>
+                                                    <Pencil className="h-3.5 w-3.5 text-slate-300 group-hover/name:text-indigo-500 transition-colors" />
+                                                </button>
+                                            )}
+                                            <p className="text-sm text-slate-500 font-medium mt-0.5">Modelando {activeScenario.scenarioItems.length} ítems en este escenario.</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-6">

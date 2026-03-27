@@ -264,6 +264,31 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
+    const renameScenario = async (scenarioId: string, name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        try {
+            await api.patch(`/proposals/scenarios/${scenarioId}`, { name: trimmed });
+            setScenarios(prev => prev.map(s => (s.id === scenarioId ? { ...s, name: trimmed } : s)));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const cloneScenario = async (scenarioId: string) => {
+        try {
+            setSaving(true);
+            const res = await api.post(`/proposals/scenarios/${scenarioId}/clone`);
+            setScenarios(prev => [...prev, res.data]);
+            setActiveScenarioId(res.data.id);
+        } catch (error) {
+            console.error(error);
+            alert('No se pudo clonar el escenario');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const updateMargin = async (siId: string, margin: string) => {
         const val = parseFloat(margin.replace(',', '.'));
         if (isNaN(val)) return;
@@ -489,5 +514,7 @@ export function useScenarios(proposalId: string | undefined) {
         updateUnitPrice,
         updateGlobalMargin,
         toggleDilpidate,
+        renameScenario,
+        cloneScenario,
     };
 }
