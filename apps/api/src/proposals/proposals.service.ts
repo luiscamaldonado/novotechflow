@@ -426,6 +426,16 @@ export class ProposalsService {
    * Implementa limpieza manual de ítems previa a la eliminación de la cabecera.
    */
   async deleteProposal(id: string) {
+    // Delete page blocks first (they reference pages)
+    await this.prisma.proposalPageBlock.deleteMany({
+      where: { page: { proposalId: id } }
+    });
+
+    // Delete pages (they reference the proposal)
+    await this.prisma.proposalPage.deleteMany({
+      where: { proposalId: id }
+    });
+
     // Delete linked scenario items first
     await this.prisma.scenarioItem.deleteMany({
       where: { scenario: { proposalId: id } }
@@ -728,25 +738,97 @@ export class ProposalsService {
 
   /**
    * Inicializa las páginas predeterminadas para una propuesta.
+   * Lee las plantillas globales configuradas por el admin (PdfTemplate).
+   * Si no hay plantillas, usa fallback hardcodeado mínimo.
+   * Agrega la firma del comercial a la página de presentación.
    */
   async initializeDefaultPages(proposalId: string) {
-    const existingLocked = await this.prisma.proposalPage.findMany({
-      where: { proposalId, isLocked: true },
-      select: { pageType: true },
+    // Check for ANY existing pages to prevent re-initialization
+    const existingCount = await this.prisma.proposalPage.count({
+      where: { proposalId },
     });
-    const existingTypes = new Set(existingLocked.map(p => p.pageType));
 
-    const defaults: { pageType: PageType; title: string; sortOrder: number }[] = [
-      { pageType: 'COVER', title: 'Portada', sortOrder: 1 },
-      { pageType: 'INTRO', title: 'Introducción', sortOrder: 2 },
-      { pageType: 'TERMS', title: 'Términos y Condiciones', sortOrder: 1000 },
-    ];
+    if (existingCount > 0) {
+      return this.getPagesByProposalId(proposalId);
+    }
 
-    for (const page of defaults) {
-      if (!existingTypes.has(page.pageType)) {
-        await this.prisma.proposalPage.create({
-          data: { proposalId, ...page, isLocked: true },
+    // Fetch proposal with user to get signature
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { user: { select: { name: true, signatureUrl: true } } },
+    });
+
+    // Read global templates from admin configuration
+    const templates = await this.prisma.pdfTemplate.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    // Build page definitions from templates or fallback
+    let pageDefs: {
+      pageType: string;
+      title: string;
+      sortOrder: number;
+      blocks: { blockType: string; content: object }[];
+    }[];
+
+    if (templates.length > 0) {
+      // Use admin-configured templates
+      pageDefs = templates.map((t) => ({
+        pageType: t.templateType,
+        title: t.name,
+        sortOrder: t.sortOrder,
+        blocks: ((t.content as any[]) || []).map((b: any) => ({
+          blockType: b.blockType,
+          content: b.content || {},
+        })),
+      }));
+    } else {
+      // Fallback: minimal hardcoded defaults
+      pageDefs = [
+        { pageType: 'COVER', title: 'Portada', sortOrder: 1, blocks: [{ blockType: 'IMAGE', content: { url: '/uploads/defaults/portada.png', caption: '', fullPage: true } }] },
+        { pageType: 'PRESENTATION', title: 'Carta de Presentación', sortOrder: 2, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentación' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Contenido de la carta de presentación.' }] }] } }] },
+        { pageType: 'COMPANY_INFO', title: 'Información General (1/2)', sortOrder: 3, blocks: [] },
+        { pageType: 'COMPANY_INFO', title: 'Información General (2/2)', sortOrder: 4, blocks: [] },
+        { pageType: 'INDEX', title: 'Índice', sortOrder: 5, blocks: [] },
+        { pageType: 'TERMS', title: 'Términos y Condiciones', sortOrder: 1000, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Términos y Condiciones' }] }] } }] },
+      ];
+    }
+
+    // For the PRESENTATION page, append the commercial user's signature if available
+    if (proposal?.user?.signatureUrl) {
+      const presentationIdx = pageDefs.findIndex(p => p.pageType === 'PRESENTATION');
+      if (presentationIdx !== -1) {
+        pageDefs[presentationIdx].blocks.push({
+          blockType: 'IMAGE',
+          content: { url: proposal.user.signatureUrl, caption: proposal.user.name || 'Firma Comercial' },
         });
+      }
+    }
+
+    // Create pages and blocks
+    for (const page of pageDefs) {
+      const createdPage = await this.prisma.proposalPage.create({
+        data: {
+          proposalId,
+          pageType: page.pageType as PageType,
+          title: page.title,
+          sortOrder: page.sortOrder,
+          isLocked: true,
+        },
+      });
+
+      if (page.blocks?.length) {
+        for (let i = 0; i < page.blocks.length; i++) {
+          await this.prisma.proposalPageBlock.create({
+            data: {
+              pageId: createdPage.id,
+              blockType: page.blocks[i].blockType as BlockType,
+              content: page.blocks[i].content as object,
+              sortOrder: i + 1,
+            },
+          });
+        }
       }
     }
 
@@ -818,9 +900,9 @@ export class ProposalsService {
    */
   async reorderPages(proposalId: string, data: ReorderPagesDto) {
     const updates = data.pageIds.map((id, index) =>
-      this.prisma.proposalPage.updateMany({
-        where: { id, proposalId, isLocked: false },
-        data: { sortOrder: index + 100 },
+      this.prisma.proposalPage.update({
+        where: { id },
+        data: { sortOrder: index + 1 },
       }),
     );
     await Promise.all(updates);

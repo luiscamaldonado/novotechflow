@@ -13,6 +13,7 @@ const NewProposal = lazy(() => import('./pages/proposals/NewProposal'));
 const ProposalItemsBuilder = lazy(() => import('./pages/proposals/ProposalItemsBuilder'));
 const ProposalCalculations = lazy(() => import('./pages/proposals/ProposalCalculations'));
 const ProposalDocBuilder = lazy(() => import('./pages/proposals/ProposalDocBuilder'));
+const DefaultPagesAdmin = lazy(() => import('./pages/admin/DefaultPagesAdmin'));
 
 
 const AdminPanel = () => (
@@ -54,7 +55,7 @@ function App() {
       <ErrorBoundary moduleName="Aplicación">
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            <Route path="/login" element={isAuthenticated ? <Navigate to={user?.role === 'ADMIN' ? '/admin' : '/dashboard'} replace /> : <Login />} />
+            <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
 
             {/* Rutas protegidas envueltas en el Layout */}
             <Route element={<PrivateRoute />}>
@@ -68,6 +69,7 @@ function App() {
                 {/* Rutas exclusivas de Administrador */}
                 <Route element={<AdminRoute />}>
                   <Route path="/admin" element={<AdminPanel />} />
+                  <Route path="/admin/templates" element={<DefaultPagesAdmin />} />
                   <Route path="/users" element={<Users />} />
                 </Route>
               </Route>

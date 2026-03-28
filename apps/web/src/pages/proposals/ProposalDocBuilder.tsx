@@ -4,38 +4,55 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText, Plus, Trash2, ArrowLeft, Loader2,
     Lock, GripVertical, Type, ImagePlus,
-    BookOpen, Pencil, Eye,
+    BookOpen, Pencil, Eye, ShieldAlert,
+    Image as ImageIcon, ListOrdered, FileSignature, Building2,
+    ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useProposalPages, type ProposalPage, type PageBlock } from '../../hooks/useProposalPages';
+import { useAuthStore } from '../../store/authStore';
 import RichTextEditor from '../../components/proposals/RichTextEditor';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
 
 /** Page type display labels */
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
-    INTRO: 'Introducción',
+    PRESENTATION: 'Carta de Presentación',
+    COMPANY_INFO: 'Info. General',
+    INDEX: 'Índice',
     TERMS: 'Términos y Condiciones',
     CUSTOM: 'Página Personalizada',
 };
 
 /** Page type icons & colors */
-const PAGE_TYPE_STYLES: Record<string, { bg: string; text: string; border: string }> = {
-    COVER: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
-    INTRO: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
-    TERMS: { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' },
-    CUSTOM: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' },
+const PAGE_TYPE_STYLES: Record<string, { bg: string; text: string; border: string; icon: typeof FileText }> = {
+    COVER: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', icon: ImageIcon },
+    PRESENTATION: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200', icon: FileSignature },
+    COMPANY_INFO: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', icon: Building2 },
+    INDEX: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200', icon: ListOrdered },
+    TERMS: { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200', icon: FileText },
+    CUSTOM: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200', icon: FileText },
 };
 
 export default function ProposalDocBuilder() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { user } = useAuthStore();
+    const isAdmin = user?.role === 'ADMIN';
 
     const {
         loading, saving, pages, activePageId, setActivePageId, activePage,
-        loadPages, createPage, updatePage, deletePage,
+        loadPages, createPage, updatePage, deletePage, reorderPages,
         createBlock, updateBlock, deleteBlock, uploadImage,
     } = useProposalPages(id);
+
+    const movePage = (index: number, direction: 'up' | 'down') => {
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= pages.length) return;
+        const newPages = [...pages];
+        [newPages[index], newPages[newIndex]] = [newPages[newIndex], newPages[index]];
+        reorderPages(newPages.map(p => p.id));
+    };
 
     const [isCreatingPage, setIsCreatingPage] = useState(false);
     const [newPageTitle, setNewPageTitle] = useState('');
@@ -88,6 +105,15 @@ export default function ProposalDocBuilder() {
         fileInputRef.current?.click();
     };
 
+    /** Check whether the current user can edit the active page */
+    const canEditPage = (page: ProposalPage | null): boolean => {
+        if (!page) return false;
+        // Locked (default) pages can only be edited by admin
+        if (page.isLocked) return isAdmin;
+        // Custom pages can be edited by anyone
+        return true;
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -122,7 +148,7 @@ export default function ProposalDocBuilder() {
                             Construcción del Documento
                         </h2>
                         <p className="text-slate-500 text-sm font-medium mt-1">
-                            Diseño de páginas y contenido de la propuesta comercial
+                            Propuesta Comercial · Tamaño Carta (8.5&quot; × 11&quot;)
                         </p>
                     </div>
                 </div>
@@ -154,6 +180,7 @@ export default function ProposalDocBuilder() {
                             <button
                                 onClick={() => setIsCreatingPage(true)}
                                 className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all scale-90"
+                                title="Agregar página personalizada"
                             >
                                 <Plus className="h-4 w-4" />
                             </button>
@@ -161,9 +188,10 @@ export default function ProposalDocBuilder() {
 
                         <div className="space-y-2">
                             <AnimatePresence mode="popLayout">
-                                {pages.map(page => {
+                                {pages.map((page, idx) => {
                                     const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
                                     const isActive = activePageId === page.id;
+                                    const IconComponent = style.icon;
 
                                     return (
                                         <motion.div
@@ -180,7 +208,7 @@ export default function ProposalDocBuilder() {
                                                     : "bg-slate-50 border-transparent hover:bg-white hover:border-indigo-100 text-slate-600"
                                             )}
                                         >
-                                            <div className="flex items-center space-x-3 min-w-0">
+                                            <div className="flex items-center space-x-3 min-w-0 flex-1">
                                                 {page.isLocked ? (
                                                     <Lock className={cn("h-4 w-4 shrink-0", isActive ? "text-indigo-200" : "text-slate-400")} />
                                                 ) : (
@@ -188,7 +216,7 @@ export default function ProposalDocBuilder() {
                                                 )}
                                                 <div className="min-w-0">
                                                     <span className="text-sm font-black tracking-tight truncate block">
-                                                        {page.title || PAGE_TYPE_LABELS[page.pageType]}
+                                                        {idx + 1}. {page.title || PAGE_TYPE_LABELS[page.pageType]}
                                                     </span>
                                                     <span className={cn(
                                                         "text-[9px] font-black uppercase tracking-widest",
@@ -198,17 +226,43 @@ export default function ProposalDocBuilder() {
                                                     </span>
                                                 </div>
                                             </div>
-                                            {!page.isLocked && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
-                                                    className={cn(
-                                                        "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0",
-                                                        isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
-                                                    )}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </button>
-                                            )}
+                                            <div className="flex items-center shrink-0 gap-0.5">
+                                                <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); movePage(idx, 'up'); }}
+                                                        disabled={idx === 0}
+                                                        className={cn(
+                                                            "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                            isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                        )}
+                                                        title="Subir"
+                                                    >
+                                                        <ChevronUp className="h-3.5 w-3.5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); movePage(idx, 'down'); }}
+                                                        disabled={idx === pages.length - 1}
+                                                        className={cn(
+                                                            "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                            isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                        )}
+                                                        title="Bajar"
+                                                    >
+                                                        <ChevronDown className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </div>
+                                                {!page.isLocked && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
+                                                        className={cn(
+                                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                                            isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                                        )}
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </motion.div>
                                     );
                                 })}
@@ -258,24 +312,42 @@ export default function ProposalDocBuilder() {
                             )}
                         </div>
                     </div>
+
+                    {/* Admin notice */}
+                    {!isAdmin && (
+                        <div className="bg-amber-50/80 border-2 border-amber-200 rounded-2xl p-4 flex items-start space-x-3">
+                            <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-xs font-bold text-amber-700">Páginas Predeterminadas</p>
+                                <p className="text-[10px] text-amber-600 mt-1 leading-relaxed">
+                                    Las páginas con candado solo pueden ser editadas por un administrador.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Main Content — Page Editor */}
                 <div className="lg:col-span-9 space-y-6">
                     {activePage ? (
-                        <PageEditor
-                            page={activePage}
-                            editingTitle={editingTitle}
-                            setEditingTitle={setEditingTitle}
-                            onUpdatePage={updatePage}
-                            onCreateBlock={createBlock}
-                            onUpdateBlock={updateBlock}
-                            onDeleteBlock={deleteBlock}
-                            onAddTextBlock={handleAddTextBlock}
-                            onAddImageBlock={handleAddImageBlock}
-                            onUploadImageForBlock={handleImageUploadForBlock}
-                            uploadImage={uploadImage}
-                        />
+                        canEditPage(activePage) ? (
+                            <PageEditor
+                                page={activePage}
+                                editingTitle={editingTitle}
+                                setEditingTitle={setEditingTitle}
+                                onUpdatePage={updatePage}
+                                onCreateBlock={createBlock}
+                                onUpdateBlock={updateBlock}
+                                onDeleteBlock={deleteBlock}
+                                onAddTextBlock={handleAddTextBlock}
+                                onAddImageBlock={handleAddImageBlock}
+                                onUploadImageForBlock={handleImageUploadForBlock}
+                                uploadImage={uploadImage}
+                                isAdmin={isAdmin}
+                            />
+                        ) : (
+                            <LockedPageView page={activePage} />
+                        )
                     ) : (
                         <div className="bg-white rounded-[2.5rem] p-32 text-center border-2 border-dashed border-slate-100">
                             <BookOpen className="h-20 w-20 mx-auto text-slate-100 mb-6" />
@@ -285,6 +357,44 @@ export default function ProposalDocBuilder() {
                         </div>
                     )}
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Locked Page View (read-only for non-admins) ──────────────
+
+function LockedPageView({ page }: { page: ProposalPage }) {
+    const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
+    const IconComponent = style.icon;
+
+    return (
+        <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-100 border border-slate-100">
+            <div className="p-8 bg-slate-50/50 border-b border-slate-100">
+                <div className="flex items-center space-x-4">
+                    <div className={cn("p-3 rounded-2xl shadow-lg", style.bg, style.border, "border")}>
+                        <IconComponent className={cn("h-6 w-6", style.text)} />
+                    </div>
+                    <div>
+                        <h4 className="text-xl font-black text-slate-900 tracking-tight">
+                            {page.title || PAGE_TYPE_LABELS[page.pageType]}
+                        </h4>
+                        <div className="flex items-center space-x-2 mt-1">
+                            <span className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg", style.bg, style.text)}>
+                                {PAGE_TYPE_LABELS[page.pageType]}
+                            </span>
+                            <Lock className="h-3 w-3 text-slate-400" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Solo Administrador</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div className="p-16 text-center">
+                <ShieldAlert className="h-16 w-16 mx-auto text-amber-200 mb-4" />
+                <h4 className="text-lg font-black text-slate-300">Página Predeterminada</h4>
+                <p className="text-sm text-slate-400 mt-2 max-w-sm mx-auto">
+                    Esta página es parte de la estructura base del documento. Solo un administrador puede modificar su contenido y orden.
+                </p>
             </div>
         </div>
     );
@@ -304,23 +414,25 @@ interface PageEditorProps {
     onAddImageBlock: () => void;
     onUploadImageForBlock: (blockId: string) => void;
     uploadImage: (file: File) => Promise<string | null>;
+    isAdmin: boolean;
 }
 
 function PageEditor({
     page, editingTitle, setEditingTitle,
     onUpdatePage, onUpdateBlock, onDeleteBlock,
-    onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage,
+    onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage, isAdmin,
 }: PageEditorProps) {
     const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
+    const IconComponent = style.icon;
 
     return (
-        <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-100 border border-slate-100 overflow-hidden">
+        <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-100 border border-slate-100">
             {/* Page Header */}
             <div className="p-8 bg-slate-50/50 border-b border-slate-100">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <div className={cn("p-3 rounded-2xl shadow-lg", style.bg, style.border, "border")}>
-                            <FileText className={cn("h-6 w-6", style.text)} />
+                            <IconComponent className={cn("h-6 w-6", style.text)} />
                         </div>
                         <div>
                             {editingTitle !== null ? (
@@ -392,10 +504,24 @@ function PageEditor({
             <div className="p-8 space-y-6">
                 {page.blocks.length === 0 ? (
                     <div className="py-16 text-center">
-                        <FileText className="h-16 w-16 mx-auto text-slate-100 mb-4" />
-                        <p className="text-sm font-bold text-slate-400">
-                            Esta página no tiene contenido aún. Use los botones de arriba para agregar texto o imágenes.
-                        </p>
+                        {page.pageType === 'INDEX' ? (
+                            <>
+                                <ListOrdered className="h-16 w-16 mx-auto text-violet-200 mb-4" />
+                                <p className="text-sm font-bold text-slate-400">
+                                    El índice se genera automáticamente a partir de las páginas del documento.
+                                </p>
+                                <p className="text-xs text-slate-300 mt-2">
+                                    No requiere contenido manual.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <FileText className="h-16 w-16 mx-auto text-slate-100 mb-4" />
+                                <p className="text-sm font-bold text-slate-400">
+                                    Esta página no tiene contenido aún. Use los botones de arriba para agregar texto o imágenes.
+                                </p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <AnimatePresence mode="popLayout">

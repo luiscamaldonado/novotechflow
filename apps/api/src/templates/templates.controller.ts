@@ -1,0 +1,129 @@
+import {
+  Controller, Get, Post, Patch, Delete,
+  Param, Body, UseGuards, Req, UseInterceptors, UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { TemplatesService } from './templates.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
+
+@Controller('templates')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
+export class TemplatesController {
+  constructor(private readonly templatesService: TemplatesService) {}
+
+  /** List all active templates. */
+  @Get()
+  async findAll(@Req() req: any) {
+    // Seed defaults if empty (first time admin opens the page)
+    await this.templatesService.seedDefaultsIfEmpty(req.user.id);
+    return this.templatesService.findAll();
+  }
+
+  /** Get one template by ID. */
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.templatesService.findOne(id);
+  }
+
+  /** Create a new template. */
+  @Post()
+  async create(
+    @Req() req: any,
+    @Body() body: { name: string; templateType: string; sortOrder?: number },
+  ) {
+    return this.templatesService.create({
+      name: body.name,
+      templateType: body.templateType as any,
+      sortOrder: body.sortOrder,
+      createdBy: req.user.id,
+    });
+  }
+
+  /** Update a template (name, sortOrder, isActive). */
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() body: { name?: string; sortOrder?: number; isActive?: boolean },
+  ) {
+    return this.templatesService.update(id, body);
+  }
+
+  /** Delete a template. */
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    return this.templatesService.remove(id);
+  }
+
+  /** Reorder templates. */
+  @Patch('reorder')
+  async reorder(@Body() body: { templateIds: string[] }) {
+    return this.templatesService.reorder(body.templateIds);
+  }
+
+  // ── Block Operations ─────────────────────────────────────
+
+  /** Add a block to a template. */
+  @Post(':id/blocks')
+  async addBlock(
+    @Param('id') id: string,
+    @Body() body: { blockType: string; content?: object },
+  ) {
+    return this.templatesService.addBlock(id, {
+      blockType: body.blockType,
+      content: body.content || {},
+    });
+  }
+
+  /** Update a block's content. */
+  @Patch(':templateId/blocks/:blockId')
+  async updateBlock(
+    @Param('templateId') templateId: string,
+    @Param('blockId') blockId: string,
+    @Body() body: { content: object },
+  ) {
+    return this.templatesService.updateBlock(templateId, blockId, body.content);
+  }
+
+  /** Delete a block. */
+  @Delete(':templateId/blocks/:blockId')
+  async deleteBlock(
+    @Param('templateId') templateId: string,
+    @Param('blockId') blockId: string,
+  ) {
+    return this.templatesService.deleteBlock(templateId, blockId);
+  }
+
+  /** Upload image for a block. */
+  @Post(':templateId/blocks/:blockId/image')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: join(process.cwd(), 'uploads', 'templates'),
+      filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, 'tpl-' + uniqueSuffix + extname(file.originalname));
+      },
+    }),
+    fileFilter: (_req, file, cb) => {
+      if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp|svg\+xml)$/)) {
+        cb(new Error('Solo se permiten imágenes'), false);
+      } else {
+        cb(null, true);
+      }
+    },
+    limits: { fileSize: 10 * 1024 * 1024 },
+  }))
+  async uploadBlockImage(
+    @Param('templateId') templateId: string,
+    @Param('blockId') blockId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const imageUrl = `/uploads/templates/${file.filename}`;
+    return this.templatesService.updateBlockImage(templateId, blockId, imageUrl);
+  }
+}

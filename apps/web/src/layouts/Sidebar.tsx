@@ -8,7 +8,8 @@ import {
     X,
     PlusCircle,
     Calculator,
-    Mail
+    Mail,
+    BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
@@ -33,6 +34,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { icon: Calculator, label: 'Calculadora', path: '/calculator', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: Mail, label: 'Envíos (Microsoft 365)', path: '/mail', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: Users, label: 'Usuarios', path: '/users', roles: ['ADMIN'] },
+        { icon: BookOpen, label: 'Plantillas de Documento', path: '/admin/templates', roles: ['ADMIN'] },
         { icon: Settings, label: 'Configuración', path: '/settings', roles: ['ADMIN'] },
     ];
 

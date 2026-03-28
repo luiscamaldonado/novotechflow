@@ -23,6 +23,7 @@ export interface AuthUser {
     email: string;
     role: UserRole;
     nomenclature: string;
+    signatureUrl?: string;
 }
 
 /** Resumen de propuesta (listado / Dashboard). */

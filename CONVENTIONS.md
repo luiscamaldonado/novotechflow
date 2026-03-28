@@ -250,3 +250,11 @@ Para pruebas locales y verificación en el navegador:
 **Autocompletado del navegador**: El navegador tiene autocompletado activo, por lo que los campos de email y contraseña pueden prellenarse automáticamente. Al hacer pruebas en el browser:
 - Si el autocompletado ya rellenó los campos correctamente, simplemente hacer clic en el botón de login.
 - Si se necesita escribir las credenciales, **primero borrar/limpiar los campos** (Ctrl+A → Delete) antes de escribir las credenciales para evitar texto duplicado.
+
+---
+
+### H. PRUEBAS EN EL NAVEGADOR
+
+- Las pruebas y verificaciones en el navegador las realiza **exclusivamente el usuario**.
+- El agente de IA **NO debe ejecutar pruebas en el browser** ni abrir el navegador para verificar funcionalidad.
+- El agente se limita a implementar los cambios en código y, si aplica, ejecutar validaciones estáticas (`tsc --noEmit`, linting, etc.).

@@ -14,11 +14,19 @@ async function bootstrap() {
     forbidNonWhitelisted: false,
   }));
 
-  // Serve uploaded images as static files
+  // Ensure upload directories exist
   const uploadsPath = join(process.cwd(), 'uploads');
-  if (!existsSync(uploadsPath)) mkdirSync(uploadsPath, { recursive: true });
+  const signaturesPath = join(uploadsPath, 'signatures');
+  const defaultsPath = join(uploadsPath, 'defaults');
+  const templatesPath = join(uploadsPath, 'templates');
+  for (const dir of [uploadsPath, signaturesPath, defaultsPath, templatesPath]) {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  }
+
+  // Serve uploaded images as static files
   app.useStaticAssets(uploadsPath, { prefix: '/uploads/' });
 
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
+

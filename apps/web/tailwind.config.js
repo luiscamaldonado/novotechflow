@@ -1,4 +1,6 @@
 import tailwindScrollbar from 'tailwind-scrollbar';
+import typography from '@tailwindcss/typography';
+// Trigger rebuild
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -24,5 +26,6 @@ export default {
     },
     plugins: [
         tailwindScrollbar({ nocompatible: true }),
+        typography,
     ],
 }

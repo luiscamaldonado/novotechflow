@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 
 // ── Types ────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ export interface PageBlock {
 export interface ProposalPage {
     id: string;
     proposalId: string;
-    pageType: 'COVER' | 'INTRO' | 'TERMS' | 'CUSTOM';
+    pageType: 'COVER' | 'PRESENTATION' | 'COMPANY_INFO' | 'INDEX' | 'TERMS' | 'CUSTOM';
     title: string | null;
     variables: Record<string, unknown> | null;
     isLocked: boolean;
@@ -29,12 +29,14 @@ export function useProposalPages(proposalId: string | undefined) {
     const [saving, setSaving] = useState(false);
     const [pages, setPages] = useState<ProposalPage[]>([]);
     const [activePageId, setActivePageId] = useState<string | null>(null);
+    const initializingRef = useRef(false);
 
     const activePage = pages.find(p => p.id === activePageId) ?? null;
 
     const loadPages = useCallback(async () => {
-        if (!proposalId) return;
+        if (!proposalId || initializingRef.current) return;
         try {
+            initializingRef.current = true;
             setLoading(true);
             // Initialize defaults if none exist, then load
             await api.post(`/proposals/${proposalId}/pages/initialize`);
@@ -47,6 +49,7 @@ export function useProposalPages(proposalId: string | undefined) {
             console.error('Error loading pages', error);
         } finally {
             setLoading(false);
+            initializingRef.current = false;
         }
     }, [proposalId, activePageId]);
 

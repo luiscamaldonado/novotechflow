@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  COMMERCIAL
+}
+
+enum ProposalStatus {
+  ELABORACION
+  PROPUESTA
+  GANADA
+  PERDIDA
+  PENDIENTE_FACTURAR
+  FACTURADA
+}
+
+enum ItemType {
+  PCS
+  ACCESSORIES
+  PC_SERVICES
+  SOFTWARE
+  INFRASTRUCTURE
+  INFRA_SERVICES
+}
+
+enum PageType {
+  COVER
+  INTRO
+  TERMS
+  CUSTOM
+}
+
+enum BlockType {
+  RICH_TEXT
+  IMAGE
+}
+
+enum SyncStatus {
+  SYNCED
+  PENDING
+  ERROR
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(100)
+  email        String   @unique @db.VarChar(150)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role
+  nomenclature String   @unique @db.VarChar(10)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  proposals    Proposal[]
+  pdfTemplates PdfTemplate[]
+  syncedFiles  SyncedFile[]
+  EmailLog     EmailLog[]
+
+  @@map("users")
+}
+
+model Proposal {
+  id             String         @id @default(uuid()) @db.Uuid
+  proposalCode   String?        @unique @map("proposal_code") @db.VarChar(20)
+  userId         String         @map("user_id") @db.Uuid
+  clientId       String?        @map("client_id") @db.Uuid
+  clientName     String         @map("client_name") @db.VarChar(200)
+  subject        String         @db.Text
+  issueDate      DateTime       @map("issue_date") @db.Date
+  validityDays   Int?           @map("validity_days")
+  validityDate   DateTime?      @map("validity_date") @db.Date
+  status         ProposalStatus @default(ELABORACION)
+  currentVersion Int            @default(1) @map("current_version")
+  isLocked       Boolean        @default(false) @map("is_locked")
+  closeDate      DateTime?      @map("close_date") @db.Date
+  billingDate    DateTime?      @map("billing_date") @db.Date
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user             User              @relation(fields: [userId], references: [id])
+  client           Client?           @relation(fields: [clientId], references: [id])
+  proposalVersions ProposalVersion[]
+  proposalItems    ProposalItem[]
+  pages            ProposalPage[]
+  scenarios        Scenario[]
+  syncedFiles      SyncedFile[]
+  emailLogs        EmailLog[]
+
+  @@map("proposals")
+}
+
+model ProposalVersion {
+  id            String   @id @default(uuid()) @db.Uuid
+  proposalId    String   @map("proposal_id") @db.Uuid
+  versionNumber Int      @map("version_number")
+  snapshotData  Json     @map("snapshot_data") @db.JsonB
+  pdfUrl        String?  @map("pdf_url") @db.VarChar(500)
+  isLocked      Boolean  @default(true) @map("is_locked")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  proposal  Proposal   @relation(fields: [proposalId], references: [id])
+  emailLogs EmailLog[]
+
+  @@map("proposal_versions")
+}
+
+model ProposalPage {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @map("proposal_id") @db.Uuid
+  pageType   PageType @map("page_type")
+  title      String?  @db.VarChar(200)
+  variables  Json?    @db.JsonB
+  isLocked   Boolean  @default(false) @map("is_locked")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  proposal      Proposal           @relation(fields: [proposalId], references: [id])
+  blocks        ProposalPageBlock[]
+  proposalItems ProposalItem[]
+
+  @@map("proposal_pages")
+}
+
+model ProposalPageBlock {
+  id        String    @id @default(uuid()) @db.Uuid
+  pageId    String    @map("page_id") @db.Uuid
+  blockType BlockType @map("block_type")
+  content   Json?     @db.JsonB
+  sortOrder Int       @default(0) @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  page ProposalPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("proposal_page_blocks")
+}
+
+model ProposalItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  proposalId  String   @map("proposal_id") @db.Uuid
+  pageId      String?  @map("page_id") @db.Uuid
+  itemType    ItemType @map("item_type")
+  name        String   @db.VarChar(300)
+  description String?  @db.Text
+  brand       String?  @db.VarChar(50)
+  partNumber  String?  @map("part_number") @db.VarChar(50)
+  quantity    Int      @default(1)
+
+  // Future-proofing detailed cost tracking
+  unitCost      Decimal  @map("unit_cost") @db.Decimal(15, 2)
+  internalCosts Json?    @map("internal_costs") @db.JsonB // Additional flexible cost fields
+  marginPct     Decimal? @map("margin_pct") @db.Decimal(5, 2)
+  unitPrice     Decimal? @map("unit_price") @db.Decimal(15, 2)
+
+  isTaxable      Boolean  @default(true) @map("is_taxable")
+  sortOrder      Int      @default(0) @map("sort_order")
+  technicalSpecs Json?    @map("technical_specs")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  proposal      Proposal         @relation(fields: [proposalId], references: [id])
+  page          ProposalPage?    @relation(fields: [pageId], references: [id])
+  scenarioItems ScenarioItem[]
+
+  @@map("proposal_items")
+}
+
+model Scenario {
+  id          String  @id @default(uuid()) @db.Uuid
+  proposalId  String  @map("proposal_id") @db.Uuid
+  name        String  @db.VarChar(100)
+  currency    String  @default("COP") @db.VarChar(5)
+  description String? @db.Text
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  proposal      Proposal       @relation(fields: [proposalId], references: [id])
+  scenarioItems ScenarioItem[]
+
+  @@map("scenarios")
+}
+
+model ScenarioItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  scenarioId        String   @map("scenario_id") @db.Uuid
+  itemId            String   @map("item_id") @db.Uuid
+  parentId          String?  @map("parent_id") @db.Uuid
+  quantity          Int      @default(1)
+  unitCostOverride  Decimal? @map("unit_cost_override") @db.Decimal(15, 2)
+  marginPctOverride Decimal? @map("margin_pct_override") @db.Decimal(5, 2)
+  unitPriceOverride Decimal? @map("unit_price_override") @db.Decimal(15, 2)
+  isDilpidate       Boolean  @default(false) @map("is_dilpidate")
+
+  scenario Scenario      @relation(fields: [scenarioId], references: [id])
+  item     ProposalItem  @relation(fields: [itemId], references: [id])
+  parent   ScenarioItem? @relation("ScenarioItemChildren", fields: [parentId], references: [id])
+  children ScenarioItem[] @relation("ScenarioItemChildren")
+
+  @@map("scenario_items")
+}
+
+model PdfTemplate {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(100)
+  templateType PageType @map("template_type")
+  content      Json     @db.JsonB
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdBy    String   @map("created_by") @db.Uuid
+
+  author User @relation(fields: [createdBy], references: [id])
+
+  @@map("pdf_templates")
+}
+
+model SyncedFile {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  proposalId String?    @map("proposal_id") @db.Uuid
+  fileName   String     @map("file_name") @db.VarChar(255)
+  filePath   String     @map("file_path") @db.VarChar(500)
+  localPath  String?    @map("local_path") @db.VarChar(500)
+  fileSize   BigInt?    @map("file_size")
+  checksum   String?    @db.VarChar(64)
+  syncStatus SyncStatus @default(SYNCED) @map("sync_status")
+  syncedAt   DateTime   @default(now()) @map("synced_at")
+
+  user     User      @relation(fields: [userId], references: [id])
+  proposal Proposal? @relation(fields: [proposalId], references: [id])
+
+  @@map("synced_files")
+}
+
+model EmailLog {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  proposalId        String  @map("proposal_id") @db.Uuid
+  proposalVersionId String? @map("proposal_version_id") @db.Uuid
+  outlookMessageId  String? @map("outlook_message_id") @db.VarChar(255) // Graph API ID
+
+  toEmail String   @map("to_email") @db.VarChar(255)
+  ccEmail String?  @map("cc_email") @db.VarChar(500)
+  subject String   @db.VarChar(500)
+  body    String   @db.Text
+  sentAt  DateTime @default(now()) @map("sent_at")
+
+  hasAttachment Boolean @default(false) @map("has_attachment")
+
+  user            User             @relation(fields: [userId], references: [id])
+  proposal        Proposal         @relation(fields: [proposalId], references: [id])
+  proposalVersion ProposalVersion? @relation(fields: [proposalVersionId], references: [id])
+
+  @@map("email_logs")
+}
+
+model Client {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(200)
+  nit       String?  @db.VarChar(20)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  proposals Proposal[]
+  @@map("clients")
+}
+
+model Catalog {
+  id        String   @id @default(uuid()) @db.Uuid
+  category  String   @db.VarChar(50) // e.g., "FABRICANTE", "PROCESADOR"
+  value     String   @db.VarChar(200)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([category, value])
+  @@map("catalogs")
+}

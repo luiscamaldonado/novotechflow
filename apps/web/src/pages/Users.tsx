@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     Plus,
     User,
@@ -10,7 +10,10 @@ import {
     Edit,
     Save,
     X,
-    Loader2
+    Loader2,
+    Upload,
+    FileSignature,
+    CheckCircle2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';
@@ -21,6 +24,7 @@ interface UserData {
     email: string;
     role: 'ADMIN' | 'COMMERCIAL';
     nomenclature: string;
+    signatureUrl?: string | null;
     isActive: boolean;
 }
 
@@ -30,6 +34,10 @@ export default function Users() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [uploadingSignature, setUploadingSignature] = useState<string | null>(null);
+    const signatureInputRef = useRef<HTMLInputElement>(null);
+
+    const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
     const loadUsers = async () => {
         try {
@@ -64,7 +72,7 @@ export default function Users() {
         try {
             await api.post('/users', data);
             setIsCreating(false);
-            loadUsers(); // Recargar usuarios
+            loadUsers();
         } catch (err: unknown) {
             const axiosErr = err as { response?: { data?: { message?: string } } };
             setError(axiosErr.response?.data?.message || 'Error al crear el usuario. Verifica que el correo o nomenclatura no estén duplicados.');
@@ -80,15 +88,60 @@ export default function Users() {
 
         try {
             await api.delete(`/users/${id}`);
-            loadUsers(); // Recargar la tabla
+            loadUsers();
         } catch (err) {
             alert('Hubo un error al intentar eliminar el usuario.');
             console.error(err);
         }
     };
 
+    const handleSignatureUpload = async (userId: string) => {
+        setUploadingSignature(userId);
+        signatureInputRef.current?.click();
+    };
+
+    const handleSignatureFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !uploadingSignature) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            await api.post(`/users/${uploadingSignature}/signature`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            loadUsers();
+        } catch (err) {
+            console.error('Error uploading signature:', err);
+            alert('Error al subir la firma. Verifica que el archivo sea una imagen válida.');
+        } finally {
+            setUploadingSignature(null);
+            if (signatureInputRef.current) signatureInputRef.current.value = '';
+        }
+    };
+
+    const handleDeleteSignature = async (userId: string) => {
+        if (!window.confirm('¿Estás seguro de que deseas eliminar la firma de este usuario?')) return;
+        try {
+            await api.delete(`/users/${userId}/signature`);
+            loadUsers();
+        } catch (err) {
+            console.error('Error deleting signature:', err);
+            alert('Error al eliminar la firma.');
+        }
+    };
+
     return (
         <div className="space-y-6">
+            {/* Hidden file input for signature upload */}
+            <input
+                ref={signatureInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleSignatureFileChange}
+            />
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight text-gray-900">Gestión de Usuarios</h2>
@@ -233,6 +286,7 @@ export default function Users() {
                                             <th className="px-6 py-4 font-medium">Usuario / Correo</th>
                                             <th className="px-6 py-4 font-medium">Rol</th>
                                             <th className="px-6 py-4 font-medium">Nom.</th>
+                                            <th className="px-6 py-4 font-medium">Firma</th>
                                             <th className="px-6 py-4 font-medium text-right">Acciones</th>
                                         </tr>
                                     </thead>
@@ -258,6 +312,41 @@ export default function Users() {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <span className="font-mono text-xs font-semibold text-gray-600">{u.nomenclature}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {u.signatureUrl ? (
+                                                        <div className="flex items-center space-x-2">
+                                                            <div className="w-16 h-10 rounded-lg border border-gray-200 overflow-hidden bg-white flex items-center justify-center">
+                                                                <img
+                                                                    src={`${apiBase}${u.signatureUrl}`}
+                                                                    alt="Firma"
+                                                                    className="max-w-full max-h-full object-contain"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleSignatureUpload(u.id)}
+                                                                className="p-1.5 text-gray-400 hover:text-novo-primary hover:bg-gray-50 rounded-lg transition-all"
+                                                                title="Cambiar firma"
+                                                            >
+                                                                <Upload className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteSignature(u.id)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                                title="Eliminar firma"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleSignatureUpload(u.id)}
+                                                            className="flex items-center space-x-1.5 text-xs text-gray-400 hover:text-novo-primary transition-colors group"
+                                                        >
+                                                            <FileSignature className="h-4 w-4 group-hover:text-novo-primary" />
+                                                            <span className="group-hover:text-novo-primary font-medium">Subir firma</span>
+                                                        </button>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end space-x-2">
