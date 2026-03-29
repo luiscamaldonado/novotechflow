@@ -9,23 +9,32 @@ import {
     AlignLeft, AlignCenter, AlignRight, AlignJustify,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { type ProposalVariables, replaceMarkersInTiptapJson } from '../../lib/proposalVariables';
 
 interface RichTextEditorProps {
     content: Record<string, unknown> | null;
     onUpdate: (content: Record<string, unknown>) => void;
     readOnly?: boolean;
+    proposalVars?: ProposalVariables;
 }
 
 const TOOLBAR_BTN = "p-1.5 rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all";
 const TOOLBAR_BTN_ACTIVE = "bg-indigo-100 text-indigo-600 shadow-sm";
 
-export default function RichTextEditor({ content, onUpdate, readOnly = false }: RichTextEditorProps) {
+export default function RichTextEditor({ content, onUpdate, readOnly = false, proposalVars }: RichTextEditorProps) {
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [, setRenderTick] = useState(0);
     const [isFocused, setIsFocused] = useState(false);
     const editorWrapperRef = useRef<HTMLDivElement>(null);
+
+
+    /** Content with µ markers replaced for display purposes */
+    const displayContent = useMemo(() => {
+        if (!content || !proposalVars) return content;
+        return replaceMarkersInTiptapJson(content, proposalVars) as Record<string, unknown>;
+    }, [content, proposalVars]);
 
     const editor = useEditor({
         extensions: [
@@ -35,7 +44,7 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false }: 
             TextAlign.configure({ types: ['heading', 'paragraph'] }),
             UnderlineExt,
         ],
-        content: content as Record<string, unknown> ?? { type: 'doc', content: [{ type: 'paragraph' }] },
+        content: displayContent as Record<string, unknown> ?? { type: 'doc', content: [{ type: 'paragraph' }] },
         editable: !readOnly,
         editorProps: {
             attributes: {
@@ -60,16 +69,25 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false }: 
 
     // Sync external content changes
     const prevContentRef = useRef(content);
+    const prevVarsRef = useRef(proposalVars);
     useEffect(() => {
-        if (editor && content && content !== prevContentRef.current) {
+        if (!editor) return;
+        const contentChanged = content && content !== prevContentRef.current;
+        const varsChanged = proposalVars !== prevVarsRef.current;
+
+        if (contentChanged || varsChanged) {
+            const processed = (content && proposalVars)
+                ? replaceMarkersInTiptapJson(content, proposalVars)
+                : content;
             const currentJSON = JSON.stringify(editor.getJSON());
-            const newJSON = JSON.stringify(content);
-            if (currentJSON !== newJSON) {
-                editor.commands.setContent(content as Record<string, unknown>);
+            const newJSON = JSON.stringify(processed);
+            if (currentJSON !== newJSON && processed) {
+                editor.commands.setContent(processed as Record<string, unknown>);
             }
             prevContentRef.current = content;
+            prevVarsRef.current = proposalVars;
         }
-    }, [content, editor]);
+    }, [content, editor, proposalVars]);
 
     const btnClass = useCallback(
         (isActive: boolean) => cn(TOOLBAR_BTN, isActive && TOOLBAR_BTN_ACTIVE),

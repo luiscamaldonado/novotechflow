@@ -108,6 +108,8 @@ export interface ProposalItemFromApi {
     id: string;
     name: string;
     itemType: string;
+    brand: string;
+    partNumber?: string;
     unitCost: number;
     marginPct: number;
     unitPrice: number;

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -6,13 +6,17 @@ import {
     Lock, GripVertical, Type, ImagePlus,
     BookOpen, Pencil, Eye, ShieldAlert,
     Image as ImageIcon, ListOrdered, FileSignature, Building2,
-    ChevronUp, ChevronDown,
+    ChevronUp, ChevronDown, MapPin,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useProposalPages, type ProposalPage, type PageBlock } from '../../hooks/useProposalPages';
 import { useAuthStore } from '../../store/authStore';
 import RichTextEditor from '../../components/proposals/RichTextEditor';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
+import { api } from '../../lib/api';
+import type { ProposalDetail } from '../../lib/types';
+import { COLOMBIAN_CAPITAL_CITIES } from '../../lib/colombianCities';
+import { type ProposalVariables, formatDateSpanish, buildGarantiaLines } from '../../lib/proposalVariables';
 
 /** Page type display labels */
 const PAGE_TYPE_LABELS: Record<string, string> = {
@@ -60,6 +64,47 @@ export default function ProposalDocBuilder() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
     const [showPreview, setShowPreview] = useState(false);
+
+    // ── Proposal metadata for µ marker replacements ──────────
+    const [proposal, setProposal] = useState<ProposalDetail | null>(null);
+    const [selectedCity, setSelectedCity] = useState<string>('Bogotá D.C.');
+
+    useEffect(() => {
+        if (!id) return;
+        api.get(`/proposals/${id}`).then(res => {
+            const data = res.data;
+            if (data.issueDate) data.issueDate = data.issueDate.split('T')[0];
+            if (data.validityDate) data.validityDate = data.validityDate.split('T')[0];
+            setProposal(data);
+        }).catch(err => console.error('Error loading proposal metadata', err));
+    }, [id]);
+
+    /** Variables de propuesta para reemplazo de marcadores µ */
+    const proposalVars = useMemo<ProposalVariables>(() => {
+        // Construir texto de validez: "15 de abril de 2026 (15 días)"
+        let validezText = '';
+        if (proposal?.validityDate) {
+            validezText = formatDateSpanish(proposal.validityDate);
+            if (proposal.validityDays) {
+                validezText += ` (${proposal.validityDays} días)`;
+            }
+        }
+
+        // Construir líneas de garantía basadas en marcas de los ítems
+        const garantiaLines = proposal?.proposalItems
+            ? buildGarantiaLines(proposal.proposalItems)
+            : [];
+
+        return {
+            ciudad: selectedCity,
+            fechaEmision: proposal?.issueDate ? formatDateSpanish(proposal.issueDate) : '',
+            cliente: proposal?.clientName || '',
+            cotizacion: proposal?.proposalCode || '',
+            asunto: proposal?.subject || '',
+            validez: validezText,
+            garantiaLines,
+        };
+    }, [selectedCity, proposal]);
 
     useEffect(() => {
         loadPages();
@@ -161,12 +206,47 @@ export default function ProposalDocBuilder() {
                 </button>
             </div>
 
+            {/* City selector bar */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-6 flex-wrap">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-50 rounded-xl">
+                        <MapPin className="h-4 w-4 text-indigo-600" />
+                    </div>
+                    <CityCombobox value={selectedCity} onChange={setSelectedCity} />
+                </div>
+                {proposal && (
+                    <>
+                        <div className="h-8 w-px bg-slate-200" />
+                        <div>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Cliente</span>
+                            <span className="text-sm font-bold text-slate-800">{proposal.clientName}</span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200" />
+                        <div>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Cotización</span>
+                            <span className="text-sm font-mono font-bold text-indigo-600">{proposal.proposalCode}</span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200" />
+                        <div>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Fecha Emisión</span>
+                            <span className="text-sm font-bold text-slate-800">{formatDateSpanish(proposal.issueDate)}</span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200" />
+                        <div className="flex-1 min-w-0">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Asunto</span>
+                            <span className="text-sm font-bold text-slate-800 truncate block">{proposal.subject}</span>
+                        </div>
+                    </>
+                )}
+            </div>
+
             {/* PDF Preview Modal */}
             <AnimatePresence>
                 {showPreview && (
                     <PdfPreviewModal
                         pages={pages}
                         onClose={() => setShowPreview(false)}
+                        proposalVars={proposalVars}
                     />
                 )}
             </AnimatePresence>
@@ -344,6 +424,7 @@ export default function ProposalDocBuilder() {
                                 onUploadImageForBlock={handleImageUploadForBlock}
                                 uploadImage={uploadImage}
                                 isAdmin={isAdmin}
+                                proposalVars={proposalVars}
                             />
                         ) : (
                             <LockedPageView page={activePage} />
@@ -358,6 +439,111 @@ export default function ProposalDocBuilder() {
                     )}
                 </div>
             </div>
+        </div>
+    );
+}
+
+// ── City Combobox (searchable dropdown) ──────────────────────
+
+function CityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    const [query, setQuery] = useState(value);
+    const [open, setOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    const filtered = useMemo(() => {
+        if (!query.trim()) return COLOMBIAN_CAPITAL_CITIES;
+        const lower = query.toLowerCase();
+        return COLOMBIAN_CAPITAL_CITIES.filter(c => c.toLowerCase().includes(lower));
+    }, [query]);
+
+    // Sync external value changes
+    useEffect(() => { setQuery(value); }, [value]);
+
+    // Close on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+                setOpen(false);
+                // Reset query to current value if nothing selected
+                setQuery(value);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [value]);
+
+    const handleSelect = (city: string) => {
+        onChange(city);
+        setQuery(city);
+        setOpen(false);
+    };
+
+    return (
+        <div ref={wrapperRef} className="relative">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
+                Ciudad de emisión
+            </label>
+            <div className="flex items-center mt-0.5">
+                <input
+                    id="city-selector"
+                    type="text"
+                    value={query}
+                    onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+                    onFocus={() => setOpen(true)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') { setOpen(false); setQuery(value); }
+                        if (e.key === 'Enter' && filtered.length > 0) {
+                            e.preventDefault();
+                            handleSelect(filtered[0]);
+                        }
+                    }}
+                    placeholder="Buscar ciudad..."
+                    className="bg-transparent border-none text-sm font-bold text-slate-800 focus:ring-0 p-0 w-44 placeholder:text-slate-300 placeholder:font-normal"
+                    autoComplete="off"
+                />
+                <button
+                    type="button"
+                    onClick={() => setOpen(!open)}
+                    className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                >
+                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+                </button>
+            </div>
+
+            <AnimatePresence>
+                {open && filtered.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute z-50 top-full left-0 mt-2 w-64 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/50"
+                    >
+                        {filtered.map(city => (
+                            <button
+                                key={city}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleSelect(city)}
+                                className={cn(
+                                    "w-full text-left px-4 py-2.5 text-sm transition-colors",
+                                    city === value
+                                        ? "bg-indigo-50 text-indigo-700 font-bold"
+                                        : "text-slate-700 hover:bg-slate-50 font-medium"
+                                )}
+                            >
+                                {city}
+                            </button>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {open && filtered.length === 0 && (
+                <div className="absolute z-50 top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-4 text-center">
+                    <p className="text-xs text-slate-400 font-medium">No se encontraron ciudades</p>
+                </div>
+            )}
         </div>
     );
 }
@@ -415,12 +601,14 @@ interface PageEditorProps {
     onUploadImageForBlock: (blockId: string) => void;
     uploadImage: (file: File) => Promise<string | null>;
     isAdmin: boolean;
+    proposalVars: ProposalVariables;
 }
 
 function PageEditor({
     page, editingTitle, setEditingTitle,
     onUpdatePage, onUpdateBlock, onDeleteBlock,
     onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage, isAdmin,
+    proposalVars,
 }: PageEditorProps) {
     const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
     const IconComponent = style.icon;
@@ -542,6 +730,7 @@ function PageEditor({
                                     onDelete={() => onDeleteBlock(page.id, block.id)}
                                     onUploadImage={() => onUploadImageForBlock(block.id)}
                                     uploadImage={uploadImage}
+                                    proposalVars={proposalVars}
                                 />
                             </motion.div>
                         ))}
@@ -563,9 +752,10 @@ interface BlockEditorProps {
     onDelete: () => void;
     onUploadImage: () => void;
     uploadImage: (file: File) => Promise<string | null>;
+    proposalVars: ProposalVariables;
 }
 
-function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, onUploadImage, uploadImage }: BlockEditorProps) {
+function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, onUploadImage, uploadImage, proposalVars }: BlockEditorProps) {
     const [captionBuffer, setCaptionBuffer] = useState(
         (block.content as Record<string, string>)?.caption || ''
     );
@@ -661,6 +851,7 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, onUploadIm
                     <RichTextEditor
                         content={block.content as Record<string, unknown> | null}
                         onUpdate={(content) => onUpdate(block.id, content)}
+                        proposalVars={proposalVars}
                     />
                 )}
             </div>

@@ -6,6 +6,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import Underline from '@tiptap/extension-underline';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type { ProposalPage, PageBlock } from '../../hooks/useProposalPages';
+import { type ProposalVariables, replaceMarkersInHtml } from '../../lib/proposalVariables';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
@@ -25,6 +26,7 @@ const extensions = [
 interface PdfPreviewModalProps {
     pages: ProposalPage[];
     onClose: () => void;
+    proposalVars?: ProposalVariables;
 }
 
 function renderRichText(content: Record<string, unknown> | null): string {
@@ -59,7 +61,7 @@ interface VisualPage {
     allPages?: ProposalPage[];
 }
 
-export default function PdfPreviewModal({ pages, onClose }: PdfPreviewModalProps) {
+export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPreviewModalProps) {
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
@@ -108,7 +110,9 @@ export default function PdfPreviewModal({ pages, onClose }: PdfPreviewModalProps
             let fullHtml = '';
             for (const block of page.blocks) {
                 if (block.blockType === 'RICH_TEXT') {
-                    fullHtml += renderRichText(block.content);
+                    let html = renderRichText(block.content);
+                    if (proposalVars) html = replaceMarkersInHtml(html, proposalVars);
+                    fullHtml += html;
                 } else if (block.blockType === 'IMAGE') {
                     const url = (block.content as Record<string, string>)?.url;
                     const caption = (block.content as Record<string, string>)?.caption;
@@ -223,7 +227,7 @@ export default function PdfPreviewModal({ pages, onClose }: PdfPreviewModalProps
 
         setVisualPages(result);
         setReady(true);
-    }, [pages, apiBase]);
+    }, [pages, apiBase, proposalVars]);
 
     useEffect(() => {
         // Wait for DOM to be ready
