@@ -1,10 +1,12 @@
 import { motion } from 'framer-motion';
-import { X, FileText, ListOrdered } from 'lucide-react';
+import { X, FileText, ListOrdered, Download, Loader2 } from 'lucide-react';
 import { generateHTML } from '@tiptap/html';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Underline from '@tiptap/extension-underline';
 import { useRef, useEffect, useState, useCallback } from 'react';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 import type { ProposalPage, PageBlock } from '../../hooks/useProposalPages';
 import { type ProposalVariables, replaceMarkersInHtml } from '../../lib/proposalVariables';
 import type { ProcessedScenario, VisibleItemCalc } from '../../hooks/useProposalScenarios';
@@ -81,6 +83,51 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
+    const [downloading, setDownloading] = useState(false);
+    const pagesContainerRef = useRef<HTMLDivElement>(null);
+
+    /** Genera y descarga el PDF capturando cada página como imagen */
+    const generatePdf = useCallback(async () => {
+        const container = pagesContainerRef.current;
+        if (!container || visualPages.length === 0) return;
+
+        setDownloading(true);
+        try {
+            // Letter size in points: 612 x 792
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+            const pageElements = container.querySelectorAll<HTMLElement>('[data-pdf-page]');
+
+            for (let i = 0; i < pageElements.length; i++) {
+                const el = pageElements[i];
+                const canvas = await html2canvas(el, {
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    width: 816,
+                    height: PAGE_HEIGHT,
+                    windowWidth: 816,
+                });
+
+                const imgData = canvas.toDataURL('image/jpeg', 0.92);
+                const pdfWidth = 612;
+                const pdfHeight = 792;
+
+                if (i > 0) pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            }
+
+            // Build filename: "Propuesta Comercial Novotechno - COT-XXX - CLIENTE.pdf"
+            const cot = proposalVars?.cotizacion || 'SIN-COT';
+            const cliente = proposalVars?.cliente || 'CLIENTE';
+            const filename = `Propuesta Comercial Novotechno_${cot}_${cliente}.pdf`;
+            pdf.save(filename);
+        } catch (err) {
+            console.error('Error generating PDF:', err);
+        } finally {
+            setDownloading(false);
+        }
+    }, [visualPages, proposalVars]);
 
     const buildVisualPages = useCallback(() => {
         const container = measureRef.current;
@@ -332,17 +379,36 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                         </p>
                     </div>
                 </div>
-                <button
-                    onClick={onClose}
-                    className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
-                >
-                    <X className="h-5 w-5" />
-                </button>
+                <div className="flex items-center space-x-3">
+                    <button
+                        onClick={generatePdf}
+                        disabled={downloading || visualPages.length === 0}
+                        className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black tracking-tight hover:bg-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-600/30"
+                    >
+                        {downloading ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Generando…</span>
+                            </>
+                        ) : (
+                            <>
+                                <Download className="h-4 w-4" />
+                                <span>Descargar PDF</span>
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
             </div>
 
             {/* Scrollable preview area */}
             <div className="flex-1 overflow-y-auto py-12 px-4">
-                <div className="max-w-[816px] mx-auto space-y-12">
+                <div ref={pagesContainerRef} className="max-w-[816px] mx-auto space-y-12">
                     {visualPages.map((vPage, pageIdx) => (
                         <motion.div
                             key={vPage.id}
@@ -365,6 +431,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
                             {/* Paper page */}
                             <div
+                                data-pdf-page
                                 className="bg-white rounded-2xl shadow-2xl shadow-black/20 border border-slate-200/50 overflow-hidden"
                                 style={{ minHeight: `${PAGE_HEIGHT}px`, maxHeight: `${PAGE_HEIGHT}px`, overflow: 'hidden' }}
                             >
