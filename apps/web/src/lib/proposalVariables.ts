@@ -15,6 +15,7 @@ export interface ProposalVariables {
 
 /**
  * Mapa de marcadores µ simples (reemplazo de texto 1:1).
+ * µGarantia NO está aquí porque requiere reemplazo estructural.
  */
 const SIMPLE_MARKER_MAP: Record<string, keyof ProposalVariables> = {
     'µCiudad': 'ciudad',
@@ -42,24 +43,16 @@ export function replaceMarkers(text: string, vars: ProposalVariables): string {
 // ── TipTap JSON helpers ─────────────────────────────────────────
 
 /**
- * Extrae todo el texto plano de un nodo TipTap recursivamente.
+ * Comprueba recursivamente si un nodo TipTap contiene el texto indicado.
  */
-function extractText(node: Record<string, unknown>): string {
+function nodeContainsText(node: Record<string, unknown>, text: string): boolean {
     if (node.type === 'text' && typeof node.text === 'string') {
-        return node.text;
+        return node.text.includes(text);
     }
     if (Array.isArray(node.content)) {
-        return node.content.map((c: Record<string, unknown>) => extractText(c)).join('');
+        return node.content.some((c: Record<string, unknown>) => nodeContainsText(c, text));
     }
-    return '';
-}
-
-
-/**
- * Comprueba si un nodo es un heading (cualquier nivel).
- */
-function isHeading(node: Record<string, unknown>): boolean {
-    return node.type === 'heading';
+    return false;
 }
 
 /**
@@ -79,140 +72,11 @@ function buildTiptapBulletList(lines: string[]): Record<string, unknown> {
 }
 
 /**
- * Comprueba si un nodo contiene texto bold que coincide con el patrón (al inicio del nodo).
- * El heading puede ser:
- * - Un heading node (h1-h6)
- * - Un párrafo cuyo PRIMER texto es bold y contiene el patrón
- *   (el resto del párrafo puede tener texto normal tras un hardBreak)
- */
-function nodeStartsWithBoldText(node: Record<string, unknown>, pattern: RegExp): boolean {
-    if (isHeading(node)) {
-        return pattern.test(extractText(node));
-    }
-
-    if (node.type === 'paragraph' && Array.isArray(node.content)) {
-        const children = node.content as Record<string, unknown>[];
-        if (children.length === 0) return false;
-
-        // El primer hijo debe ser un texto con marca bold que coincida con el patrón
-        const first = children[0];
-        if (first.type === 'text' && typeof first.text === 'string') {
-            const marks = first.marks as Array<{ type: string }> | undefined;
-            const isBold = marks?.some((m) => m.type === 'bold');
-            if (isBold && pattern.test(first.text)) return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Busca la sección "GARANTÍA Y SOPORTE" en el doc e inyecta las viñetas
- * de garantía dinámicas al final de esa sección.
- *
- * La estructura TipTap observada en la plantilla es:
- *   paragraph → [text(bold:"GARANTÍA Y SOPORTE."), hardBreak, text(...)]
- *   paragraph → [text(body...)]
- *   ...
- *   bulletList → [listItem → para("Lenovo..."), listItem → para("Dell..."), ...]
- *   paragraph → [text(bold:"DISPONIBILIDAD Y ENTREGA"), ...]
- *
- * Algoritmo:
- * 1. Encontrar el párrafo que comienza con bold "GARANTÍA Y SOPORTE"
- * 2. Buscar hacia adelante cualquier bulletList con texto de garantía/soporte
- * 3. Remover esos bulletLists estáticos
- * 4. Insertar el nuevo bulletList dinámico en la posición del primero que se removió,
- *    o al final de la sección si no se encontró ninguno existente
- */
-function injectGarantiaIntoSection(
-    contentNodes: Record<string, unknown>[],
-    garantiaLines: string[],
-): Record<string, unknown>[] {
-    // 1. Buscar el párrafo con "GARANTÍA Y SOPORTE"
-    const sectionPattern = /garant[ií]a\s+y\s+soporte/i;
-    let sectionIdx = -1;
-
-    for (let i = 0; i < contentNodes.length; i++) {
-        if (nodeStartsWithBoldText(contentNodes[i], sectionPattern)) {
-            sectionIdx = i;
-            break;
-        }
-    }
-
-    if (sectionIdx === -1) return contentNodes;
-
-    // 2. Buscar el final de la sección:
-    //    el siguiente nodo que sea un heading o un párrafo que empiece con bold corto
-    //    (indicando que es otro título de sección)
-    const boldTitlePattern = /^[A-ZÁÉÍÓÚÑ\s.,]+$/; // All-caps text = section title
-    let sectionEndIdx = contentNodes.length;
-    for (let i = sectionIdx + 1; i < contentNodes.length; i++) {
-        const node = contentNodes[i];
-        if (isHeading(node)) {
-            sectionEndIdx = i;
-            break;
-        }
-        // Detectar otro título bold all-caps (como "DISPONIBILIDAD Y ENTREGA")
-        if (node.type === 'paragraph' && Array.isArray(node.content)) {
-            const children = node.content as Record<string, unknown>[];
-            if (children.length > 0) {
-                const first = children[0];
-                if (first.type === 'text' && typeof first.text === 'string') {
-                    const marks = first.marks as Array<{ type: string }> | undefined;
-                    const isBold = marks?.some((m) => m.type === 'bold');
-                    if (isBold && boldTitlePattern.test(first.text.trim()) && first.text.trim().length < 80) {
-                        // Es otro título de sección, no es "GARANTÍA Y SOPORTE" (ya lo encontramos)
-                        if (i !== sectionIdx) {
-                            sectionEndIdx = i;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // 3. Dentro de la sección, buscar y marcar bulletLists de garantía para remover
-    const newContent = [...contentNodes];
-    const indicesToRemove: number[] = [];
-
-    for (let i = sectionIdx + 1; i < sectionEndIdx; i++) {
-        const node = newContent[i];
-        if (node.type === 'bulletList') {
-            const text = extractText(node).toLowerCase();
-            if (
-                text.includes('garantía') ||
-                text.includes('garantia') ||
-                text.includes('soporte técnico') ||
-                text.includes('soporte tecnico') ||
-                text.includes('novotechno')
-            ) {
-                indicesToRemove.push(i);
-            }
-        }
-    }
-
-    // 4. Remover en orden inverso
-    for (let i = indicesToRemove.length - 1; i >= 0; i--) {
-        newContent.splice(indicesToRemove[i], 1);
-        if (sectionEndIdx > indicesToRemove[i]) sectionEndIdx--;
-    }
-
-    // 5. Insertar el nuevo bulletList dinámico
-    //    Si había un bulletList que removimos, insertar en la posición del primero;
-    //    si no, insertar al final de la sección
-    const insertIdx = indicesToRemove.length > 0 ? indicesToRemove[0] : sectionEndIdx;
-    const bulletList = buildTiptapBulletList(garantiaLines);
-    newContent.splice(insertIdx, 0, bulletList);
-
-    return newContent;
-}
-
-/**
  * Recorre recursivamente un documento TipTap JSON y reemplaza
  * los marcadores µ en todos los nodos de texto.
  *
- * También inserta automáticamente las viñetas de garantía al final
- * de la sección "GARANTÍA Y SOPORTE" si existe.
+ * Manejo especial de µGarantia: el párrafo que lo contenga se
+ * reemplaza por un bulletList con las líneas de garantía dinámicas.
  *
  * Retorna un nuevo objeto (no muta el original).
  */
@@ -229,15 +93,20 @@ export function replaceMarkersInTiptapJson(
         result.text = replaceMarkers(result.text, vars);
     }
 
-    // Recorrer contenido hijo
+    // Recorrer contenido hijo con manejo especial de µGarantia
     if (Array.isArray(result.content)) {
-        let newContent = (result.content as Record<string, unknown>[]).map(
-            (child) => replaceMarkersInTiptapJson(child, vars),
-        );
+        const newContent: Record<string, unknown>[] = [];
 
-        // Si estamos en el nodo raíz (type === 'doc'), inyectar garantía
-        if (result.type === 'doc' && vars.garantiaLines.length > 0) {
-            newContent = injectGarantiaIntoSection(newContent, vars.garantiaLines);
+        for (const child of result.content as Record<string, unknown>[]) {
+            // Si este nodo contiene µGarantia, reemplazar con bulletList
+            if (
+                vars.garantiaLines.length > 0 &&
+                nodeContainsText(child, 'µGarantia')
+            ) {
+                newContent.push(buildTiptapBulletList(vars.garantiaLines));
+            } else {
+                newContent.push(replaceMarkersInTiptapJson(child, vars));
+            }
         }
 
         result.content = newContent;
@@ -250,48 +119,19 @@ export function replaceMarkersInTiptapJson(
 
 /**
  * Reemplaza marcadores µ en una cadena HTML renderizada.
- * También inyecta las viñetas de garantía después de la sección
- * "GARANTÍA Y SOPORTE" si existe.
+ * Maneja µGarantia convirtiéndolo a una lista HTML <ul>.
  */
 export function replaceMarkersInHtml(html: string, vars: ProposalVariables): string {
     let result = replaceMarkers(html, vars);
 
-    // Inyección automática de garantía en sección "GARANTÍA Y SOPORTE"
-    if (vars.garantiaLines.length > 0) {
-        const garantiaHtml = '<ul>' + vars.garantiaLines.map(l => `<li>${l}</li>`).join('') + '</ul>';
-
-        // Buscar el heading "GARANTÍA Y SOPORTE" y el siguiente heading
-        const sectionRegex = /(<h[1-6][^>]*>[^<]*garant[ií]a\s+y\s+soporte[^<]*<\/h[1-6]>)/i;
-        const sectionMatch = result.match(sectionRegex);
-
-        if (sectionMatch) {
-            const sectionStart = result.indexOf(sectionMatch[0]) + sectionMatch[0].length;
-            // Encontrar el siguiente heading después de esta sección
-            const restHtml = result.substring(sectionStart);
-            const nextHeadingMatch = restHtml.match(/<h[1-6][^>]*>/i);
-
-            // Remover listas de garantía existentes (estáticas de la plantilla)
-            let sectionContent: string;
-            let afterSection: string;
-
-            if (nextHeadingMatch) {
-                const nextHeadingIdx = restHtml.indexOf(nextHeadingMatch[0]);
-                sectionContent = restHtml.substring(0, nextHeadingIdx);
-                afterSection = restHtml.substring(nextHeadingIdx);
-            } else {
-                sectionContent = restHtml;
-                afterSection = '';
-            }
-
-            // Remover <ul> existentes que contengan texto de garantía
-            sectionContent = sectionContent.replace(
-                /<ul>(?:(?!<\/ul>).)*garant[ií]a.*?<\/ul>/gis,
-                '',
-            );
-
-            // Reconstruir: antes de sección + heading + contenido limpio + nueva lista + resto
-            result = result.substring(0, sectionStart) + sectionContent + garantiaHtml + afterSection;
-        }
+    // Reemplazo estructural de µGarantia
+    if (vars.garantiaLines.length > 0 && result.includes('µGarantia')) {
+        const listItems = vars.garantiaLines.map(l => `<li>${l}</li>`).join('');
+        const listHtml = `<ul>${listItems}</ul>`;
+        // Reemplazar el párrafo entero que contiene µGarantia
+        result = result.replace(/<p[^>]*>[^<]*µGarantia[^<]*<\/p>/g, listHtml);
+        // Fallback: si no estaba dentro de <p>
+        result = result.replaceAll('µGarantia', listHtml);
     }
 
     return result;
@@ -306,7 +146,7 @@ export function replaceMarkersInHtml(html: string, vars: ProposalVariables): str
 export function formatDateSpanish(isoDate: string): string {
     if (!isoDate) return '';
     try {
-        const date = new Date(isoDate + 'T12:00:00'); // Avoid timezone issues
+        const date = new Date(isoDate + 'T12:00:00');
         return date.toLocaleDateString('es-CO', {
             day: 'numeric',
             month: 'long',
