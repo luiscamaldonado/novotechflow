@@ -7,12 +7,17 @@ import Underline from '@tiptap/extension-underline';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type { ProposalPage, PageBlock } from '../../hooks/useProposalPages';
 import { type ProposalVariables, replaceMarkersInHtml } from '../../lib/proposalVariables';
+import type { ProcessedScenario, VisibleItemCalc } from '../../hooks/useProposalScenarios';
+import TechnicalSpecSheet from './TechnicalSpecSheet';
+import EconomicProposalTable from './EconomicProposalTable';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
     PRESENTATION: 'Carta de Presentación',
     COMPANY_INFO: 'Info. General',
     INDEX: 'Índice',
+    TECH_SPEC: 'Propuesta Técnica',
+    ECONOMIC: 'Propuesta Económica',
     TERMS: 'Términos y Condiciones',
     CUSTOM: 'Página Personalizada',
 };
@@ -27,6 +32,7 @@ interface PdfPreviewModalProps {
     pages: ProposalPage[];
     onClose: () => void;
     proposalVars?: ProposalVariables;
+    processedScenarios?: ProcessedScenario[];
 }
 
 function renderRichText(content: Record<string, unknown> | null): string {
@@ -48,20 +54,29 @@ const HEADER_HEIGHT = 72; // estimated header with border
 interface VisualPage {
     id: string;
     pageType: string;
-    title: string;
+    title: string | null;
     /** Pre-rendered HTML for this page slice */
     htmlContent: string;
     isContinuation: boolean;
     /** Special page types */
     isCover: boolean;
     isIndex: boolean;
+    isTechSpec: boolean;
+    isEconomic: boolean;
     /** For cover pages */
     coverBlocks: PageBlock[];
     /** For index pages */
     allPages?: ProposalPage[];
+    /** For tech spec pages */
+    techSpecItem?: VisibleItemCalc;
+    techSpecScenarioName?: string;
+    techSpecCurrency?: string;
+    techSpecItemIndex?: number;
+    /** For economic proposal pages */
+    economicScenario?: ProcessedScenario;
 }
 
-export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPreviewModalProps) {
+export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [] }: PdfPreviewModalProps) {
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
@@ -84,6 +99,8 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPre
                     isContinuation: false,
                     isCover: true,
                     isIndex: false,
+                    isTechSpec: false,
+                    isEconomic: false,
                     coverBlocks: page.blocks,
                 });
                 continue;
@@ -99,9 +116,51 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPre
                     isContinuation: false,
                     isCover: false,
                     isIndex: true,
+                    isTechSpec: false,
+                    isEconomic: false,
                     coverBlocks: [],
                     allPages: pages,
                 });
+
+                // Inject virtual TECH SPEC pages after INDEX
+                for (const scenario of processedScenarios) {
+                    scenario.visibleItems.forEach((vi, idx) => {
+                        result.push({
+                            id: `techspec-${scenario.id}-${vi.scenarioItem.id}`,
+                            pageType: 'TECH_SPEC',
+                            title: `Propuesta Técnica — ${scenario.name}`,
+                            htmlContent: '',
+                            isContinuation: false,
+                            isCover: false,
+                            isIndex: false,
+                            isTechSpec: true,
+                            isEconomic: false,
+                            coverBlocks: [],
+                            techSpecItem: vi,
+                            techSpecScenarioName: scenario.name,
+                            techSpecCurrency: scenario.currency,
+                            techSpecItemIndex: idx + 1,
+                        });
+                    });
+                }
+
+                // Inject virtual ECONOMIC PROPOSAL pages after tech specs
+                for (const scenario of processedScenarios) {
+                    result.push({
+                        id: `economic-${scenario.id}`,
+                        pageType: 'ECONOMIC',
+                        title: `Propuesta Económica — ${scenario.name}`,
+                        htmlContent: '',
+                        isContinuation: false,
+                        isCover: false,
+                        isIndex: false,
+                        isTechSpec: false,
+                        isEconomic: true,
+                        coverBlocks: [],
+                        economicScenario: scenario,
+                    });
+                }
+
                 continue;
             }
 
@@ -140,6 +199,8 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPre
                     isContinuation: false,
                     isCover: false,
                     isIndex: false,
+                    isTechSpec: false,
+                    isEconomic: false,
                     coverBlocks: [],
                 });
                 continue;
@@ -200,6 +261,8 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPre
                         isContinuation,
                         isCover: false,
                         isIndex: false,
+                        isTechSpec: false,
+                        isEconomic: false,
                         coverBlocks: [],
                     });
                     sliceIdx++;
@@ -221,13 +284,15 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPre
                 isContinuation,
                 isCover: false,
                 isIndex: false,
+                isTechSpec: false,
+                isEconomic: false,
                 coverBlocks: [],
             });
         }
 
         setVisualPages(result);
         setReady(true);
-    }, [pages, apiBase, proposalVars]);
+    }, [pages, apiBase, proposalVars, processedScenarios]);
 
     useEffect(() => {
         // Wait for DOM to be ready
@@ -306,7 +371,16 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars }: PdfPre
                                 {vPage.isCover ? (
                                     <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title} apiBase={apiBase} />
                                 ) : vPage.isIndex ? (
-                                    <IndexPageContent pages={vPage.allPages || pages} />
+                                    <IndexPageContent visualPages={visualPages} />
+                                ) : vPage.isTechSpec && vPage.techSpecItem ? (
+                                    <TechnicalSpecSheet
+                                        item={vPage.techSpecItem}
+                                        scenarioName={vPage.techSpecScenarioName || ''}
+                                        currency={vPage.techSpecCurrency || 'COP'}
+                                        itemIndex={vPage.techSpecItemIndex || 1}
+                                    />
+                                ) : vPage.isEconomic && vPage.economicScenario ? (
+                                    <EconomicProposalTable scenario={vPage.economicScenario} />
                                 ) : (
                                     <div className="px-16 py-16 h-full">
                                         {/* Header */}
@@ -397,28 +471,77 @@ function CoverPageContent({ blocks, title, apiBase }: { blocks: PageBlock[]; tit
     );
 }
 
-/** Auto-generated index page */
-function IndexPageContent({ pages }: { pages: ProposalPage[] }) {
+/** Auto-generated index page — lists all visual pages with correct numbering */
+function IndexPageContent({ visualPages }: { visualPages: VisualPage[] }) {
+    // Build deduplicated index entries: group continuations under their parent
+    const entries: { label: string; pageNum: number; pageType: string; isSub?: boolean }[] = [];
+    const seenSections = new Set<string>();
+
+    visualPages.forEach((vp, idx) => {
+        // Skip cover and index itself
+        if (vp.isCover || vp.isIndex) return;
+        // Skip continuations
+        if (vp.isContinuation) return;
+
+        // For tech spec pages, group by scenario
+        if (vp.isTechSpec && vp.techSpecScenarioName) {
+            const sectionKey = `techspec-${vp.techSpecScenarioName}`;
+            if (!seenSections.has(sectionKey)) {
+                seenSections.add(sectionKey);
+                entries.push({
+                    label: `Propuesta Técnica — ${vp.techSpecScenarioName}`,
+                    pageNum: idx + 1,
+                    pageType: 'TECH_SPEC',
+                });
+            }
+            return;
+        }
+
+        // For economic pages, one entry per scenario
+        if (vp.isEconomic && vp.economicScenario) {
+            entries.push({
+                label: `Propuesta Económica — ${vp.economicScenario.name}`,
+                pageNum: idx + 1,
+                pageType: 'ECONOMIC',
+            });
+            return;
+        }
+
+        // Regular pages
+        entries.push({
+            label: vp.title || PAGE_TYPE_LABELS[vp.pageType] || vp.pageType,
+            pageNum: idx + 1,
+            pageType: vp.pageType,
+        });
+    });
+
     return (
         <div className="px-16 py-16" style={{ minHeight: `${PAGE_HEIGHT}px` }}>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-8 pb-4 border-b-2 border-indigo-600">Índice</h2>
             <div className="space-y-1">
-                {pages.map((page, idx) => (
-                    <div
-                        key={page.id}
-                        className={`flex items-center justify-between py-3 ${page.pageType === 'INDEX' ? 'text-violet-600 font-bold' : ''}`}
-                    >
-                        <div className="flex items-center space-x-3">
-                            <span className="text-sm font-bold text-slate-400 w-8 text-right">{idx + 1}.</span>
-                            <div className="flex items-center space-x-2">
-                                <ListOrdered className="h-4 w-4 text-slate-300" />
-                                <span className="text-sm font-bold text-slate-800">{page.title || PAGE_TYPE_LABELS[page.pageType]}</span>
+                {entries.map((entry, idx) => {
+                    const isTechOrEcon = entry.pageType === 'TECH_SPEC' || entry.pageType === 'ECONOMIC';
+                    return (
+                        <div
+                            key={`idx-${idx}`}
+                            className="flex items-center justify-between py-3"
+                        >
+                            <div className="flex items-center space-x-3">
+                                <span className="text-sm font-bold text-slate-400 w-8 text-right">{idx + 1}.</span>
+                                <div className="flex items-center space-x-2">
+                                    <ListOrdered className="h-4 w-4 text-slate-300" />
+                                    <span className={`text-sm font-bold ${
+                                        isTechOrEcon ? 'text-indigo-700' : 'text-slate-800'
+                                    }`}>
+                                        {entry.label}
+                                    </span>
+                                </div>
                             </div>
+                            <div className="flex-1 mx-4 border-b border-dotted border-slate-200" />
+                            <span className="text-sm font-black text-slate-500">{entry.pageNum}</span>
                         </div>
-                        <div className="flex-1 mx-4 border-b border-dotted border-slate-200" />
-                        <span className="text-sm font-black text-slate-500">{idx + 1}</span>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
