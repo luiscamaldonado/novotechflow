@@ -5,7 +5,7 @@ import {
     Calculator, Plus, Trash2,
     ArrowLeft, Loader2, Package,
     AlertCircle, TrendingUp,
-    Percent, RotateCcw, ChevronDown, Layers, Pencil, Copy, BookOpen
+    Percent, RotateCcw, ChevronDown, Layers, Pencil, Copy, BookOpen, ShoppingCart
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScenarios, type ProposalCalcItem } from '../../hooks/useScenarios';
@@ -39,6 +39,63 @@ export default function ProposalCalculations() {
     const [pickingChildrenFor, setPickingChildrenFor] = useState<string | null>(null);
     const [editingScenarioName, setEditingScenarioName] = useState<string | null>(null);
     const scenarioNameInputRef = useRef<HTMLInputElement>(null);
+
+    // ── Acquisition mode per scenario (VENTA / DAAS) ──
+    type AcquisitionMode = 'VENTA' | 'DAAS_12' | 'DAAS_24' | 'DAAS_36' | 'DAAS_48' | 'DAAS_60';
+    const ACQUISITION_OPTIONS: { value: AcquisitionMode; label: string }[] = [
+        { value: 'VENTA', label: 'Venta' },
+        { value: 'DAAS_12', label: 'DaaS 12 Meses' },
+        { value: 'DAAS_24', label: 'DaaS 24 Meses' },
+        { value: 'DAAS_36', label: 'DaaS 36 Meses' },
+        { value: 'DAAS_48', label: 'DaaS 48 Meses' },
+        { value: 'DAAS_60', label: 'DaaS 60 Meses' },
+    ];
+    // Per-scenario acquisition mode
+    const [acquisitionModes, setAcquisitionModes] = useState<Record<string, AcquisitionMode>>({});
+    // Saved margins snapshot: { scenarioId → { global: number, items: { siId: margin } } }
+    const savedMarginsRef = useRef<Record<string, { global: number; items: Record<string, number> }>>({});
+
+    const isDaasMode = (scenarioId: string | null) => {
+        if (!scenarioId) return false;
+        return (acquisitionModes[scenarioId] || 'VENTA') !== 'VENTA';
+    };
+
+    const handleAcquisitionChange = async (newMode: AcquisitionMode) => {
+        if (!activeScenarioId || !activeScenario) return;
+        const currentMode = acquisitionModes[activeScenarioId] || 'VENTA';
+        if (newMode === currentMode) return;
+
+        if (newMode !== 'VENTA' && currentMode === 'VENTA') {
+            // Switching TO DaaS → save current margins, then set all to 0
+            const marginSnapshot: Record<string, number> = {};
+            activeScenario.scenarioItems.forEach(si => {
+                const margin = si.marginPctOverride !== undefined && si.marginPctOverride !== null
+                    ? si.marginPctOverride
+                    : Number(si.item.marginPct);
+                marginSnapshot[si.id!] = margin;
+            });
+            savedMarginsRef.current[activeScenarioId] = {
+                global: totals.globalMarginPct,
+                items: marginSnapshot,
+            };
+            // Apply 0 margin globally
+            await updateGlobalMargin('0');
+        } else if (newMode === 'VENTA' && currentMode !== 'VENTA') {
+            // Switching BACK to VENTA → restore saved margins
+            const saved = savedMarginsRef.current[activeScenarioId];
+            if (saved) {
+                // Restore each item's margin
+                for (const [siId, margin] of Object.entries(saved.items)) {
+                    await updateMargin(siId, margin.toString());
+                }
+                delete savedMarginsRef.current[activeScenarioId];
+            }
+        } else if (newMode !== 'VENTA' && currentMode !== 'VENTA') {
+            // Switching between DaaS modes — margins stay at 0, just update the mode
+        }
+
+        setAcquisitionModes(prev => ({ ...prev, [activeScenarioId]: newMode }));
+    };
 
     const handleCreateScenario = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -310,19 +367,55 @@ export default function ProposalCalculations() {
                                     <div className="flex items-center space-x-6">
                                         <div className="flex flex-col items-end mr-4">
                                             <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Margen Global</span>
-                                            <div className="flex items-center bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 shadow-sm">
+                                            <div className={cn(
+                                                "flex items-center px-4 py-2 rounded-xl border shadow-sm",
+                                                isDaasMode(activeScenarioId)
+                                                    ? "bg-slate-100 border-slate-200"
+                                                    : "bg-emerald-50 border-emerald-100"
+                                            )}>
                                                 <input 
                                                     type="text"
                                                     value={globalMarginBuffer !== null ? globalMarginBuffer : totals.globalMarginPct.toFixed(2)}
-                                                    onFocus={() => setGlobalMarginBuffer(totals.globalMarginPct.toFixed(2))}
-                                                    onChange={(e) => setGlobalMarginBuffer(e.target.value)}
+                                                    onFocus={() => !isDaasMode(activeScenarioId) && setGlobalMarginBuffer(totals.globalMarginPct.toFixed(2))}
+                                                    onChange={(e) => !isDaasMode(activeScenarioId) && setGlobalMarginBuffer(e.target.value)}
                                                     onBlur={(e) => {
-                                                        updateGlobalMargin(e.target.value);
-                                                        setGlobalMarginBuffer(null);
+                                                        if (!isDaasMode(activeScenarioId)) {
+                                                            updateGlobalMargin(e.target.value);
+                                                            setGlobalMarginBuffer(null);
+                                                        }
                                                     }}
-                                                    className="w-16 bg-transparent border-none text-right font-black text-emerald-700 p-0 focus:ring-0 text-sm"
+                                                    disabled={isDaasMode(activeScenarioId)}
+                                                    className={cn(
+                                                        "w-16 bg-transparent border-none text-right font-black p-0 focus:ring-0 text-sm",
+                                                        isDaasMode(activeScenarioId)
+                                                            ? "text-slate-400 cursor-not-allowed"
+                                                            : "text-emerald-700"
+                                                    )}
                                                 />
-                                                <span className="ml-1 text-xs font-black text-emerald-600">%</span>
+                                                <span className={cn(
+                                                    "ml-1 text-xs font-black",
+                                                    isDaasMode(activeScenarioId) ? "text-slate-400" : "text-emerald-600"
+                                                )}>%</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Acquisition Mode Selector */}
+                                        <div className="flex flex-col items-end mr-4">
+                                            <span className="text-[9px] font-black text-sky-600 uppercase tracking-widest mb-1">Adquisición</span>
+                                            <div className="flex items-center bg-sky-50 px-3 py-2 rounded-xl border border-sky-100 shadow-sm">
+                                                <ShoppingCart className="h-3.5 w-3.5 text-sky-400 mr-2" />
+                                                <select
+                                                    value={acquisitionModes[activeScenarioId!] || 'VENTA'}
+                                                    onChange={(e) => handleAcquisitionChange(e.target.value as AcquisitionMode)}
+                                                    className={cn(
+                                                        "bg-transparent border-none font-black text-xs focus:ring-0 cursor-pointer pr-6",
+                                                        isDaasMode(activeScenarioId) ? "text-pink-600" : "text-sky-700"
+                                                    )}
+                                                >
+                                                    {ACQUISITION_OPTIONS.map(opt => (
+                                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                         </div>
 
@@ -505,6 +598,16 @@ export default function ProposalCalculations() {
                                                                         />
                                                                         <Percent className="absolute left-2 top-2.5 h-3 w-3 text-amber-300" />
                                                                     </div>
+                                                                ) : isDaasMode(activeScenarioId) ? (
+                                                                    <div className="relative w-24 mx-auto">
+                                                                        <input 
+                                                                            type="text" 
+                                                                            value="0.00"
+                                                                            disabled
+                                                                            className="w-full bg-pink-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6 text-pink-400 cursor-not-allowed"
+                                                                        />
+                                                                        <Percent className="absolute left-2 top-2.5 h-3 w-3 text-pink-300" />
+                                                                    </div>
                                                                 ) : (
                                                                     <div className="relative w-24 mx-auto">
                                                                         <input 
@@ -533,6 +636,8 @@ export default function ProposalCalculations() {
                                                             <td className="px-4 py-6 text-right font-mono text-xs text-slate-500">
                                                                 {si.isDilpidate ? (
                                                                     <span className="text-xs font-black text-amber-400">—</span>
+                                                                ) : isDaasMode(activeScenarioId) ? (
+                                                                    <span className="text-xs font-black text-pink-400 bg-pink-50 px-3 py-2 rounded-xl">{unitPrice.toFixed(2)}</span>
                                                                 ) : (
                                                                     <input 
                                                                         type="text"
