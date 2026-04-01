@@ -9,6 +9,9 @@ export type UserRole = 'ADMIN' | 'COMMERCIAL';
 /** Posibles estados de una propuesta. */
 export type ProposalStatus = 'ELABORACION' | 'PROPUESTA' | 'GANADA' | 'PERDIDA' | 'PENDIENTE_FACTURAR' | 'FACTURADA';
 
+/** Tipos de adquisición. */
+export type AcquisitionType = 'VENTA' | 'DAAS';
+
 /** Categorías de ítems permitidas. */
 export type ItemType = 'PCS' | 'ACCESSORIES' | 'PC_SERVICES' | 'SOFTWARE' | 'INFRASTRUCTURE' | 'INFRA_SERVICES';
 
@@ -38,6 +41,7 @@ export interface ProposalSummary {
     status: ProposalStatus;
     closeDate?: string | null;
     billingDate?: string | null;
+    acquisitionType?: AcquisitionType | null;
     updatedAt: string;
     user?: { name: string; nomenclature: string };
     scenarios?: Array<{
@@ -180,3 +184,22 @@ export interface ExtraTrmData {
     setIcapAverage: number | null;
     wilkinsonSpot: number | null;
 }
+
+// ──────────────────────────────────────────────────────────
+// Proyecciones de Facturación
+// ──────────────────────────────────────────────────────────
+
+/** Entrada de proyección de facturación (no es una propuesta completa). */
+export interface BillingProjection {
+    id: string;
+    projectionCode: string;
+    clientName: string;
+    subtotal: number | string;
+    status: 'PENDIENTE_FACTURAR' | 'FACTURADA';
+    billingDate?: string | null;
+    acquisitionType?: AcquisitionType | null;
+    createdAt: string;
+    updatedAt: string;
+    user?: { name: string; nomenclature: string };
+}
+

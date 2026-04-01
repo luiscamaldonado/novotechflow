@@ -196,6 +196,7 @@ export class ProposalsService {
         status: data.status ?? undefined,
         closeDate: data.closeDate ? new Date(data.closeDate) : data.closeDate === null ? null : undefined,
         billingDate: data.billingDate ? new Date(data.billingDate) : data.billingDate === null ? null : undefined,
+        acquisitionType: data.acquisitionType ?? undefined,
       },
     });
   }

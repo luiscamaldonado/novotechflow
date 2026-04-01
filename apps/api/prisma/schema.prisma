@@ -50,6 +50,11 @@ enum SyncStatus {
   ERROR
 }
 
+enum AcquisitionType {
+  VENTA
+  DAAS
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   name         String   @db.VarChar(100)
@@ -62,10 +67,11 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  proposals    Proposal[]
-  pdfTemplates PdfTemplate[]
-  syncedFiles  SyncedFile[]
-  EmailLog     EmailLog[]
+  proposals          Proposal[]
+  pdfTemplates       PdfTemplate[]
+  syncedFiles        SyncedFile[]
+  EmailLog           EmailLog[]
+  billingProjections BillingProjection[]
 
   @@map("users")
 }
@@ -85,6 +91,7 @@ model Proposal {
   isLocked       Boolean        @default(false) @map("is_locked")
   closeDate      DateTime?      @map("close_date") @db.Date
   billingDate    DateTime?      @map("billing_date") @db.Date
+  acquisitionType AcquisitionType? @map("acquisition_type")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
@@ -282,4 +289,21 @@ model Catalog {
 
   @@unique([category, value])
   @@map("catalogs")
+}
+
+model BillingProjection {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  projectionCode String         @unique @map("projection_code") @db.VarChar(20)
+  clientName     String         @map("client_name") @db.VarChar(200)
+  subtotal       Decimal        @db.Decimal(15, 2)
+  status         ProposalStatus @default(PENDIENTE_FACTURAR)
+  billingDate    DateTime?      @map("billing_date") @db.Date
+  acquisitionType AcquisitionType? @map("acquisition_type")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("billing_projections")
 }

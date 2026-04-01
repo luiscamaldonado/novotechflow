@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, IsEnum, IsDateString, Min, MaxLength, IsObject, IsIn } from 'class-validator';
-import { ItemType, ProposalStatus } from '@prisma/client';
+import { ItemType, ProposalStatus, AcquisitionType } from '@prisma/client';
 
 /**
  * DTO para la creación de una nueva propuesta.
@@ -57,6 +57,10 @@ export class UpdateProposalDto {
     @IsOptional()
     @IsDateString()
     billingDate?: string;
+
+    @IsOptional()
+    @IsEnum(AcquisitionType)
+    acquisitionType?: AcquisitionType;
 }
 
 /**

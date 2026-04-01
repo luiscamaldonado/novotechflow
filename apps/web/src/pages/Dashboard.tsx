@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import {
     FileText, PlusCircle, Trash2, Edit2, Loader2, Calendar,
     DollarSign, Clock, Copy, ChevronDown, ChevronUp, Search,
-    Filter, X, TrendingUp, BarChart3, AlertCircle
+    Filter, X, TrendingUp, BarChart3, AlertCircle, Receipt
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
-import type { ProposalSummary, ProposalStatus, ProposalItemFromApi } from '../lib/types';
+import type { ProposalSummary, ProposalStatus, ProposalItemFromApi, BillingProjection, AcquisitionType } from '../lib/types';
 
 // ── Status configuration ──
 const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: string; border: string }> = {
@@ -20,6 +20,7 @@ const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: s
 };
 
 const ALL_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA'];
+const PROJECTION_STATUSES: ProposalStatus[] = ['PENDIENTE_FACTURAR', 'FACTURADA'];
 
 // ── Utility: compute min-scenario subtotal ──
 function computeMinSubtotal(proposal: ProposalSummary): number | null {
@@ -72,10 +73,37 @@ function formatCOP(value: number): string {
     return '$' + value.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+// ── Acquisition type config ──
+const ACQUISITION_CONFIG: Record<string, { label: string; bg: string; text: string; border: string }> = {
+    VENTA: { label: 'Venta', bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200' },
+    DAAS:  { label: 'DaaS',  bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+};
+
+// ── Unified row type ──
+interface DashboardRow {
+    id: string;
+    code: string;
+    clientName: string;
+    subject: string;
+    minSubtotal: number | null;
+    status: ProposalStatus;
+    closeDate?: string | null;
+    billingDate?: string | null;
+    acquisitionType?: AcquisitionType | null;
+    updatedAt: string;
+    user?: { name: string; nomenclature: string };
+    isProjection: boolean;
+    // Only for proposals
+    originalProposal?: ProposalSummary & { minSubtotal: number | null };
+    // Only for projections
+    originalProjection?: BillingProjection;
+}
+
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user } = useAuthStore();
     const [proposals, setProposals] = useState<ProposalSummary[]>([]);
+    const [projections, setProjections] = useState<BillingProjection[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Filter state
@@ -88,9 +116,36 @@ export default function Dashboard() {
     // Clone action state
     const [cloning, setCloning] = useState<string | null>(null);
 
+    // Projection modal state
+    const [showProjectionModal, setShowProjectionModal] = useState(false);
+    const [editingProjection, setEditingProjection] = useState<BillingProjection | null>(null);
+    const [projForm, setProjForm] = useState({
+        clientName: '',
+        subtotal: '',
+        status: 'PENDIENTE_FACTURAR' as 'PENDIENTE_FACTURAR' | 'FACTURADA',
+        billingDate: '',
+        acquisitionType: '' as '' | 'VENTA' | 'DAAS',
+    });
+    const [savingProjection, setSavingProjection] = useState(false);
+
     useEffect(() => {
-        loadProposals();
+        loadData();
     }, []);
+
+    const loadData = async () => {
+        try {
+            const [proposalsRes, projectionsRes] = await Promise.all([
+                api.get('/proposals'),
+                api.get('/billing-projections'),
+            ]);
+            setProposals(proposalsRes.data);
+            setProjections(projectionsRes.data);
+        } catch (error) {
+            console.error("Error cargando datos:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const loadProposals = async () => {
         try {
@@ -98,8 +153,15 @@ export default function Dashboard() {
             setProposals(res.data);
         } catch (error) {
             console.error("Error cargando propuestas:", error);
-        } finally {
-            setLoading(false);
+        }
+    };
+
+    const loadProjections = async () => {
+        try {
+            const res = await api.get('/billing-projections');
+            setProjections(res.data);
+        } catch (error) {
+            console.error("Error cargando proyecciones:", error);
         }
     };
 
@@ -111,12 +173,49 @@ export default function Dashboard() {
         }));
     }, [proposals]);
 
+    // ── Unified rows (proposals + projections) ──
+    const allRows: DashboardRow[] = useMemo(() => {
+        const proposalRows: DashboardRow[] = proposalsWithSubtotals.map(p => ({
+            id: p.id,
+            code: p.proposalCode,
+            clientName: p.clientName,
+            subject: p.subject,
+            minSubtotal: p.minSubtotal,
+            status: p.status,
+            closeDate: p.closeDate,
+            billingDate: p.billingDate,
+            acquisitionType: p.acquisitionType,
+            updatedAt: p.updatedAt,
+            user: p.user,
+            isProjection: false,
+            originalProposal: p,
+        }));
+
+        const projectionRows: DashboardRow[] = projections.map(pr => ({
+            id: pr.id,
+            code: pr.projectionCode,
+            clientName: pr.clientName,
+            subject: '',
+            minSubtotal: Number(pr.subtotal),
+            status: pr.status as ProposalStatus,
+            closeDate: null,
+            billingDate: pr.billingDate,
+            acquisitionType: pr.acquisitionType,
+            updatedAt: pr.updatedAt,
+            user: pr.user,
+            isProjection: true,
+            originalProjection: pr,
+        }));
+
+        return [...proposalRows, ...projectionRows];
+    }, [proposalsWithSubtotals, projections]);
+
     const filtered = useMemo(() => {
-        return proposalsWithSubtotals.filter(p => {
+        return allRows.filter(p => {
             // Text search
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
-                const matches = p.proposalCode?.toLowerCase().includes(term) ||
+                const matches = p.code?.toLowerCase().includes(term) ||
                     p.clientName.toLowerCase().includes(term) ||
                     p.subject.toLowerCase().includes(term);
                 if (!matches) return false;
@@ -128,9 +227,9 @@ export default function Dashboard() {
             if (subtotalMax && p.minSubtotal !== null && p.minSubtotal > parseFloat(subtotalMax)) return false;
             return true;
         });
-    }, [proposalsWithSubtotals, searchTerm, statusFilters, subtotalMin, subtotalMax]);
+    }, [allRows, searchTerm, statusFilters, subtotalMin, subtotalMax]);
 
-    // ── Billing summary cards ──
+    // ── Billing summary cards (includes projections) ──
     const billingCards = useMemo(() => {
         const now = new Date();
         const thisMonth = now.getMonth();
@@ -159,6 +258,7 @@ export default function Dashboard() {
             return { month: m - 1, year: y }; // month is 0-indexed to match JS convention
         };
 
+        // Process proposals
         for (const p of proposalsWithSubtotals) {
             const sub = p.minSubtotal || 0;
 
@@ -208,8 +308,45 @@ export default function Dashboard() {
             }
         }
 
+        // Process billing projections (same logic as proposals)
+        for (const pr of projections) {
+            const sub = Number(pr.subtotal) || 0;
+
+            if (pr.status === 'FACTURADA' && pr.billingDate) {
+                const { month, year } = parseDate(pr.billingDate);
+                if (month === prevMonth && year === prevMonthYear) {
+                    facturadoMesAnterior += sub;
+                }
+                if (month === thisMonth && year === thisYear) {
+                    facturadoMesActual += sub;
+                }
+                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
+                    facturadoTrimestreActual += sub;
+                }
+            }
+
+            if (pr.status === 'PENDIENTE_FACTURAR' && pr.billingDate) {
+                const { month, year } = parseDate(pr.billingDate);
+
+                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
+                    facturadoTrimestreActual += sub;
+                }
+
+                if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) {
+                    proyeccionTrimestreSiguiente += sub;
+                }
+
+                if (month === thisMonth && year === thisYear) {
+                    pendFactMesActual += sub;
+                }
+                if (month === nextMonth && year === nextMonthYear) {
+                    pendFactMesSiguiente += sub;
+                }
+            }
+        }
+
         return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente, pendFactMesActual, pendFactMesSiguiente };
-    }, [proposalsWithSubtotals]);
+    }, [proposalsWithSubtotals, projections]);
 
     // ── Actions ──
     const handleStatusChange = async (id: string, newStatus: ProposalStatus) => {
@@ -255,6 +392,105 @@ export default function Dashboard() {
         }
     };
 
+    const handleAcquisitionChange = async (id: string, value: AcquisitionType) => {
+        try {
+            await api.patch(`/proposals/${id}`, { acquisitionType: value });
+            setProposals(prev => prev.map(p => p.id === id ? { ...p, acquisitionType: value } : p));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleProjectionAcquisitionChange = async (id: string, value: AcquisitionType) => {
+        try {
+            await api.patch(`/billing-projections/${id}`, { acquisitionType: value });
+            setProjections(prev => prev.map(pr => pr.id === id ? { ...pr, acquisitionType: value } : pr));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    // ── Projection Actions ──
+    const handleProjectionStatusChange = async (id: string, newStatus: ProposalStatus) => {
+        try {
+            await api.patch(`/billing-projections/${id}`, { status: newStatus });
+            setProjections(prev => prev.map(pr => pr.id === id ? { ...pr, status: newStatus as 'PENDIENTE_FACTURAR' | 'FACTURADA' } : pr));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleProjectionDateChange = async (id: string, value: string) => {
+        try {
+            await api.patch(`/billing-projections/${id}`, { billingDate: value || null });
+            setProjections(prev => prev.map(pr => pr.id === id ? { ...pr, billingDate: value || null } : pr));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleDeleteProjection = async (id: string, code: string) => {
+        if (!window.confirm(`⚠️ ¿Estás seguro de que deseas eliminar la proyección ${code}?`)) return;
+
+        try {
+            await api.delete(`/billing-projections/${id}`);
+            setProjections(prev => prev.filter(pr => pr.id !== id));
+        } catch (error) {
+            console.error(error);
+            alert("No se pudo eliminar la proyección.");
+        }
+    };
+
+    const openNewProjectionModal = () => {
+        setEditingProjection(null);
+        setProjForm({ clientName: '', subtotal: '', status: 'PENDIENTE_FACTURAR', billingDate: '', acquisitionType: '' });
+        setShowProjectionModal(true);
+    };
+
+    const openEditProjectionModal = (pr: BillingProjection) => {
+        setEditingProjection(pr);
+        setProjForm({
+            clientName: pr.clientName,
+            subtotal: String(pr.subtotal),
+            status: pr.status,
+            billingDate: pr.billingDate ? new Date(pr.billingDate).toISOString().split('T')[0] : '',
+            acquisitionType: (pr.acquisitionType || '') as '' | 'VENTA' | 'DAAS',
+        });
+        setShowProjectionModal(true);
+    };
+
+    const handleSaveProjection = async () => {
+        if (!projForm.clientName.trim() || !projForm.subtotal) return;
+        setSavingProjection(true);
+        try {
+            if (editingProjection) {
+                const res = await api.patch(`/billing-projections/${editingProjection.id}`, {
+                    clientName: projForm.clientName,
+                    subtotal: parseFloat(projForm.subtotal),
+                    status: projForm.status,
+                    billingDate: projForm.billingDate || null,
+                    acquisitionType: projForm.acquisitionType || undefined,
+                });
+                setProjections(prev => prev.map(pr => pr.id === editingProjection.id ? res.data : pr));
+            } else {
+                const res = await api.post('/billing-projections', {
+                    clientName: projForm.clientName,
+                    subtotal: parseFloat(projForm.subtotal),
+                    status: projForm.status,
+                    billingDate: projForm.billingDate || null,
+                    acquisitionType: projForm.acquisitionType || undefined,
+                });
+                setProjections(prev => [res.data, ...prev]);
+            }
+            setShowProjectionModal(false);
+        } catch (error) {
+            console.error(error);
+            alert('Error al guardar la proyección.');
+        } finally {
+            setSavingProjection(false);
+        }
+    };
+
     const toggleStatusFilter = (status: ProposalStatus) => {
         setStatusFilters(prev => {
             const next = new Set(prev);
@@ -293,13 +529,22 @@ export default function Dashboard() {
                         {user?.role === 'ADMIN' ? 'Métricas y propuestas de todo el equipo comercial.' : 'Gestiona tus cotizaciones y cierres.'}
                     </p>
                 </div>
-                <button
-                    onClick={() => navigate('/proposals/new')}
-                    className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/25"
-                >
-                    <PlusCircle className="h-5 w-5" />
-                    <span>Nueva Propuesta</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={openNewProjectionModal}
+                        className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-violet-600/25"
+                    >
+                        <Receipt className="h-5 w-5" />
+                        <span>Proyección de Facturación</span>
+                    </button>
+                    <button
+                        onClick={() => navigate('/proposals/new')}
+                        className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/25"
+                    >
+                        <PlusCircle className="h-5 w-5" />
+                        <span>Nueva Propuesta</span>
+                    </button>
+                </div>
             </div>
 
             {/* Financial Cards */}
@@ -437,7 +682,7 @@ export default function Dashboard() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
-                        {filtered.length} Propuesta{filtered.length !== 1 ? 's' : ''}
+                        {filtered.length} Registro{filtered.length !== 1 ? 's' : ''}
                     </h3>
                 </div>
 
@@ -451,6 +696,7 @@ export default function Dashboard() {
                                 <th className="px-4 py-3 text-center">F. Cierre</th>
                                 <th className="px-4 py-3 text-center">Actualización</th>
                                 <th className="px-4 py-3 text-right">Subtotal Min.</th>
+                                <th className="px-4 py-3 text-center">Adquisición</th>
                                 <th className="px-4 py-3 text-center">Estado</th>
                                 <th className="px-4 py-3 text-center">Acciones</th>
                             </tr>
@@ -458,12 +704,103 @@ export default function Dashboard() {
                         <tbody className="divide-y divide-gray-50">
                             {filtered.length === 0 ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'ADMIN' ? 8 : 7} className="px-6 py-16 text-center text-gray-400">
+                                    <td colSpan={user?.role === 'ADMIN' ? 9 : 8} className="px-6 py-16 text-center text-gray-400">
                                         No hay propuestas que coincidan con los filtros.
                                     </td>
                                 </tr>
                             ) : (
-                                filtered.map((p) => {
+                                filtered.map((row) => {
+                                    if (row.isProjection) {
+                                        // ── Projection Row ──
+                                        const pr = row.originalProjection!;
+                                        const cfg = STATUS_CONFIG[row.status];
+                                        return (
+                                            <tr key={`proj-${row.id}`} className="hover:bg-violet-50/30 transition-colors group bg-violet-50/10">
+                                                <td className="px-5 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono font-black text-violet-600 text-xs">{row.code}</span>
+                                                        <span className="text-[8px] font-bold uppercase bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-md border border-violet-200">PROY</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <p className="font-bold text-gray-900 text-sm">{row.clientName}</p>
+                                                    <p className="text-[10px] text-violet-400 mt-0.5">Proyección de facturación</p>
+                                                </td>
+                                                {user?.role === 'ADMIN' && (
+                                                    <td className="px-4 py-4 text-center">
+                                                        <span className="text-[10px] font-bold uppercase text-violet-600 bg-violet-50 px-2 py-1 rounded-lg border border-violet-100">
+                                                            {pr.user?.nomenclature || '??'} - {pr.user?.name?.split(' ')[0]}
+                                                        </span>
+                                                    </td>
+                                                )}
+                                                <td className="px-4 py-4 text-center">
+                                                    <span className="text-[10px] text-gray-300">—</span>
+                                                </td>
+                                                <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
+                                                    {new Date(row.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                                </td>
+                                                <td className="px-4 py-4 text-right">
+                                                    <span className="font-mono font-black text-xs text-emerald-700">{formatCOP(Number(pr.subtotal))}</span>
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    <select
+                                                        value={pr.acquisitionType || ''}
+                                                        onChange={(e) => handleProjectionAcquisitionChange(row.id, e.target.value as AcquisitionType)}
+                                                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 ${
+                                                            pr.acquisitionType && ACQUISITION_CONFIG[pr.acquisitionType]
+                                                                ? `${ACQUISITION_CONFIG[pr.acquisitionType].bg} ${ACQUISITION_CONFIG[pr.acquisitionType].text} ${ACQUISITION_CONFIG[pr.acquisitionType].border}`
+                                                                : 'bg-gray-50 text-gray-400 border-gray-200'
+                                                        }`}
+                                                    >
+                                                        <option value="">— Seleccionar —</option>
+                                                        <option value="VENTA">Venta</option>
+                                                        <option value="DAAS">DaaS</option>
+                                                    </select>
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    <select
+                                                        value={row.status}
+                                                        onChange={(e) => handleProjectionStatusChange(row.id, e.target.value as ProposalStatus)}
+                                                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-violet-600/20`}
+                                                    >
+                                                        {PROJECTION_STATUSES.map(s => (
+                                                            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="mt-2">
+                                                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-0.5">Fecha de facturación</span>
+                                                        <input
+                                                            type="date"
+                                                            value={pr.billingDate ? new Date(pr.billingDate).toISOString().split('T')[0] : ''}
+                                                            onChange={(e) => handleProjectionDateChange(row.id, e.target.value)}
+                                                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px]"
+                                                        />
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    <div className="flex items-center justify-center space-x-1">
+                                                        <button
+                                                            onClick={() => openEditProjectionModal(pr)}
+                                                            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                                                            title="Editar proyección"
+                                                        >
+                                                            <Edit2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteProjection(row.id, row.code)}
+                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                            title="Eliminar proyección"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    }
+
+                                    // ── Proposal Row (original logic) ──
+                                    const p = row.originalProposal!;
                                     const cfg = STATUS_CONFIG[p.status];
                                     const needsBillingDate = p.status === 'PENDIENTE_FACTURAR' || p.status === 'FACTURADA';
 
@@ -496,11 +833,26 @@ export default function Dashboard() {
                                                 {new Date(p.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
                                             </td>
                                             <td className="px-4 py-4 text-right">
-                                                {p.minSubtotal !== null ? (
-                                                    <span className="font-mono font-black text-xs text-emerald-700">{formatCOP(p.minSubtotal)}</span>
+                                                {row.minSubtotal !== null ? (
+                                                    <span className="font-mono font-black text-xs text-emerald-700">{formatCOP(row.minSubtotal)}</span>
                                                 ) : (
                                                     <span className="text-[10px] text-gray-300">Sin escenario</span>
                                                 )}
+                                            </td>
+                                            <td className="px-4 py-4 text-center">
+                                                <select
+                                                    value={p.acquisitionType || ''}
+                                                    onChange={(e) => handleAcquisitionChange(p.id, e.target.value as AcquisitionType)}
+                                                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 ${
+                                                        p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType]
+                                                            ? `${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`
+                                                            : 'bg-gray-50 text-gray-400 border-gray-200'
+                                                    }`}
+                                                >
+                                                    <option value="">— Seleccionar —</option>
+                                                    <option value="VENTA">Venta</option>
+                                                    <option value="DAAS">DaaS</option>
+                                                </select>
                                             </td>
                                             <td className="px-4 py-4 text-center">
                                                 <select
@@ -566,6 +918,120 @@ export default function Dashboard() {
                     </table>
                 </div>
             </div>
+
+            {/* Projection Modal */}
+            {showProjectionModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowProjectionModal(false)}>
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <Receipt className="h-5 w-5 text-white/80" />
+                                <h3 className="text-lg font-bold text-white">
+                                    {editingProjection ? 'Editar Proyección' : 'Nueva Proyección de Facturación'}
+                                </h3>
+                            </div>
+                            <button onClick={() => setShowProjectionModal(false)} className="text-white/70 hover:text-white transition-colors">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 space-y-5">
+                            {/* Client Name */}
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Cliente</label>
+                                <input
+                                    type="text"
+                                    value={projForm.clientName}
+                                    onChange={(e) => setProjForm(prev => ({ ...prev, clientName: e.target.value }))}
+                                    placeholder="Nombre del cliente"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all"
+                                    autoFocus
+                                />
+                            </div>
+
+                            {/* Subtotal */}
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Subtotal</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-3 text-gray-400 font-bold text-sm">$</span>
+                                    <input
+                                        type="number"
+                                        value={projForm.subtotal}
+                                        onChange={(e) => setProjForm(prev => ({ ...prev, subtotal: e.target.value }))}
+                                        placeholder="0"
+                                        className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Status */}
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Estado</label>
+                                <select
+                                    value={projForm.status}
+                                    onChange={(e) => setProjForm(prev => ({ ...prev, status: e.target.value as 'PENDIENTE_FACTURAR' | 'FACTURADA' }))}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all cursor-pointer"
+                                >
+                                    <option value="PENDIENTE_FACTURAR">Pendiente Facturar</option>
+                                    <option value="FACTURADA">Facturada</option>
+                                </select>
+                            </div>
+
+                            {/* Acquisition Type */}
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Adquisición</label>
+                                <select
+                                    value={projForm.acquisitionType}
+                                    onChange={(e) => setProjForm(prev => ({ ...prev, acquisitionType: e.target.value as '' | 'VENTA' | 'DAAS' }))}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all cursor-pointer"
+                                >
+                                    <option value="">— Seleccionar —</option>
+                                    <option value="VENTA">Venta</option>
+                                    <option value="DAAS">DaaS</option>
+                                </select>
+                            </div>
+
+                            {/* Billing Date */}
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Fecha de Facturación</label>
+                                <input
+                                    type="date"
+                                    value={projForm.billingDate}
+                                    onChange={(e) => setProjForm(prev => ({ ...prev, billingDate: e.target.value }))}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end space-x-3">
+                            <button
+                                onClick={() => setShowProjectionModal(false)}
+                                className="px-5 py-2.5 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveProjection}
+                                disabled={savingProjection || !projForm.clientName.trim() || !projForm.subtotal}
+                                className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-violet-600/25"
+                            >
+                                {savingProjection ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Receipt className="h-4 w-4" />
+                                )}
+                                <span>{editingProjection ? 'Guardar Cambios' : 'Crear Proyección'}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
