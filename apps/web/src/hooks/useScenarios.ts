@@ -11,9 +11,12 @@ export interface ProposalCalcItem {
     unitPrice: number;
     quantity: number;
     isTaxable: boolean;
+    description?: string;
     internalCosts?: {
         fletePct?: number;
+        proveedor?: string;
     };
+    technicalSpecs?: Record<string, string | undefined>;
 }
 
 export interface ScenarioItem {

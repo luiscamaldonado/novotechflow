@@ -5,12 +5,14 @@ import {
     Calculator, Plus, Trash2,
     ArrowLeft, Loader2, Package,
     AlertCircle, TrendingUp,
-    Percent, RotateCcw, ChevronDown, Layers, Pencil, Copy, BookOpen, ShoppingCart
+    Percent, RotateCcw, ChevronDown, Layers, Pencil, Copy, BookOpen, ShoppingCart, FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScenarios, type ProposalCalcItem } from '../../hooks/useScenarios';
 import ItemPickerModal from '../../components/proposals/ItemPickerModal';
 import ScenarioTotalsCards from '../../components/proposals/ScenarioTotalsCards';
+import { exportToExcel } from '../../lib/exportExcel';
+import { useAuthStore } from '../../store/authStore';
 
 export default function ProposalCalculations() {
     const { id } = useParams<{ id: string }>();
@@ -207,8 +209,26 @@ export default function ProposalCalculations() {
                 </div>
             </div>
 
-            {/* Navigation to Document Builder */}
-            <div className="flex justify-end">
+            {/* Navigation to Document Builder + Export */}
+            <div className="flex justify-end space-x-3">
+                <button 
+                    onClick={async () => {
+                        const { user } = useAuthStore.getState();
+                        await exportToExcel({
+                            proposalCode: proposal.proposalCode,
+                            clientName: proposal.clientName,
+                            userName: user?.name || 'Usuario',
+                            scenarios,
+                            proposalItems,
+                            acquisitionModes,
+                        });
+                    }}
+                    disabled={scenarios.length === 0}
+                    className="flex items-center space-x-3 px-6 py-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all font-black text-[10px] uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    <span>Exportar Excel</span>
+                </button>
                 <button 
                     onClick={() => navigate(`/proposals/${id}/document`)}
                     className="flex items-center space-x-3 px-6 py-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all font-black text-[10px] uppercase tracking-widest"
