@@ -185,7 +185,7 @@ export async function exportToExcel(opts: ExportOptions) {
                 }
 
                 const margin = si.marginPctOverride !== undefined && si.marginPctOverride !== null
-                    ? si.marginPctOverride
+                    ? Number(si.marginPctOverride)
                     : Number(item.marginPct);
                 let unitPrice = 0;
                 if (margin < 100) {
