@@ -1,6 +1,7 @@
+require('dotenv').config();
 const jwt = require('jsonwebtoken');
 
-const secret = 'super-secret-novotechflow-key-change-me';
+const secret = process.env.JWT_SECRET;
 
 const payload = {
   sub: 'dd77b88a-2424-4b1b-8888-37222fe033c8', // Admin ID I found earlier

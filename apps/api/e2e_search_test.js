@@ -1,8 +1,9 @@
+require('dotenv').config();
 const { JwtService } = require('@nestjs/jwt');
 const axios = require('axios');
 
 const jwtService = new JwtService({
-  secret: 'super-secret-novotechflow-key-change-me',
+  secret: process.env.JWT_SECRET,
   signOptions: { expiresIn: '12h' },
 });
 

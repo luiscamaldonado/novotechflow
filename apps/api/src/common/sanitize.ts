@@ -1,4 +1,5 @@
-import * as sanitizeHtml from 'sanitize-html';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sanitizeHtml = require('sanitize-html');
 
 export function sanitizePlainText(input: string): string {
   return sanitizeHtml(input, { allowedTags: [], allowedAttributes: {} });

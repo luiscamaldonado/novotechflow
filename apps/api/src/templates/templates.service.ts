@@ -324,13 +324,14 @@ export class TemplatesService {
    * Reorder templates by updating their sortOrder.
    */
   async reorder(templateIds: string[]) {
-    const updates = templateIds.map((id, index) =>
-      this.prisma.pdfTemplate.update({
-        where: { id },
-        data: { sortOrder: index + 1 },
-      }),
+    await this.prisma.$transaction(
+      templateIds.map((id, index) =>
+        this.prisma.pdfTemplate.update({
+          where: { id },
+          data: { sortOrder: index + 1 },
+        }),
+      ),
     );
-    await Promise.all(updates);
     return this.findAll();
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Delete, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Delete, Param, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
 import { BillingProjectionsService, CreateBillingProjectionDto, UpdateBillingProjectionDto } from './billing-projections.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
@@ -21,13 +21,13 @@ export class BillingProjectionsController {
 
     @UseGuards(JwtAuthGuard)
     @Patch(':id')
-    async update(@Param('id') id: string, @Body() data: UpdateBillingProjectionDto, @Request() req: { user: AuthenticatedUser }) {
+    async update(@Param('id', ParseUUIDPipe) id: string, @Body() data: UpdateBillingProjectionDto, @Request() req: { user: AuthenticatedUser }) {
         return this.service.update(id, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    async delete(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }) {
+    async delete(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
         return this.service.delete(id, req.user);
     }
 }

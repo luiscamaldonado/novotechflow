@@ -5,9 +5,9 @@ services:
     image: postgres:15-alpine
     container_name: novotechflow-db
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: novotechflow
+      POSTGRES_USER: ${DB_USER:-novotechflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-novotechflow}
     ports:
       - "5432:5432"
     volumes:

@@ -65,11 +65,11 @@ export class ProposalsService {
   }
 
   /**
-   * Busca propuestas recientes (último año) que coincidan parcial o totalmente 
-   * con el término de búsqueda, ya sea en el nombre del cliente o en el asunto.
-   * 
-   * @param {string} query - Término de búsqueda (Nombre o parte del nombre).
-   * @returns {Promise<any[]>} Lista de propuestas que podrían representar un cruce de cuenta.
+   * Busca propuestas recientes que coincidan con el término de búsqueda.
+   * NOTA DE SEGURIDAD: Este endpoint muestra propuestas de TODOS los usuarios
+   * intencionalmente. Su propósito es detectar cruces de cuenta entre comerciales
+   * antes de crear una nueva propuesta para el mismo cliente.
+   * Revisado en auditoría de seguridad 2026-04-05 — comportamiento aceptado.
    */
   async findPotentialConflicts(query: string): Promise<any[]> {
     const normalizedQuery = query?.trim();
@@ -647,8 +647,10 @@ export class ProposalsService {
    */
   async deleteScenario(id: string, user: AuthenticatedUser) {
     await this.verifyScenarioOwnership(id, user);
-    await this.prisma.scenarioItem.deleteMany({ where: { scenarioId: id } });
-    return this.prisma.scenario.delete({ where: { id } });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.scenarioItem.deleteMany({ where: { scenarioId: id } });
+      return tx.scenario.delete({ where: { id } });
+    });
   }
 
   /**
@@ -963,13 +965,14 @@ export class ProposalsService {
    */
   async reorderPages(proposalId: string, data: ReorderPagesDto, user: AuthenticatedUser) {
     await this.verifyProposalOwnership(proposalId, user);
-    const updates = data.pageIds.map((id, index) =>
-      this.prisma.proposalPage.update({
-        where: { id },
-        data: { sortOrder: index + 1 },
-      }),
+    await this.prisma.$transaction(
+      data.pageIds.map((id, index) =>
+        this.prisma.proposalPage.update({
+          where: { id },
+          data: { sortOrder: index + 1 },
+        }),
+      ),
     );
-    await Promise.all(updates);
     return this.getPagesByProposalId(proposalId);
   }
 
@@ -1031,13 +1034,14 @@ export class ProposalsService {
    */
   async reorderBlocks(pageId: string, data: ReorderBlocksDto, user: AuthenticatedUser) {
     await this.verifyPageOwnership(pageId, user);
-    const updates = data.blockIds.map((id, index) =>
-      this.prisma.proposalPageBlock.update({
-        where: { id },
-        data: { sortOrder: index + 1 },
-      }),
+    await this.prisma.$transaction(
+      data.blockIds.map((id, index) =>
+        this.prisma.proposalPageBlock.update({
+          where: { id },
+          data: { sortOrder: index + 1 },
+        }),
+      ),
     );
-    await Promise.all(updates);
     return this.prisma.proposalPageBlock.findMany({
       where: { pageId },
       orderBy: { sortOrder: 'asc' },

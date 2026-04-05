@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Delete, Param, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Delete, Param, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -35,7 +35,7 @@ export class UsersController {
 
     @Delete(':id')
     @Roles(Role.ADMIN)
-    async remove(@Param('id') id: string) {
+    async remove(@Param('id', ParseUUIDPipe) id: string) {
         return this.usersService.deleteUser(id);
     }
 
@@ -60,7 +60,7 @@ export class UsersController {
         limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     }))
     async uploadSignature(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @UploadedFile() file: Express.Multer.File,
     ) {
         await validateImageMagicBytes(file);
@@ -70,7 +70,7 @@ export class UsersController {
 
     @Delete(':id/signature')
     @Roles(Role.ADMIN)
-    async deleteSignature(@Param('id') id: string) {
+    async deleteSignature(@Param('id', ParseUUIDPipe) id: string) {
         return this.usersService.deleteSignature(id);
     }
 }

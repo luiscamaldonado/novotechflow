@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, UseGuards, Req, UseInterceptors, UploadedFile,
+  Param, Body, UseGuards, Req, UseInterceptors, UploadedFile, ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -11,6 +11,13 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
+import {
+  CreateTemplateDto,
+  UpdateTemplateDto,
+  ReorderTemplatesDto,
+  CreateTemplateBlockDto,
+  UpdateTemplateBlockDto,
+} from './dto/templates.dto';
 
 @Controller('templates')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,7 +35,7 @@ export class TemplatesController {
 
   /** Get one template by ID. */
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.findOne(id);
   }
 
@@ -36,7 +43,7 @@ export class TemplatesController {
   @Post()
   async create(
     @Req() req: any,
-    @Body() body: { name: string; templateType: string; sortOrder?: number },
+    @Body() body: CreateTemplateDto,
   ) {
     return this.templatesService.create({
       name: body.name,
@@ -49,21 +56,21 @@ export class TemplatesController {
   /** Update a template (name, sortOrder, isActive). */
   @Patch(':id')
   async update(
-    @Param('id') id: string,
-    @Body() body: { name?: string; sortOrder?: number; isActive?: boolean },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateTemplateDto,
   ) {
     return this.templatesService.update(id, body);
   }
 
   /** Delete a template. */
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.remove(id);
   }
 
   /** Reorder templates. */
   @Patch('reorder')
-  async reorder(@Body() body: { templateIds: string[] }) {
+  async reorder(@Body() body: ReorderTemplatesDto) {
     return this.templatesService.reorder(body.templateIds);
   }
 
@@ -72,8 +79,8 @@ export class TemplatesController {
   /** Add a block to a template. */
   @Post(':id/blocks')
   async addBlock(
-    @Param('id') id: string,
-    @Body() body: { blockType: string; content?: object },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CreateTemplateBlockDto,
   ) {
     return this.templatesService.addBlock(id, {
       blockType: body.blockType,
@@ -84,9 +91,9 @@ export class TemplatesController {
   /** Update a block's content. */
   @Patch(':templateId/blocks/:blockId')
   async updateBlock(
-    @Param('templateId') templateId: string,
-    @Param('blockId') blockId: string,
-    @Body() body: { content: object },
+    @Param('templateId', ParseUUIDPipe) templateId: string,
+    @Param('blockId', ParseUUIDPipe) blockId: string,
+    @Body() body: UpdateTemplateBlockDto,
   ) {
     return this.templatesService.updateBlock(templateId, blockId, body.content);
   }
@@ -94,8 +101,8 @@ export class TemplatesController {
   /** Delete a block. */
   @Delete(':templateId/blocks/:blockId')
   async deleteBlock(
-    @Param('templateId') templateId: string,
-    @Param('blockId') blockId: string,
+    @Param('templateId', ParseUUIDPipe) templateId: string,
+    @Param('blockId', ParseUUIDPipe) blockId: string,
   ) {
     return this.templatesService.deleteBlock(templateId, blockId);
   }
@@ -121,8 +128,8 @@ export class TemplatesController {
     limits: { fileSize: 10 * 1024 * 1024 },
   }))
   async uploadBlockImage(
-    @Param('templateId') templateId: string,
-    @Param('blockId') blockId: string,
+    @Param('templateId', ParseUUIDPipe) templateId: string,
+    @Param('blockId', ParseUUIDPipe) blockId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     await validateImageMagicBytes(file);

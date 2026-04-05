@@ -71,76 +71,78 @@ export class UsersService {
     }
 
     async deleteUser(id: string) {
-        // Get all proposal IDs belonging to this user
-        const userProposals = await this.prisma.proposal.findMany({
-            where: { userId: id },
-            select: { id: true },
-        });
-        const proposalIds = userProposals.map(p => p.id);
+        return this.prisma.$transaction(async (tx) => {
+            // Get all proposal IDs belonging to this user
+            const userProposals = await tx.proposal.findMany({
+                where: { userId: id },
+                select: { id: true },
+            });
+            const proposalIds = userProposals.map(p => p.id);
 
-        if (proposalIds.length > 0) {
-            // Delete proposal page blocks
-            await this.prisma.proposalPageBlock.deleteMany({
-                where: { page: { proposalId: { in: proposalIds } } },
+            if (proposalIds.length > 0) {
+                // Delete proposal page blocks
+                await tx.proposalPageBlock.deleteMany({
+                    where: { page: { proposalId: { in: proposalIds } } },
+                });
+
+                // Delete proposal pages
+                await tx.proposalPage.deleteMany({
+                    where: { proposalId: { in: proposalIds } },
+                });
+
+                // Delete scenario items
+                await tx.scenarioItem.deleteMany({
+                    where: { scenario: { proposalId: { in: proposalIds } } },
+                });
+
+                // Delete scenarios
+                await tx.scenario.deleteMany({
+                    where: { proposalId: { in: proposalIds } },
+                });
+
+                // Delete email logs BEFORE proposal versions (FK: emailLog -> proposalVersion)
+                await tx.emailLog.deleteMany({
+                    where: { proposalId: { in: proposalIds } },
+                });
+
+                // Delete synced files linked to proposals
+                await tx.syncedFile.deleteMany({
+                    where: { proposalId: { in: proposalIds } },
+                });
+
+                // Delete proposal versions
+                await tx.proposalVersion.deleteMany({
+                    where: { proposalId: { in: proposalIds } },
+                });
+
+                // Delete proposal items
+                await tx.proposalItem.deleteMany({
+                    where: { proposalId: { in: proposalIds } },
+                });
+
+                // Delete proposals
+                await tx.proposal.deleteMany({
+                    where: { userId: id },
+                });
+            }
+
+            // Delete PDF templates created by this user
+            await tx.pdfTemplate.deleteMany({
+                where: { createdBy: id },
             });
 
-            // Delete proposal pages
-            await this.prisma.proposalPage.deleteMany({
-                where: { proposalId: { in: proposalIds } },
-            });
-
-            // Delete scenario items
-            await this.prisma.scenarioItem.deleteMany({
-                where: { scenario: { proposalId: { in: proposalIds } } },
-            });
-
-            // Delete scenarios
-            await this.prisma.scenario.deleteMany({
-                where: { proposalId: { in: proposalIds } },
-            });
-
-            // Delete email logs BEFORE proposal versions (FK: emailLog -> proposalVersion)
-            await this.prisma.emailLog.deleteMany({
-                where: { proposalId: { in: proposalIds } },
-            });
-
-            // Delete synced files linked to proposals
-            await this.prisma.syncedFile.deleteMany({
-                where: { proposalId: { in: proposalIds } },
-            });
-
-            // Delete proposal versions
-            await this.prisma.proposalVersion.deleteMany({
-                where: { proposalId: { in: proposalIds } },
-            });
-
-            // Delete proposal items
-            await this.prisma.proposalItem.deleteMany({
-                where: { proposalId: { in: proposalIds } },
-            });
-
-            // Delete proposals
-            await this.prisma.proposal.deleteMany({
+            // Delete remaining synced files and email logs for user
+            await tx.syncedFile.deleteMany({
                 where: { userId: id },
             });
-        }
+            await tx.emailLog.deleteMany({
+                where: { userId: id },
+            });
 
-        // Delete PDF templates created by this user
-        await this.prisma.pdfTemplate.deleteMany({
-            where: { createdBy: id },
-        });
-
-        // Delete remaining synced files and email logs for user
-        await this.prisma.syncedFile.deleteMany({
-            where: { userId: id },
-        });
-        await this.prisma.emailLog.deleteMany({
-            where: { userId: id },
-        });
-
-        // Delete the user
-        return this.prisma.user.delete({
-            where: { id },
+            // Delete the user
+            return tx.user.delete({
+                where: { id },
+            });
         });
     }
 
