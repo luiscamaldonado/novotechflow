@@ -282,9 +282,7 @@ export default function ProposalDocBuilder() {
                         <div className="space-y-2">
                             <AnimatePresence mode="popLayout">
                                 {pages.map((page, idx) => {
-                                    const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
                                     const isActive = activePageId === page.id;
-                                    const IconComponent = style.icon;
 
                                     // Insert virtual sections after INDEX page
                                     const isIndex = page.pageType === 'INDEX';
@@ -835,7 +833,7 @@ interface PageEditorProps {
 function PageEditor({
     page, editingTitle, setEditingTitle,
     onUpdatePage, onUpdateBlock, onDeleteBlock,
-    onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage, isAdmin,
+    onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage,
     proposalVars,
 }: PageEditorProps) {
     const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
@@ -983,7 +981,7 @@ interface BlockEditorProps {
     proposalVars: ProposalVariables;
 }
 
-function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, onUploadImage, uploadImage, proposalVars }: BlockEditorProps) {
+function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImage, proposalVars }: BlockEditorProps) {
     const [captionBuffer, setCaptionBuffer] = useState(
         (block.content as Record<string, string>)?.caption || ''
     );

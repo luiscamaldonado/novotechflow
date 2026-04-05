@@ -13,7 +13,6 @@ import {
     Loader2,
     Upload,
     FileSignature,
-    CheckCircle2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';

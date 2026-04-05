@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    FileText, PlusCircle, Trash2, Edit2, Loader2, Calendar,
-    DollarSign, Clock, Copy, ChevronDown, ChevronUp, Search,
+    PlusCircle, Trash2, Edit2, Loader2, Calendar,
+    DollarSign, Clock, Copy, Search,
     Filter, X, TrendingUp, BarChart3, AlertCircle, Receipt
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
-import type { ProposalSummary, ProposalStatus, ProposalItemFromApi, BillingProjection, AcquisitionType } from '../lib/types';
+import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType } from '../lib/types';
 
 // ── Status configuration ──
 const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: string; border: string }> = {
@@ -156,14 +156,7 @@ export default function Dashboard() {
         }
     };
 
-    const loadProjections = async () => {
-        try {
-            const res = await api.get('/billing-projections');
-            setProjections(res.data);
-        } catch (error) {
-            console.error("Error cargando proyecciones:", error);
-        }
-    };
+
 
     // ── Computed values ──
     const proposalsWithSubtotals = useMemo(() => {

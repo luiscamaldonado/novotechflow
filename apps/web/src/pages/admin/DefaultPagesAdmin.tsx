@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Plus, Trash2, Loader2, Lock, GripVertical,
+    Plus, Trash2, Loader2,
     Type, ImagePlus, FileText, BookOpen, Pencil,
     Image as ImageIcon, ListOrdered, FileSignature, Building2,
-    Save, CheckCircle2, AlertTriangle, Eye,
+    CheckCircle2, AlertTriangle, Eye,
     ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';

@@ -89,7 +89,7 @@ export class ProposalsService {
         },
       });
     } catch (error) {
-      this.logger.error(`Falla al crear propuesta para usuario ${userId}: ${error.message}`);
+      this.logger.error(`Falla al crear propuesta para usuario ${userId}: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }

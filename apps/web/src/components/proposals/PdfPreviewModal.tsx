@@ -436,7 +436,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                                 style={{ minHeight: `${PAGE_HEIGHT}px`, maxHeight: `${PAGE_HEIGHT}px`, overflow: 'hidden' }}
                             >
                                 {vPage.isCover ? (
-                                    <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title} apiBase={apiBase} />
+                                    <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title ?? ''} apiBase={apiBase} />
                                 ) : vPage.isIndex ? (
                                     <IndexPageContent visualPages={visualPages} />
                                 ) : vPage.isTechSpec && vPage.techSpecItem ? (

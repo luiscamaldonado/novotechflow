@@ -36,3 +36,8 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Explicit security-sensitive paths (redundant with global patterns, but explicit for safety)
+apps/api/.env
+apps/api/dist/
+apps/agent/dist/

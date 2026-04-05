@@ -31,13 +31,27 @@ import {
  *
  * @route /proposals
  */
+/** TTL del cache de TRM en milisegundos (5 minutos). */
+const TRM_CACHE_TTL_MS = 5 * 60 * 1000;
+
 @Controller('proposals')
 export class ProposalsController {
+    /** Cache en memoria para evitar scraping repetitivo de TRM. */
+    private trmCache: { data: unknown; expiresAt: number } | null = null;
+
     constructor(private readonly proposalsService: ProposalsService) {}
 
+    @UseGuards(JwtAuthGuard)
     @Get('trm-extra')
     async getExtraTrm() {
-        return this.proposalsService.getExtraTrmValues();
+        const now = Date.now();
+        if (this.trmCache && now < this.trmCache.expiresAt) {
+            return this.trmCache.data;
+        }
+
+        const data = await this.proposalsService.getExtraTrmValues();
+        this.trmCache = { data, expiresAt: now + TRM_CACHE_TTL_MS };
+        return data;
     }
 
     @UseGuards(JwtAuthGuard)

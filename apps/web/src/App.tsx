@@ -36,7 +36,7 @@ const PageLoader = () => (
 );
 
 function App() {
-  const { checkAuth, isLoading, isAuthenticated, user } = useAuthStore();
+  const { checkAuth, isLoading, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     checkAuth();

@@ -52,7 +52,7 @@ export class ClientsService {
       const suggestion = await this.getSmartSuggestion(rawQuery.trim());
       return { results: [], suggestion };
     } catch (error) {
-      this.logger.error(`Error en búsqueda: "${query}": ${error.message}`);
+      this.logger.error(`Error en búsqueda: "${query}": ${error instanceof Error ? error.message : String(error)}`);
       return { results: [], suggestion: null };
     }
   }
