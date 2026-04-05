@@ -7,6 +7,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
+import { CreateUserDto } from './dto/create-user.dto';
+import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -21,7 +23,7 @@ export class UsersController {
 
     @Post()
     @Roles(Role.ADMIN)
-    async create(@Body() createUserDto: any) {
+    async create(@Body() createUserDto: CreateUserDto) {
         return this.usersService.createUser({
             email: createUserDto.email,
             name: createUserDto.name,
@@ -43,8 +45,9 @@ export class UsersController {
         storage: diskStorage({
             destination: join(process.cwd(), 'uploads', 'signatures'),
             filename: (_req, file, cb) => {
+                const safeName = sanitizeFilename(file.originalname);
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-                cb(null, 'signature-' + uniqueSuffix + extname(file.originalname));
+                cb(null, 'signature-' + uniqueSuffix + extname(safeName));
             },
         }),
         fileFilter: (_req, file, cb) => {
@@ -60,6 +63,7 @@ export class UsersController {
         @Param('id') id: string,
         @UploadedFile() file: Express.Multer.File,
     ) {
+        await validateImageMagicBytes(file);
         const signatureUrl = `/uploads/signatures/${file.filename}`;
         return this.usersService.updateSignature(id, signatureUrl);
     }

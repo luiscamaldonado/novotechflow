@@ -10,6 +10,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
+import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
 
 @Controller('templates')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -105,8 +106,9 @@ export class TemplatesController {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads', 'templates'),
       filename: (_req, file, cb) => {
+        const safeName = sanitizeFilename(file.originalname);
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, 'tpl-' + uniqueSuffix + extname(file.originalname));
+        cb(null, 'tpl-' + uniqueSuffix + extname(safeName));
       },
     }),
     fileFilter: (_req, file, cb) => {
@@ -123,6 +125,7 @@ export class TemplatesController {
     @Param('blockId') blockId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
+    await validateImageMagicBytes(file);
     const imageUrl = `/uploads/templates/${file.filename}`;
     return this.templatesService.updateBlockImage(templateId, blockId, imageUrl);
   }

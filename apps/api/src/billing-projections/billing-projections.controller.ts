@@ -21,13 +21,13 @@ export class BillingProjectionsController {
 
     @UseGuards(JwtAuthGuard)
     @Patch(':id')
-    async update(@Param('id') id: string, @Body() data: UpdateBillingProjectionDto) {
-        return this.service.update(id, data);
+    async update(@Param('id') id: string, @Body() data: UpdateBillingProjectionDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.service.update(id, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    async delete(@Param('id') id: string) {
-        return this.service.delete(id);
+    async delete(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.service.delete(id, req.user);
     }
 }

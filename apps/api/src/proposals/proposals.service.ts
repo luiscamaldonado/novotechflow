@@ -4,6 +4,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { ProposalStatus, BlockType, PageType } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
+import { sanitizePlainText, sanitizeRichText } from '../common/sanitize';
 import {
     CreateProposalDto,
     UpdateProposalDto,
@@ -115,8 +116,8 @@ export class ProposalsService {
           proposalCode,
           userId,
           clientId,
-          clientName: data.clientName.trim().toUpperCase(),
-          subject: data.subject,
+          clientName: sanitizePlainText(data.clientName.trim().toUpperCase()),
+          subject: sanitizePlainText(data.subject),
           issueDate: new Date(data.issueDate),
           validityDays: typeof data.validityDays === 'string' ? parseInt(data.validityDays, 10) : data.validityDays,
           validityDate: new Date(data.validityDate),
@@ -223,7 +224,7 @@ export class ProposalsService {
     return this.prisma.proposal.update({
       where: { id },
       data: {
-        subject: data.subject,
+        subject: data.subject ? sanitizePlainText(data.subject) : undefined,
         issueDate: data.issueDate ? new Date(data.issueDate) : undefined,
         validityDays: data.validityDays ?? undefined,
         validityDate: data.validityDate ? new Date(data.validityDate) : undefined,
@@ -470,34 +471,36 @@ export class ProposalsService {
    */
   async deleteProposal(id: string, user: AuthenticatedUser) {
     await this.verifyProposalOwnership(id, user);
-    // Delete page blocks first (they reference pages)
-    await this.prisma.proposalPageBlock.deleteMany({
-      where: { page: { proposalId: id } }
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // Delete page blocks first (they reference pages)
+      await tx.proposalPageBlock.deleteMany({
+        where: { page: { proposalId: id } }
+      });
 
-    // Delete pages (they reference the proposal)
-    await this.prisma.proposalPage.deleteMany({
-      where: { proposalId: id }
-    });
+      // Delete pages (they reference the proposal)
+      await tx.proposalPage.deleteMany({
+        where: { proposalId: id }
+      });
 
-    // Delete linked scenario items first
-    await this.prisma.scenarioItem.deleteMany({
-      where: { scenario: { proposalId: id } }
-    });
+      // Delete linked scenario items first
+      await tx.scenarioItem.deleteMany({
+        where: { scenario: { proposalId: id } }
+      });
 
-    // Delete scenarios
-    await this.prisma.scenario.deleteMany({
-      where: { proposalId: id }
-    });
+      // Delete scenarios
+      await tx.scenario.deleteMany({
+        where: { proposalId: id }
+      });
 
-    // Delete regular items
-    await this.prisma.proposalItem.deleteMany({
-      where: { proposalId: id },
-    });
+      // Delete regular items
+      await tx.proposalItem.deleteMany({
+        where: { proposalId: id },
+      });
 
-    // Delete proposal
-    return this.prisma.proposal.delete({
-      where: { id },
+      // Delete proposal
+      return tx.proposal.delete({
+        where: { id },
+      });
     });
   }
 
@@ -618,7 +621,7 @@ export class ProposalsService {
         proposalId,
         name: data.name,
         currency: data.currency || 'COP',
-        description: data.description,
+        description: data.description ? sanitizePlainText(data.description) : undefined,
         sortOrder: nextOrder
       }
     });
@@ -634,7 +637,7 @@ export class ProposalsService {
       data: {
         name: data.name,
         currency: data.currency,
-        description: data.description
+        description: data.description ? sanitizePlainText(data.description) : data.description
       }
     });
   }
@@ -981,11 +984,15 @@ export class ProposalsService {
     });
     const nextOrder = (aggregate._max.sortOrder || 0) + 1;
 
+    const contentToSave = data.blockType === 'RICH_TEXT' && data.content
+      ? { ...data.content as object, html: typeof (data.content as any).html === 'string' ? sanitizeRichText((data.content as any).html) : undefined }
+      : (data.content || {});
+
     return this.prisma.proposalPageBlock.create({
       data: {
         pageId,
         blockType: data.blockType as BlockType,
-        content: (data.content || {}) as object,
+        content: contentToSave as object,
         sortOrder: nextOrder,
       },
     });
@@ -998,9 +1005,14 @@ export class ProposalsService {
     const block = await this.prisma.proposalPageBlock.findUnique({ where: { id: blockId } });
     if (!block) throw new NotFoundException('Bloque no encontrado.');
     await this.verifyPageOwnership(block.pageId, user);
+
+    const contentToSave = block.blockType === 'RICH_TEXT' && data.content
+      ? { ...data.content as object, html: typeof (data.content as any).html === 'string' ? sanitizeRichText((data.content as any).html) : undefined }
+      : data.content;
+
     return this.prisma.proposalPageBlock.update({
       where: { id: blockId },
-      data: { content: data.content as object | undefined },
+      data: { content: contentToSave as object | undefined },
     });
   }
 

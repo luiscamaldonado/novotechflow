@@ -4,9 +4,20 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        scriptSrc: ["'self'"],
+      },
+    },
+    hsts: { maxAge: 31536000, includeSubDomains: true },
+  }));
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173'],
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],

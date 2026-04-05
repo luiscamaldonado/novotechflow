@@ -5,6 +5,8 @@ import { extname, join } from 'path';
 import { ProposalsService } from './proposals.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
+import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
     CreateProposalDto,
     UpdateProposalDto,
@@ -41,6 +43,7 @@ export class ProposalsController {
 
     constructor(private readonly proposalsService: ProposalsService) {}
 
+    @SkipThrottle()
     @UseGuards(JwtAuthGuard)
     @Get('trm-extra')
     async getExtraTrm() {
@@ -240,8 +243,9 @@ export class ProposalsController {
         storage: diskStorage({
             destination: join(process.cwd(), 'uploads'),
             filename: (_req, file, cb) => {
+                const safeName = sanitizeFilename(file.originalname);
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-                cb(null, uniqueSuffix + extname(file.originalname));
+                cb(null, uniqueSuffix + extname(safeName));
             },
         }),
         fileFilter: (_req, file, cb) => {
@@ -254,6 +258,7 @@ export class ProposalsController {
         limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     }))
     async uploadImage(@UploadedFile() file: Express.Multer.File) {
+        await validateImageMagicBytes(file);
         return { url: `/uploads/${file.filename}`, originalName: file.originalname };
     }
 }

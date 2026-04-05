@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProposalStatus, AcquisitionType } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
@@ -93,9 +93,12 @@ export class BillingProjectionsService {
     /**
      * Updates a billing projection.
      */
-    async update(id: string, data: UpdateBillingProjectionDto) {
+    async update(id: string, data: UpdateBillingProjectionDto, user: AuthenticatedUser) {
         const existing = await this.prisma.billingProjection.findUnique({ where: { id } });
         if (!existing) throw new NotFoundException('Proyección no encontrada.');
+        if (user.role !== 'ADMIN' && existing.userId !== user.id) {
+            throw new ForbiddenException('No tienes permiso para modificar esta proyección.');
+        }
 
         return this.prisma.billingProjection.update({
             where: { id },
@@ -115,9 +118,12 @@ export class BillingProjectionsService {
     /**
      * Deletes a billing projection.
      */
-    async delete(id: string) {
+    async delete(id: string, user: AuthenticatedUser) {
         const existing = await this.prisma.billingProjection.findUnique({ where: { id } });
         if (!existing) throw new NotFoundException('Proyección no encontrada.');
+        if (user.role !== 'ADMIN' && existing.userId !== user.id) {
+            throw new ForbiddenException('No tienes permiso para eliminar esta proyección.');
+        }
 
         return this.prisma.billingProjection.delete({ where: { id } });
     }
