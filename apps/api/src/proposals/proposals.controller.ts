@@ -68,32 +68,32 @@ export class ProposalsController {
 
     @UseGuards(JwtAuthGuard)
     @Get(':id')
-    async getById(@Param('id') id: string) {
-        return this.proposalsService.getProposalById(id);
+    async getById(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.getProposalById(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch(':id')
-    async update(@Param('id') id: string, @Body() updateData: UpdateProposalDto) {
-        return this.proposalsService.updateProposal(id, updateData);
+    async update(@Param('id') id: string, @Body() updateData: UpdateProposalDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.updateProposal(id, updateData, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/items')
-    async addItem(@Param('id') id: string, @Body() itemData: CreateProposalItemDto) {
-        return this.proposalsService.addProposalItem(id, itemData);
+    async addItem(@Param('id') id: string, @Body() itemData: CreateProposalItemDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.addProposalItem(id, itemData, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('items/:itemId')
-    async removeItem(@Param('itemId') itemId: string) {
-        return this.proposalsService.removeProposalItem(itemId);
+    async removeItem(@Param('itemId') itemId: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.removeProposalItem(itemId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('items/:itemId')
-    async updateItem(@Param('itemId') itemId: string, @Body() itemData: UpdateProposalItemDto) {
-        return this.proposalsService.updateProposalItem(itemId, itemData);
+    async updateItem(@Param('itemId') itemId: string, @Body() itemData: UpdateProposalItemDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.updateProposalItem(itemId, itemData, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
@@ -104,132 +104,132 @@ export class ProposalsController {
 
     @UseGuards(JwtAuthGuard)
     @Delete(':id')
-    async delete(@Param('id') id: string) {
-        return this.proposalsService.deleteProposal(id);
+    async delete(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.deleteProposal(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/clone')
     async clone(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }, @Body() data: CloneProposalDto) {
-        return this.proposalsService.cloneProposal(id, req.user.id, data.cloneType);
+        return this.proposalsService.cloneProposal(id, req.user.id, data.cloneType, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Get(':id/scenarios')
-    async getScenarios(@Param('id') id: string) {
-        return this.proposalsService.getScenariosByProposalId(id);
+    async getScenarios(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.getScenariosByProposalId(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/scenarios')
-    async createScenario(@Param('id') id: string, @Body() data: CreateScenarioDto) {
-        return this.proposalsService.createScenario(id, data);
+    async createScenario(@Param('id') id: string, @Body() data: CreateScenarioDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.createScenario(id, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('scenarios/:scenarioId')
-    async updateScenario(@Param('scenarioId') scenarioId: string, @Body() data: UpdateScenarioDto) {
-        return this.proposalsService.updateScenario(scenarioId, data);
+    async updateScenario(@Param('scenarioId') scenarioId: string, @Body() data: UpdateScenarioDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.updateScenario(scenarioId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('scenarios/:scenarioId')
-    async deleteScenario(@Param('scenarioId') scenarioId: string) {
-        return this.proposalsService.deleteScenario(scenarioId);
+    async deleteScenario(@Param('scenarioId') scenarioId: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.deleteScenario(scenarioId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post('scenarios/:scenarioId/clone')
-    async cloneScenario(@Param('scenarioId') scenarioId: string) {
-        return this.proposalsService.cloneScenario(scenarioId);
+    async cloneScenario(@Param('scenarioId') scenarioId: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.cloneScenario(scenarioId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post('scenarios/:scenarioId/items')
-    async addScenarioItem(@Param('scenarioId') scenarioId: string, @Body() data: AddScenarioItemDto) {
-        return this.proposalsService.addScenarioItem(scenarioId, data);
+    async addScenarioItem(@Param('scenarioId') scenarioId: string, @Body() data: AddScenarioItemDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.addScenarioItem(scenarioId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('scenarios/items/:itemId')
-    async updateScenarioItem(@Param('itemId') itemId: string, @Body() data: UpdateScenarioItemDto) {
-        return this.proposalsService.updateScenarioItem(itemId, data);
+    async updateScenarioItem(@Param('itemId') itemId: string, @Body() data: UpdateScenarioItemDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.updateScenarioItem(itemId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('scenarios/items/:itemId')
-    async removeScenarioItem(@Param('itemId') itemId: string) {
-        return this.proposalsService.removeScenarioItem(itemId);
+    async removeScenarioItem(@Param('itemId') itemId: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.removeScenarioItem(itemId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('scenarios/:scenarioId/apply-margin')
-    async applyMarginToScenario(@Param('scenarioId') id: string, @Body() data: ApplyMarginDto) {
-        return this.proposalsService.applyMarginToEntireScenario(id, data.marginPct);
+    async applyMarginToScenario(@Param('scenarioId') id: string, @Body() data: ApplyMarginDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.applyMarginToEntireScenario(id, data.marginPct, req.user);
     }
 
     // --- ENDPOINTS DE PÁGINAS ---
 
     @UseGuards(JwtAuthGuard)
     @Get(':id/pages')
-    async getPages(@Param('id') id: string) {
-        return this.proposalsService.getPagesByProposalId(id);
+    async getPages(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.getPagesByProposalId(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/pages/initialize')
-    async initializePages(@Param('id') id: string) {
-        return this.proposalsService.initializeDefaultPages(id);
+    async initializePages(@Param('id') id: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.initializeDefaultPages(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/pages')
-    async createPage(@Param('id') id: string, @Body() data: CreatePageDto) {
-        return this.proposalsService.createCustomPage(id, data);
+    async createPage(@Param('id') id: string, @Body() data: CreatePageDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.createCustomPage(id, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('pages/:pageId')
-    async updatePage(@Param('pageId') pageId: string, @Body() data: UpdatePageDto) {
-        return this.proposalsService.updatePage(pageId, data);
+    async updatePage(@Param('pageId') pageId: string, @Body() data: UpdatePageDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.updatePage(pageId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('pages/:pageId')
-    async deletePage(@Param('pageId') pageId: string) {
-        return this.proposalsService.deletePage(pageId);
+    async deletePage(@Param('pageId') pageId: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.deletePage(pageId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch(':id/pages/reorder')
-    async reorderPages(@Param('id') id: string, @Body() data: ReorderPagesDto) {
-        return this.proposalsService.reorderPages(id, data);
+    async reorderPages(@Param('id') id: string, @Body() data: ReorderPagesDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.reorderPages(id, data, req.user);
     }
 
     // --- ENDPOINTS DE BLOQUES ---
 
     @UseGuards(JwtAuthGuard)
     @Post('pages/:pageId/blocks')
-    async createBlock(@Param('pageId') pageId: string, @Body() data: CreateBlockDto) {
-        return this.proposalsService.createBlock(pageId, data);
+    async createBlock(@Param('pageId') pageId: string, @Body() data: CreateBlockDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.createBlock(pageId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('pages/blocks/:blockId')
-    async updateBlock(@Param('blockId') blockId: string, @Body() data: UpdateBlockDto) {
-        return this.proposalsService.updateBlock(blockId, data);
+    async updateBlock(@Param('blockId') blockId: string, @Body() data: UpdateBlockDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.updateBlock(blockId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('pages/blocks/:blockId')
-    async deleteBlock(@Param('blockId') blockId: string) {
-        return this.proposalsService.deleteBlock(blockId);
+    async deleteBlock(@Param('blockId') blockId: string, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.deleteBlock(blockId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('pages/:pageId/blocks/reorder')
-    async reorderBlocks(@Param('pageId') pageId: string, @Body() data: ReorderBlocksDto) {
-        return this.proposalsService.reorderBlocks(pageId, data);
+    async reorderBlocks(@Param('pageId') pageId: string, @Body() data: ReorderBlocksDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.proposalsService.reorderBlocks(pageId, data, req.user);
     }
 
     // --- UPLOAD DE IMÁGENES ---

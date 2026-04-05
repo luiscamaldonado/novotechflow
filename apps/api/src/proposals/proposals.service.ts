@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
@@ -27,6 +27,41 @@ export class ProposalsService {
   private readonly logger = new Logger(ProposalsService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Verifica que el usuario tenga acceso a la propuesta.
+   * ADMIN accede a todas; COMMERCIAL solo a las propias.
+   */
+  private async verifyProposalOwnership(proposalId: string, user: AuthenticatedUser) {
+    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!proposal) throw new NotFoundException('Propuesta no encontrada.');
+    if (user.role !== 'ADMIN' && proposal.userId !== user.id) {
+      throw new ForbiddenException('No tienes acceso a esta propuesta.');
+    }
+    return proposal;
+  }
+
+  /**
+   * Verifica ownership a través de un escenario.
+   * Busca el scenario → obtiene proposalId → verifica ownership.
+   */
+  private async verifyScenarioOwnership(scenarioId: string, user: AuthenticatedUser) {
+    const scenario = await this.prisma.scenario.findUnique({ where: { id: scenarioId } });
+    if (!scenario) throw new NotFoundException('Escenario no encontrado.');
+    await this.verifyProposalOwnership(scenario.proposalId, user);
+    return scenario;
+  }
+
+  /**
+   * Verifica ownership a través de una página.
+   * Busca la page → obtiene proposalId → verifica ownership.
+   */
+  private async verifyPageOwnership(pageId: string, user: AuthenticatedUser) {
+    const page = await this.prisma.proposalPage.findUnique({ where: { id: pageId } });
+    if (!page) throw new NotFoundException('Página no encontrada.');
+    await this.verifyProposalOwnership(page.proposalId, user);
+    return page;
+  }
 
   /**
    * Busca propuestas recientes (último año) que coincidan parcial o totalmente 
@@ -167,16 +202,14 @@ export class ProposalsService {
   /**
    * Recupera una propuesta con sus ítems asociados para edición.
    */
-  async getProposalById(id: string) {
-    const proposal = await this.prisma.proposal.findUnique({
+  async getProposalById(id: string, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(id, user);
+    return this.prisma.proposal.findUnique({
       where: { id },
       include: {
         proposalItems: { orderBy: { sortOrder: 'asc' } }
       }
     });
-
-    if (!proposal) throw new NotFoundException('Propuesta no encontrada.');
-    return proposal;
   }
 
   /**
@@ -185,7 +218,8 @@ export class ProposalsService {
    * @param {string} id - UUID de la propuesta.
    * @param {any} data - Nuevos datos (asunto, fechas, etc).
    */
-  async updateProposal(id: string, data: UpdateProposalDto) {
+  async updateProposal(id: string, data: UpdateProposalDto, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(id, user);
     return this.prisma.proposal.update({
       where: { id },
       data: {
@@ -205,7 +239,8 @@ export class ProposalsService {
    * Añade un nuevo ítem (producto/servicio) a la propuesta.
    * Gestiona el correlativo de orden (sortOrder) automáticamente.
    */
-  async addProposalItem(proposalId: string, data: CreateProposalItemDto) {
+  async addProposalItem(proposalId: string, data: CreateProposalItemDto, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(proposalId, user);
     const aggregate = await this.prisma.proposalItem.aggregate({
       where: { proposalId },
       _max: { sortOrder: true }
@@ -236,7 +271,10 @@ export class ProposalsService {
   /**
    * Elimina un ítem específico de una propuesta.
    */
-  async removeProposalItem(itemId: string) {
+  async removeProposalItem(itemId: string, user: AuthenticatedUser) {
+    const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
+    if (!item) throw new NotFoundException('Ítem no encontrado.');
+    await this.verifyProposalOwnership(item.proposalId, user);
     return this.prisma.proposalItem.delete({
       where: { id: itemId }
     });
@@ -245,7 +283,10 @@ export class ProposalsService {
   /**
    * Actualiza un ítem específico de una propuesta.
    */
-  async updateProposalItem(itemId: string, data: UpdateProposalItemDto) {
+  async updateProposalItem(itemId: string, data: UpdateProposalItemDto, user: AuthenticatedUser) {
+    const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
+    if (!item) throw new NotFoundException('Ítem no encontrado.');
+    await this.verifyProposalOwnership(item.proposalId, user);
     return this.prisma.proposalItem.update({
       where: { id: itemId },
       data: {
@@ -300,7 +341,8 @@ export class ProposalsService {
    * NEW_VERSION: incrementa la versión (COT-LM0001-1 → COT-LM0001-2)
    * NEW_PROPOSAL: genera nuevo código secuencial (COT-LM0002-1)
    */
-  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') {
+  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(id, user);
     const original = await this.prisma.proposal.findUnique({
       where: { id },
       include: {
@@ -426,7 +468,8 @@ export class ProposalsService {
    * Elimina una propuesta completa y sus dependencias.
    * Implementa limpieza manual de ítems previa a la eliminación de la cabecera.
    */
-  async deleteProposal(id: string) {
+  async deleteProposal(id: string, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(id, user);
     // Delete page blocks first (they reference pages)
     await this.prisma.proposalPageBlock.deleteMany({
       where: { page: { proposalId: id } }
@@ -539,7 +582,8 @@ export class ProposalsService {
   /**
    * Recupera todos los escenarios para una propuesta con sus ítems asociados.
    */
-  async getScenariosByProposalId(proposalId: string) {
+  async getScenariosByProposalId(proposalId: string, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(proposalId, user);
     return this.prisma.scenario.findMany({
       where: { proposalId },
       include: {
@@ -560,7 +604,8 @@ export class ProposalsService {
   /**
    * Crea un nuevo escenario para una propuesta.
    */
-  async createScenario(proposalId: string, data: CreateScenarioDto) {
+  async createScenario(proposalId: string, data: CreateScenarioDto, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(proposalId, user);
     const aggregate = await this.prisma.scenario.aggregate({
       where: { proposalId },
       _max: { sortOrder: true }
@@ -582,7 +627,8 @@ export class ProposalsService {
   /**
    * Actualiza un escenario existente.
    */
-  async updateScenario(id: string, data: UpdateScenarioDto) {
+  async updateScenario(id: string, data: UpdateScenarioDto, user: AuthenticatedUser) {
+    await this.verifyScenarioOwnership(id, user);
     return this.prisma.scenario.update({
       where: { id },
       data: {
@@ -596,7 +642,8 @@ export class ProposalsService {
   /**
    * Elimina un escenario y sus items vinculados.
    */
-  async deleteScenario(id: string) {
+  async deleteScenario(id: string, user: AuthenticatedUser) {
+    await this.verifyScenarioOwnership(id, user);
     await this.prisma.scenarioItem.deleteMany({ where: { scenarioId: id } });
     return this.prisma.scenario.delete({ where: { id } });
   }
@@ -604,7 +651,8 @@ export class ProposalsService {
   /**
    * Clona un escenario existente con todos sus ítems y sub-ítems.
    */
-  async cloneScenario(scenarioId: string) {
+  async cloneScenario(scenarioId: string, user: AuthenticatedUser) {
+    await this.verifyScenarioOwnership(scenarioId, user);
     const original = await this.prisma.scenario.findUnique({
       where: { id: scenarioId },
       include: {
@@ -683,7 +731,8 @@ export class ProposalsService {
   /**
    * Vincula un item de propuesta a un escenario.
    */
-  async addScenarioItem(scenarioId: string, data: AddScenarioItemDto) {
+  async addScenarioItem(scenarioId: string, data: AddScenarioItemDto, user: AuthenticatedUser) {
+    await this.verifyScenarioOwnership(scenarioId, user);
     return this.prisma.scenarioItem.create({
       data: {
         scenarioId,
@@ -702,7 +751,10 @@ export class ProposalsService {
   /**
    * Actualiza un ítem dentro de un escenario.
    */
-  async updateScenarioItem(id: string, data: UpdateScenarioItemDto) {
+  async updateScenarioItem(id: string, data: UpdateScenarioItemDto, user: AuthenticatedUser) {
+    const scenarioItem = await this.prisma.scenarioItem.findUnique({ where: { id } });
+    if (!scenarioItem) throw new NotFoundException('Ítem de escenario no encontrado.');
+    await this.verifyScenarioOwnership(scenarioItem.scenarioId, user);
     return this.prisma.scenarioItem.update({
       where: { id },
       data: {
@@ -716,7 +768,10 @@ export class ProposalsService {
   /**
    * Elimina un ítem específico de un escenario.
    */
-  async removeScenarioItem(id: string) {
+  async removeScenarioItem(id: string, user: AuthenticatedUser) {
+    const scenarioItem = await this.prisma.scenarioItem.findUnique({ where: { id } });
+    if (!scenarioItem) throw new NotFoundException('Ítem de escenario no encontrado.');
+    await this.verifyScenarioOwnership(scenarioItem.scenarioId, user);
     // Cascade: delete children first, then the item itself
     await this.prisma.scenarioItem.deleteMany({ where: { parentId: id } });
     return this.prisma.scenarioItem.delete({ where: { id } });
@@ -726,7 +781,8 @@ export class ProposalsService {
    * Aplica un margen global a todos los ítems de un escenario específico.
    * Esto sobreescribe cualquier margen individual previo.
    */
-  async applyMarginToEntireScenario(scenarioId: string, marginPct: number) {
+  async applyMarginToEntireScenario(scenarioId: string, marginPct: number, user: AuthenticatedUser) {
+    await this.verifyScenarioOwnership(scenarioId, user);
     return this.prisma.scenarioItem.updateMany({
       where: { scenarioId },
       data: {
@@ -743,7 +799,8 @@ export class ProposalsService {
    * Si no hay plantillas, usa fallback hardcodeado mínimo.
    * Agrega la firma del comercial a la página de presentación.
    */
-  async initializeDefaultPages(proposalId: string) {
+  async initializeDefaultPages(proposalId: string, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(proposalId, user);
     // Check for ANY existing pages to prevent re-initialization
     const existingCount = await this.prisma.proposalPage.count({
       where: { proposalId },
@@ -839,7 +896,8 @@ export class ProposalsService {
   /**
    * Retorna todas las páginas con sus bloques para una propuesta.
    */
-  async getPagesByProposalId(proposalId: string) {
+  async getPagesByProposalId(proposalId: string, user?: AuthenticatedUser) {
+    if (user) await this.verifyProposalOwnership(proposalId, user);
     return this.prisma.proposalPage.findMany({
       where: { proposalId },
       include: { blocks: { orderBy: { sortOrder: 'asc' } } },
@@ -850,7 +908,8 @@ export class ProposalsService {
   /**
    * Crea una página personalizada.
    */
-  async createCustomPage(proposalId: string, data: CreatePageDto) {
+  async createCustomPage(proposalId: string, data: CreatePageDto, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(proposalId, user);
     // Insert before TERMS (sortOrder 1000) but after everything else
     const aggregate = await this.prisma.proposalPage.aggregate({
       where: { proposalId, pageType: { not: 'TERMS' } },
@@ -873,7 +932,8 @@ export class ProposalsService {
   /**
    * Actualiza una página (título o variables).
    */
-  async updatePage(pageId: string, data: UpdatePageDto) {
+  async updatePage(pageId: string, data: UpdatePageDto, user: AuthenticatedUser) {
+    await this.verifyPageOwnership(pageId, user);
     return this.prisma.proposalPage.update({
       where: { id: pageId },
       data: {
@@ -887,9 +947,8 @@ export class ProposalsService {
   /**
    * Elimina una página (solo si no es predeterminada).
    */
-  async deletePage(pageId: string) {
-    const page = await this.prisma.proposalPage.findUnique({ where: { id: pageId } });
-    if (!page) throw new NotFoundException('Página no encontrada.');
+  async deletePage(pageId: string, user: AuthenticatedUser) {
+    const page = await this.verifyPageOwnership(pageId, user);
     if (page.isLocked) throw new Error('No se puede eliminar una página predeterminada.');
 
     await this.prisma.proposalPageBlock.deleteMany({ where: { pageId } });
@@ -899,7 +958,8 @@ export class ProposalsService {
   /**
    * Reordena las páginas respetando las posiciones fijas de predeterminadas.
    */
-  async reorderPages(proposalId: string, data: ReorderPagesDto) {
+  async reorderPages(proposalId: string, data: ReorderPagesDto, user: AuthenticatedUser) {
+    await this.verifyProposalOwnership(proposalId, user);
     const updates = data.pageIds.map((id, index) =>
       this.prisma.proposalPage.update({
         where: { id },
@@ -913,7 +973,8 @@ export class ProposalsService {
   /**
    * Crea un bloque dentro de una página.
    */
-  async createBlock(pageId: string, data: CreateBlockDto) {
+  async createBlock(pageId: string, data: CreateBlockDto, user: AuthenticatedUser) {
+    await this.verifyPageOwnership(pageId, user);
     const aggregate = await this.prisma.proposalPageBlock.aggregate({
       where: { pageId },
       _max: { sortOrder: true },
@@ -933,7 +994,10 @@ export class ProposalsService {
   /**
    * Actualiza el contenido de un bloque.
    */
-  async updateBlock(blockId: string, data: UpdateBlockDto) {
+  async updateBlock(blockId: string, data: UpdateBlockDto, user: AuthenticatedUser) {
+    const block = await this.prisma.proposalPageBlock.findUnique({ where: { id: blockId } });
+    if (!block) throw new NotFoundException('Bloque no encontrado.');
+    await this.verifyPageOwnership(block.pageId, user);
     return this.prisma.proposalPageBlock.update({
       where: { id: blockId },
       data: { content: data.content as object | undefined },
@@ -943,14 +1007,18 @@ export class ProposalsService {
   /**
    * Elimina un bloque.
    */
-  async deleteBlock(blockId: string) {
+  async deleteBlock(blockId: string, user: AuthenticatedUser) {
+    const block = await this.prisma.proposalPageBlock.findUnique({ where: { id: blockId } });
+    if (!block) throw new NotFoundException('Bloque no encontrado.');
+    await this.verifyPageOwnership(block.pageId, user);
     return this.prisma.proposalPageBlock.delete({ where: { id: blockId } });
   }
 
   /**
    * Reordena los bloques dentro de una página.
    */
-  async reorderBlocks(pageId: string, data: ReorderBlocksDto) {
+  async reorderBlocks(pageId: string, data: ReorderBlocksDto, user: AuthenticatedUser) {
+    await this.verifyPageOwnership(pageId, user);
     const updates = data.blockIds.map((id, index) =>
       this.prisma.proposalPageBlock.update({
         where: { id },

@@ -24,11 +24,10 @@ export class UsersService {
                 nomenclature: true,
                 signatureUrl: true,
                 isActive: true,
-                passwordHash: true,
                 createdAt: true,
                 updatedAt: true,
             },
-        }) as Promise<User | null>;
+        }) as unknown as Promise<User | null>;
     }
 
     async createUser(data: Prisma.UserCreateInput): Promise<User> {

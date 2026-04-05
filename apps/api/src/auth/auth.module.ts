@@ -11,7 +11,10 @@ import { JwtStrategy } from './jwt.strategy';
     UsersModule,
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-novotechflow-key-change-me',
+      secret: (() => {
+        if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET env var is required');
+        return process.env.JWT_SECRET;
+      })(),
       signOptions: { expiresIn: '12h' },
     }),
   ],
