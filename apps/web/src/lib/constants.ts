@@ -141,3 +141,18 @@ export const ACQUISITION_CONFIG: Record<string, { label: string; bg: string; tex
 export function formatCOP(value: number): string {
     return '$' + value.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
+
+// ── Proposal Calculations constants ──────────────────────────
+
+/** Acquisition mode for a scenario (Venta vs DaaS). */
+export type AcquisitionMode = 'VENTA' | 'DAAS_12' | 'DAAS_24' | 'DAAS_36' | 'DAAS_48' | 'DAAS_60';
+
+/** Dropdown options for acquisition mode selector. */
+export const ACQUISITION_OPTIONS: { value: AcquisitionMode; label: string }[] = [
+    { value: 'VENTA', label: 'Venta' },
+    { value: 'DAAS_12', label: 'DaaS 12 Meses' },
+    { value: 'DAAS_24', label: 'DaaS 24 Meses' },
+    { value: 'DAAS_36', label: 'DaaS 36 Meses' },
+    { value: 'DAAS_48', label: 'DaaS 48 Meses' },
+    { value: 'DAAS_60', label: 'DaaS 60 Meses' },
+];
