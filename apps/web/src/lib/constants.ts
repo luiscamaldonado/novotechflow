@@ -3,6 +3,12 @@
 // Centralizan magic numbers y strings en un solo lugar.
 // ──────────────────────────────────────────────────────────
 
+import {
+    FileText, FileSignature, Building2, ListOrdered,
+    Cpu, DollarSign,
+    Image as ImageIcon,
+} from 'lucide-react';
+
 /** Tasa de IVA colombiano (19%). */
 export const IVA_RATE = 0.19;
 
@@ -74,3 +80,33 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, { label: st
         unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
     },
 } as const;
+
+// ── Proposal Document Builder constants ──────────────────────
+
+/** Page type display labels */
+export const PAGE_TYPE_LABELS: Record<string, string> = {
+    COVER: 'Portada',
+    PRESENTATION: 'Carta de Presentación',
+    COMPANY_INFO: 'Info. General',
+    INDEX: 'Índice',
+    TECH_SPEC: 'Propuesta Técnica',
+    ECONOMIC: 'Propuesta Económica',
+    TERMS: 'Términos y Condiciones',
+    CUSTOM: 'Página Personalizada',
+};
+
+/** Page type icons & colors */
+export const PAGE_TYPE_STYLES: Record<string, { bg: string; text: string; border: string; icon: typeof FileText }> = {
+    COVER: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', icon: ImageIcon },
+    PRESENTATION: { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200', icon: FileSignature },
+    COMPANY_INFO: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', icon: Building2 },
+    INDEX: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200', icon: ListOrdered },
+    TECH_SPEC: { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200', icon: Cpu },
+    ECONOMIC: { bg: 'bg-teal-50', text: 'text-teal-600', border: 'border-teal-200', icon: DollarSign },
+    TERMS: { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200', icon: FileText },
+    CUSTOM: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200', icon: FileText },
+};
+
+/** Virtual section IDs for the generated sections */
+export const VIRTUAL_TECH_SPEC_ID = '__virtual_tech_spec__';
+export const VIRTUAL_ECONOMIC_ID = '__virtual_economic__';
