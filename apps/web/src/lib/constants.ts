@@ -8,6 +8,7 @@ import {
     Cpu, DollarSign,
     Image as ImageIcon,
 } from 'lucide-react';
+import type { ProposalStatus } from './types';
 
 /** Tasa de IVA colombiano (19%). */
 export const IVA_RATE = 0.19;
@@ -110,3 +111,33 @@ export const PAGE_TYPE_STYLES: Record<string, { bg: string; text: string; border
 /** Virtual section IDs for the generated sections */
 export const VIRTUAL_TECH_SPEC_ID = '__virtual_tech_spec__';
 export const VIRTUAL_ECONOMIC_ID = '__virtual_economic__';
+
+// ── Dashboard constants ──────────────────────────────────────
+
+
+/** Status badge configuration for Dashboard rows. */
+export const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: string; border: string }> = {
+    ELABORACION:        { label: 'Elaboración',    bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200' },
+    PROPUESTA:          { label: 'Propuesta',      bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200' },
+    GANADA:             { label: 'Ganada',          bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+    PERDIDA:            { label: 'Perdida',         bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200' },
+    PENDIENTE_FACTURAR: { label: 'Pend. Facturar', bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200' },
+    FACTURADA:          { label: 'Facturada',       bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200' },
+};
+
+/** All proposal statuses in display order. */
+export const ALL_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA'];
+
+/** Statuses valid for billing projections. */
+export const PROJECTION_STATUSES: ProposalStatus[] = ['PENDIENTE_FACTURAR', 'FACTURADA'];
+
+/** Acquisition type badge configuration. */
+export const ACQUISITION_CONFIG: Record<string, { label: string; bg: string; text: string; border: string }> = {
+    VENTA: { label: 'Venta', bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200' },
+    DAAS:  { label: 'DaaS',  bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+};
+
+/** Format a number as Colombian Pesos (COP). */
+export function formatCOP(value: number): string {
+    return '$' + value.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
