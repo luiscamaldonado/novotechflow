@@ -3,6 +3,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { ProposalsService } from './proposals.service';
+import { ScenariosService } from './scenarios.service';
+import { PagesService } from './pages.service';
+import { TrmService } from './trm.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
@@ -33,28 +36,20 @@ import {
  *
  * @route /proposals
  */
-/** TTL del cache de TRM en milisegundos (5 minutos). */
-const TRM_CACHE_TTL_MS = 5 * 60 * 1000;
-
 @Controller('proposals')
 export class ProposalsController {
-    /** Cache en memoria para evitar scraping repetitivo de TRM. */
-    private trmCache: { data: unknown; expiresAt: number } | null = null;
-
-    constructor(private readonly proposalsService: ProposalsService) {}
+    constructor(
+        private readonly proposalsService: ProposalsService,
+        private readonly scenariosService: ScenariosService,
+        private readonly pagesService: PagesService,
+        private readonly trmService: TrmService,
+    ) {}
 
     @SkipThrottle()
     @UseGuards(JwtAuthGuard)
     @Get('trm-extra')
     async getExtraTrm() {
-        const now = Date.now();
-        if (this.trmCache && now < this.trmCache.expiresAt) {
-            return this.trmCache.data;
-        }
-
-        const data = await this.proposalsService.getExtraTrmValues();
-        this.trmCache = { data, expiresAt: now + TRM_CACHE_TTL_MS };
-        return data;
+        return this.trmService.getExtraTrmValues();
     }
 
     @UseGuards(JwtAuthGuard)
@@ -117,58 +112,60 @@ export class ProposalsController {
         return this.proposalsService.cloneProposal(id, req.user.id, data.cloneType, req.user);
     }
 
+    // --- ENDPOINTS DE ESCENARIOS ---
+
     @UseGuards(JwtAuthGuard)
     @Get(':id/scenarios')
     async getScenarios(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.getScenariosByProposalId(id, req.user);
+        return this.scenariosService.getScenariosByProposalId(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/scenarios')
     async createScenario(@Param('id', ParseUUIDPipe) id: string, @Body() data: CreateScenarioDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.createScenario(id, data, req.user);
+        return this.scenariosService.createScenario(id, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('scenarios/:scenarioId')
     async updateScenario(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Body() data: UpdateScenarioDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.updateScenario(scenarioId, data, req.user);
+        return this.scenariosService.updateScenario(scenarioId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('scenarios/:scenarioId')
     async deleteScenario(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.deleteScenario(scenarioId, req.user);
+        return this.scenariosService.deleteScenario(scenarioId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post('scenarios/:scenarioId/clone')
     async cloneScenario(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.cloneScenario(scenarioId, req.user);
+        return this.scenariosService.cloneScenario(scenarioId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post('scenarios/:scenarioId/items')
     async addScenarioItem(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Body() data: AddScenarioItemDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.addScenarioItem(scenarioId, data, req.user);
+        return this.scenariosService.addScenarioItem(scenarioId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('scenarios/items/:itemId')
     async updateScenarioItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Body() data: UpdateScenarioItemDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.updateScenarioItem(itemId, data, req.user);
+        return this.scenariosService.updateScenarioItem(itemId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('scenarios/items/:itemId')
     async removeScenarioItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.removeScenarioItem(itemId, req.user);
+        return this.scenariosService.removeScenarioItem(itemId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('scenarios/:scenarioId/apply-margin')
     async applyMarginToScenario(@Param('scenarioId', ParseUUIDPipe) id: string, @Body() data: ApplyMarginDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.applyMarginToEntireScenario(id, data.marginPct, req.user);
+        return this.scenariosService.applyMarginToEntireScenario(id, data.marginPct, req.user);
     }
 
     // --- ENDPOINTS DE PÁGINAS ---
@@ -176,37 +173,37 @@ export class ProposalsController {
     @UseGuards(JwtAuthGuard)
     @Get(':id/pages')
     async getPages(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.getPagesByProposalId(id, req.user);
+        return this.pagesService.getPagesByProposalId(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/pages/initialize')
     async initializePages(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.initializeDefaultPages(id, req.user);
+        return this.pagesService.initializeDefaultPages(id, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Post(':id/pages')
     async createPage(@Param('id', ParseUUIDPipe) id: string, @Body() data: CreatePageDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.createCustomPage(id, data, req.user);
+        return this.pagesService.createCustomPage(id, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('pages/:pageId')
     async updatePage(@Param('pageId', ParseUUIDPipe) pageId: string, @Body() data: UpdatePageDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.updatePage(pageId, data, req.user);
+        return this.pagesService.updatePage(pageId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('pages/:pageId')
     async deletePage(@Param('pageId', ParseUUIDPipe) pageId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.deletePage(pageId, req.user);
+        return this.pagesService.deletePage(pageId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch(':id/pages/reorder')
     async reorderPages(@Param('id', ParseUUIDPipe) id: string, @Body() data: ReorderPagesDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.reorderPages(id, data, req.user);
+        return this.pagesService.reorderPages(id, data, req.user);
     }
 
     // --- ENDPOINTS DE BLOQUES ---
@@ -214,25 +211,25 @@ export class ProposalsController {
     @UseGuards(JwtAuthGuard)
     @Post('pages/:pageId/blocks')
     async createBlock(@Param('pageId', ParseUUIDPipe) pageId: string, @Body() data: CreateBlockDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.createBlock(pageId, data, req.user);
+        return this.pagesService.createBlock(pageId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('pages/blocks/:blockId')
     async updateBlock(@Param('blockId', ParseUUIDPipe) blockId: string, @Body() data: UpdateBlockDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.updateBlock(blockId, data, req.user);
+        return this.pagesService.updateBlock(blockId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Delete('pages/blocks/:blockId')
     async deleteBlock(@Param('blockId', ParseUUIDPipe) blockId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.deleteBlock(blockId, req.user);
+        return this.pagesService.deleteBlock(blockId, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
     @Patch('pages/:pageId/blocks/reorder')
     async reorderBlocks(@Param('pageId', ParseUUIDPipe) pageId: string, @Body() data: ReorderBlocksDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.reorderBlocks(pageId, data, req.user);
+        return this.pagesService.reorderBlocks(pageId, data, req.user);
     }
 
     // --- UPLOAD DE IMÁGENES ---
