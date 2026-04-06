@@ -67,12 +67,20 @@ export function useProposalBuilder(proposalId: string | undefined) {
         try {
             // Normalizar tipos: los inputs HTML siempre devuelven strings,
             // pero el backend DTO espera números.
+            // Only send fields accepted by CreateProposalItemDto / UpdateProposalItemDto
             const payload = {
-                ...itemForm,
+                itemType: itemForm.itemType,
+                name: itemForm.name,
+                description: itemForm.description,
+                brand: itemForm.brand,
+                partNumber: itemForm.partNumber,
                 quantity: Number(itemForm.quantity) || 1,
                 unitCost: Number(itemForm.unitCost) || 0,
                 marginPct: Number(itemForm.marginPct) || 0,
                 unitPrice: Number(itemForm.unitPrice) || 0,
+                isTaxable: itemForm.isTaxable,
+                technicalSpecs: itemForm.technicalSpecs,
+                internalCosts: itemForm.internalCosts,
             };
 
             if (editingItemId) {
@@ -109,7 +117,17 @@ export function useProposalBuilder(proposalId: string | undefined) {
         if (!proposal) return;
         setSaving(true);
         try {
-            await api.patch(`/proposals/${proposalId}`, data);
+            // Only send fields accepted by UpdateProposalDto
+            const allowed = [
+                'subject', 'issueDate', 'validityDays', 'validityDate',
+                'status', 'closeDate', 'billingDate', 'acquisitionType',
+            ];
+            const cleanData: Record<string, unknown> = {};
+            const anyData = data as Record<string, unknown>;
+            for (const key of allowed) {
+                if (key in anyData) cleanData[key] = anyData[key];
+            }
+            await api.patch(`/proposals/${proposalId}`, cleanData);
         } catch (error) {
             console.error(error);
             alert('Error al actualizar la propuesta.');

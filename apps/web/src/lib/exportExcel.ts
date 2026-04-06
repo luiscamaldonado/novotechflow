@@ -1,7 +1,8 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import type { Scenario, ScenarioItem, ProposalCalcItem } from '../hooks/useScenarios';
+import type { Scenario, ProposalCalcItem } from '../hooks/useScenarios';
 import { ITEM_TYPE_LABELS } from './constants';
+import { calculateItemDisplayValues } from './pricing-engine';
 
 // ── Types ──────────────────────────────────────────────
 interface ExportOptions {
@@ -133,22 +134,9 @@ export async function exportToExcel(opts: ExportOptions) {
             };
         });
 
-        // ── Precompute dilution data ──
-        const allItems = scenario.scenarioItems;
-        const dilutedItems = allItems.filter(i => i.isDilpidate);
-        const normalItems = allItems.filter(i => !i.isDilpidate);
-
-        let totalDilutedCost = 0;
-        dilutedItems.forEach(di => {
-            totalDilutedCost += Number(di.item.unitCost) * di.quantity;
-        });
-
-        let totalNormalSubtotal = 0;
-        normalItems.forEach(ni => {
-            totalNormalSubtotal += Number(ni.item.unitCost) * ni.quantity;
-        });
-
         // ── Data rows (only visible/normal items) ──
+        const normalItems = scenario.scenarioItems.filter(i => !i.isDilpidate);
+
         normalItems
             .sort((a, b) => {
                 const aIdx = proposalItems.findIndex(pi => pi.id === a.itemId);
@@ -161,42 +149,14 @@ export async function exportToExcel(opts: ExportOptions) {
                 const globalItemIdx = proposalItems.findIndex(pi => pi.id === si.itemId);
                 const displayIdx = globalItemIdx !== -1 ? globalItemIdx + 1 : idx + 1;
 
-                // ── Cost calculations (matching Ventana de Cálculos) ──
-                const cost = Number(item.unitCost);
-                const flete = Number(item.internalCosts?.fletePct || 0);
-                const parentLandedCost = cost * (1 + flete / 100);
-
-                // Children costs
-                let childrenCostPerUnit = 0;
-                const children = (si as ScenarioItem & { children?: ScenarioItem[] }).children || [];
-                children.forEach(child => {
-                    const cCost = Number(child.item.unitCost);
-                    const cFlete = Number(child.item.internalCosts?.fletePct || 0);
-                    childrenCostPerUnit += cCost * (1 + cFlete / 100) * child.quantity;
-                });
-                const baseLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
-
-                // Dilution share
-                let effectiveLandedCost = baseLandedCost;
-                if (totalNormalSubtotal > 0 && totalDilutedCost > 0) {
-                    const itemWeight = (cost * si.quantity) / totalNormalSubtotal;
-                    const dilutionPerUnit = (itemWeight * totalDilutedCost) / si.quantity;
-                    effectiveLandedCost = baseLandedCost + dilutionPerUnit;
-                }
-
-                const margin = si.marginPctOverride !== undefined && si.marginPctOverride !== null
-                    ? Number(si.marginPctOverride)
-                    : Number(item.marginPct);
-                let unitPrice = 0;
-                if (margin < 100) {
-                    unitPrice = effectiveLandedCost / (1 - margin / 100);
-                }
+                // ── Delegate all cost calculations to pricing engine ──
+                const dv = calculateItemDisplayValues(si, scenario.scenarioItems);
 
                 const ivaPct = item.isTaxable ? 19 : 0;
                 const ivaMultiplier = 1 + ivaPct / 100;
-                const subtotalCost = effectiveLandedCost * si.quantity;
+                const subtotalCost = dv.effectiveLandedCost * si.quantity;
                 const totalCostConIva = subtotalCost * ivaMultiplier;
-                const subtotalVenta = unitPrice * si.quantity;
+                const subtotalVenta = dv.unitPrice * si.quantity;
                 const totalVentaConIva = subtotalVenta * ivaMultiplier;
 
                 // Source data from ITEMS_ARCHITECT
@@ -214,12 +174,12 @@ export async function exportToExcel(opts: ExportOptions) {
                     fabricanteField,
                     descriptionField,
                     si.quantity,
-                    effectiveLandedCost,
+                    dv.effectiveLandedCost,
                     `${ivaPct}%`,
                     subtotalCost,
                     totalCostConIva,
-                    `${margin.toFixed(2)}%`,
-                    unitPrice,
+                    `${dv.margin.toFixed(2)}%`,
+                    dv.unitPrice,
                     subtotalVenta,
                     totalVentaConIva,
                 ]);

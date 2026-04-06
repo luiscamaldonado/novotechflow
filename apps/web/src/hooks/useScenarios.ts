@@ -1,7 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
+import {
+    calculateScenarioTotals,
+    calculateParentLandedCost,
+    calculateChildrenCostPerUnit,
+    calculateBaseLandedCost,
+    calculateDilutionPerUnit,
+    calculateEffectiveLandedCost,
+    calculateTotalDilutedCost,
+    calculateTotalNormalSubtotal,
+    calculateMarginFromPrice,
+    type ScenarioTotals,
+} from '../lib/pricing-engine';
 
 // ── Tipos ────────────────────────────────────────────────────
+// ProposalCalcItem is kept here for backward-compat with consumers
+// that import it from this file (ItemPickerModal, ProposalCalculations, etc.)
 export interface ProposalCalcItem {
     id: string;
     name: string;
@@ -38,14 +52,8 @@ export interface Scenario {
     scenarioItems: ScenarioItem[];
 }
 
-export interface ScenarioTotals {
-    beforeVat: number;
-    nonTaxed: number;
-    subtotal: number;
-    vat: number;
-    total: number;
-    globalMarginPct: number;
-}
+// Re-export ScenarioTotals from pricing-engine for consumers
+export type { ScenarioTotals };
 
 // ── Hook ─────────────────────────────────────────────────────
 export function useScenarios(proposalId: string | undefined) {
@@ -361,19 +369,16 @@ export function useScenarios(proposalId: string | undefined) {
 
         const cost = Number(si.item.unitCost);
         const flete = Number(si.item.internalCosts?.fletePct || 0);
-        const parentLandedCost = cost * (1 + flete / 100);
+        const parentLanded = calculateParentLandedCost(cost, flete);
+        const childrenCost = calculateChildrenCostPerUnit(si.children || []);
+        const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
-        // Include children costs in landed cost for margin calculation
-        let childrenCostPerUnit = 0;
-        if (si.children && si.children.length > 0) {
-            si.children.forEach(child => {
-                const cCost = Number(child.item.unitCost);
-                const cFlete = Number(child.item.internalCosts?.fletePct || 0);
-                childrenCostPerUnit += cCost * (1 + cFlete / 100) * child.quantity;
-            });
-        }
-        const effectiveLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
-        const newMargin = ((val - effectiveLandedCost) / val) * 100;
+        // Include dilution in effective cost for accurate margin reverse-calc
+        const totalDilutedCost = calculateTotalDilutedCost(scenario.scenarioItems);
+        const totalNormalSub = calculateTotalNormalSubtotal(scenario.scenarioItems);
+        const dilution = calculateDilutionPerUnit(cost, si.quantity, totalNormalSub, totalDilutedCost);
+        const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
+        const newMargin = calculateMarginFromPrice(val, effectiveLanded);
 
         try {
             await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: newMargin });
@@ -406,84 +411,9 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
-    // ── Cálculos ─────────────────────────────────────────────
+    // ── Cálculos (delegated to pricing-engine) ────────────────
     const calculateTotals = (scenario: Scenario): ScenarioTotals => {
-        let beforeVat = 0;
-        let nonTaxed = 0;
-        let totalCost = 0;
-
-        // 1. Calculate total diluted cost: unitCost × quantity
-        let totalDilutedCost = 0;
-        const normalItems = scenario.scenarioItems.filter(si => !si.isDilpidate);
-        const dilutedItems = scenario.scenarioItems.filter(si => si.isDilpidate);
-
-        dilutedItems.forEach(si => {
-            totalDilutedCost += Number(si.item.unitCost) * si.quantity;
-        });
-
-        // 2. Calculate total non-diluted subtotal: Σ(unitCost × quantity) for weights
-        let totalNormalSubtotal = 0;
-        normalItems.forEach(si => {
-            totalNormalSubtotal += Number(si.item.unitCost) * si.quantity;
-        });
-
-        // 3. Process normal items: calculate weight, add proportional dilution, then apply margin
-        normalItems.forEach(si => {
-            const item = si.item;
-            const cost = Number(item.unitCost);
-            const flete = Number(item.internalCosts?.fletePct || 0);
-            const parentLandedCost = cost * (1 + flete / 100);
-
-            let childrenCostPerUnit = 0;
-            if (si.children && si.children.length > 0) {
-                si.children.forEach(child => {
-                    const childCost = Number(child.item.unitCost);
-                    const childFlete = Number(child.item.internalCosts?.fletePct || 0);
-                    childrenCostPerUnit += childCost * (1 + childFlete / 100) * child.quantity;
-                });
-            }
-
-            const baseLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
-
-            // Weight based on unitCost × quantity
-            const itemWeight = totalNormalSubtotal > 0
-                ? (cost * si.quantity) / totalNormalSubtotal
-                : 0;
-            // Dilution share per unit = (weight × totalDilutedCost) / quantity
-            const dilutionPerUnit = si.quantity > 0
-                ? (itemWeight * totalDilutedCost) / si.quantity
-                : 0;
-            // New effective cost = base landed cost + dilution per unit
-            const effectiveLandedCost = baseLandedCost + dilutionPerUnit;
-
-            const marginOverride = si.marginPctOverride;
-            const margin = marginOverride !== undefined && marginOverride !== null ? marginOverride : Number(item.marginPct);
-
-            let unitPrice = 0;
-            if (margin < 100) {
-                unitPrice = effectiveLandedCost / (1 - margin / 100);
-            }
-
-            const totalItem = unitPrice * si.quantity;
-            totalCost += effectiveLandedCost * si.quantity;
-
-            if (item.isTaxable) {
-                beforeVat += totalItem;
-            } else {
-                nonTaxed += totalItem;
-            }
-        });
-
-        // Diluted cost is already absorbed into normal items' effectiveLandedCost
-        // so no need to add it again here
-
-        const totalPrice = beforeVat + nonTaxed;
-        const globalMarginPct = totalPrice > 0 ? ((totalPrice - totalCost) / totalPrice) * 100 : 0;
-        const subtotal = beforeVat + nonTaxed;
-        const vat = beforeVat * 0.19;
-        const total = beforeVat + vat + nonTaxed;
-
-        return { beforeVat, nonTaxed, subtotal, vat, total, globalMarginPct };
+        return calculateScenarioTotals(scenario.scenarioItems);
     };
 
     const activeScenario = scenarios.find(s => s.id === activeScenarioId) ?? null;

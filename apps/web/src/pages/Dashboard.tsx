@@ -8,6 +8,7 @@ import {
 import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType } from '../lib/types';
+import { calculateScenarioTotals } from '../lib/pricing-engine';
 
 // ── Status configuration ──
 const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: string; border: string }> = {
@@ -22,44 +23,17 @@ const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: s
 const ALL_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA'];
 const PROJECTION_STATUSES: ProposalStatus[] = ['PENDIENTE_FACTURAR', 'FACTURADA'];
 
-// ── Utility: compute min-scenario subtotal ──
+// ── Utility: compute min-scenario subtotal (via pricing engine) ──
 function computeMinSubtotal(proposal: ProposalSummary): number | null {
     if (!proposal.scenarios || proposal.scenarios.length === 0) return null;
 
     let minSubtotal: number | null = null;
 
     for (const scenario of proposal.scenarios) {
-        let beforeVat = 0;
-        let nonTaxed = 0;
+        // Delegate to centralized engine (includes dilution, children, etc.)
+        const totals = calculateScenarioTotals(scenario.scenarioItems);
+        const subtotal = totals.subtotal;
 
-        for (const si of scenario.scenarioItems) {
-            const item = si.item;
-            const cost = Number(item.unitCost);
-            const flete = Number(item.internalCosts?.fletePct || 0);
-            const parentLanded = cost * (1 + flete / 100);
-
-            let childrenCost = 0;
-            if (si.children) {
-                for (const child of si.children) {
-                    const cCost = Number(child.item.unitCost);
-                    const cFlete = Number(child.item.internalCosts?.fletePct || 0);
-                    childrenCost += cCost * (1 + cFlete / 100) * child.quantity;
-                }
-            }
-
-            const effectiveLanded = parentLanded + (childrenCost / si.quantity);
-            const margin = si.marginPctOverride ?? Number(item.marginPct);
-            let unitPrice = 0;
-            if (margin < 100) {
-                unitPrice = effectiveLanded / (1 - margin / 100);
-            }
-
-            const total = unitPrice * si.quantity;
-            if (item.isTaxable) beforeVat += total;
-            else nonTaxed += total;
-        }
-
-        const subtotal = beforeVat + nonTaxed;
         if (minSubtotal === null || subtotal < minSubtotal) {
             minSubtotal = subtotal;
         }

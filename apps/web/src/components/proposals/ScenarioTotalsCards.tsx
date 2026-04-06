@@ -1,4 +1,4 @@
-import type { ScenarioTotals } from '../../hooks/useScenarios';
+import type { ScenarioTotals } from '../../lib/pricing-engine';
 
 interface ScenarioTotalsCardsProps {
     totals: ScenarioTotals;

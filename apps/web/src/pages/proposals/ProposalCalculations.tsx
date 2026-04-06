@@ -13,6 +13,7 @@ import ItemPickerModal from '../../components/proposals/ItemPickerModal';
 import ScenarioTotalsCards from '../../components/proposals/ScenarioTotalsCards';
 import { exportToExcel } from '../../lib/exportExcel';
 import { useAuthStore } from '../../store/authStore';
+import { calculateItemDisplayValues, calculateParentLandedCost, resolveMargin } from '../../lib/pricing-engine';
 
 export default function ProposalCalculations() {
     const { id } = useParams<{ id: string }>();
@@ -71,9 +72,7 @@ export default function ProposalCalculations() {
             // Switching TO DaaS → save current margins, then set all to 0
             const marginSnapshot: Record<string, number> = {};
             activeScenario.scenarioItems.forEach(si => {
-                const margin = si.marginPctOverride !== undefined && si.marginPctOverride !== null
-                    ? si.marginPctOverride
-                    : Number(si.item.marginPct);
+                const margin = resolveMargin(si.marginPctOverride, si.item.marginPct);
                 marginSnapshot[si.id!] = margin;
             });
             savedMarginsRef.current[activeScenarioId] = {
@@ -508,56 +507,15 @@ export default function ProposalCalculations() {
                                                         return 0;
                                                     })
                                                     .map((si, idx) => {
-                                                    // Precompute dilution distribution for the display
-                                                    const allItems = activeScenario.scenarioItems;
-                                                    const dilutedItems = allItems.filter(i => i.isDilpidate);
-                                                    const normalItems = allItems.filter(i => !i.isDilpidate);
-
-                                                    // Total diluted cost: unitCost × quantity
-                                                    let totalDilutedCost = 0;
-                                                    dilutedItems.forEach(di => {
-                                                        totalDilutedCost += Number(di.item.unitCost) * di.quantity;
-                                                    });
-
-                                                    // Total normal subtotal: Σ(unitCost × quantity) for weights
-                                                    let totalNormalSubtotal = 0;
-                                                    normalItems.forEach(ni => {
-                                                        totalNormalSubtotal += Number(ni.item.unitCost) * ni.quantity;
-                                                    });
+                                                    // Delegate all calculations to pricing engine
+                                                    const displayValues = calculateItemDisplayValues(si, activeScenario.scenarioItems);
+                                                    const { childrenCostPerUnit, margin, unitPrice } = displayValues;
 
                                                     const item = si.item;
                                                     const globalItemIdx = proposal?.proposalItems.findIndex((pi: ProposalCalcItem) => pi.id === si.itemId) ?? -1;
                                                     const displayIdx = globalItemIdx !== -1 ? globalItemIdx + 1 : idx + 1;
-                                                    
-                                                    const cost = Number(item.unitCost);
-                                                    const flete = Number(item.internalCosts?.fletePct || 0);
-                                                    const parentLandedCost = cost * (1 + flete / 100);
 
-                                                    // Calculate children costs
-                                                    let childrenCostPerUnit = 0;
                                                     const children = si.children || [];
-                                                    children.forEach(child => {
-                                                        const cCost = Number(child.item.unitCost);
-                                                        const cFlete = Number(child.item.internalCosts?.fletePct || 0);
-                                                        childrenCostPerUnit += cCost * (1 + cFlete / 100) * child.quantity;
-                                                    });
-                                                    const baseLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
-
-                                                    // For non-diluted items: weight-based proportional share of diluted cost
-                                                    let effectiveLandedCost = baseLandedCost;
-                                                    if (!si.isDilpidate && totalNormalSubtotal > 0 && totalDilutedCost > 0) {
-                                                        const cost = Number(item.unitCost);
-                                                        const itemWeight = (cost * si.quantity) / totalNormalSubtotal;
-                                                        const dilutionPerUnit = (itemWeight * totalDilutedCost) / si.quantity;
-                                                        effectiveLandedCost = baseLandedCost + dilutionPerUnit;
-                                                    }
-
-                                                    const margin = si.marginPctOverride !== undefined ? si.marginPctOverride : Number(item.marginPct);
-                                                    let unitPrice = 0;
-                                                    if (!si.isDilpidate && margin < 100) {
-                                                        unitPrice = effectiveLandedCost / (1 - margin / 100);
-                                                    }
-
                                                     const isExpanded = expandedItems.has(si.id!);
                                                     const childCount = children.length;
 
@@ -634,10 +592,9 @@ export default function ProposalCalculations() {
                                                                             type="text" 
                                                                             value={editingCell?.id === si.id && editingCell?.field === 'margin' 
                                                                                 ? editingCell.value 
-                                                                                : Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct).toFixed(2)}
+                                                                                : margin.toFixed(2)}
                                                                             onFocus={() => {
-                                                                                const val = Number((si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? si.marginPctOverride : item.marginPct);
-                                                                                setEditingCell({ id: si.id!, field: 'margin', value: val.toFixed(2) });
+                                                                                setEditingCell({ id: si.id!, field: 'margin', value: margin.toFixed(2) });
                                                                             }}
                                                                             onChange={(e) => setEditingCell({ id: si.id!, field: 'margin', value: e.target.value })}
                                                                             onBlur={(e) => {
@@ -733,9 +690,7 @@ export default function ProposalCalculations() {
                                                                                 children.map(child => {
                                                                                     const childGlobalIdx = proposal?.proposalItems.findIndex((pi: ProposalCalcItem) => pi.id === child.itemId) ?? -1;
                                                                                     const childDisplayIdx = childGlobalIdx !== -1 ? childGlobalIdx + 1 : '?';
-                                                                                    const cCost = Number(child.item.unitCost);
-                                                                                    const cFlete = Number(child.item.internalCosts?.fletePct || 0);
-                                                                                    const cLanded = cCost * (1 + cFlete / 100);
+                                                                                    const cLanded = calculateParentLandedCost(Number(child.item.unitCost), Number(child.item.internalCosts?.fletePct || 0));
                                                                                     return (
                                                                                         <div key={child.id} className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-violet-100 shadow-sm">
                                                                                             <div className="flex items-center space-x-3 flex-1 min-w-0">

@@ -145,9 +145,12 @@ export interface ProposalDetail {
 export interface ScenarioItem {
     id?: string;
     itemId: string;
+    parentId?: string | null;
     quantity: number;
-    marginPctOverride?: number;
+    marginPctOverride?: number | null;
+    isDilpidate?: boolean;
     item: ProposalItemFromApi;
+    children?: ScenarioItem[];
 }
 
 /** Escenario de cálculos financieros. */
