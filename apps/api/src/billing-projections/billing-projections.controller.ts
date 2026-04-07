@@ -1,8 +1,11 @@
 import { Controller, Get, Post, Body, Patch, Delete, Param, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { BillingProjectionsService, CreateBillingProjectionDto, UpdateBillingProjectionDto } from './billing-projections.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 
+@ApiTags('Billing Projections')
+@ApiBearerAuth()
 @Controller('billing-projections')
 export class BillingProjectionsController {
     constructor(private readonly service: BillingProjectionsService) {}

@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ClientsService, ISearchResponse } from './clients.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -9,6 +10,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
  *
  * @route /clients
  */
+@ApiTags('Clients')
+@ApiBearerAuth()
 @Controller('clients')
 @UseGuards(JwtAuthGuard)
 export class ClientsController {

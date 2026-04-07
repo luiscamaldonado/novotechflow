@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards, Query, Request, Param, Patch, Delete, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -36,6 +37,8 @@ import {
  *
  * @route /proposals
  */
+@ApiTags('Proposals')
+@ApiBearerAuth()
 @Controller('proposals')
 export class ProposalsController {
     constructor(

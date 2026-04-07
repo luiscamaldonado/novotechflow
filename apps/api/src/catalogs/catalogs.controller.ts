@@ -1,4 +1,5 @@
 import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { CatalogsService } from './catalogs.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -6,6 +7,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
  * @class CatalogsController
  * Controlador para acceder a los datos maestros del sistema.
  */
+@ApiTags('Catalogs')
+@ApiBearerAuth()
 @Controller('catalogs')
 @UseGuards(JwtAuthGuard)
 export class CatalogsController {

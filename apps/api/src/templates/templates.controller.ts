@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, UseGuards, Req, UseInterceptors, UploadedFile, ParseUUIDPipe,
 } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -19,6 +20,8 @@ import {
   UpdateTemplateBlockDto,
 } from './dto/templates.dto';
 
+@ApiTags('Templates')
+@ApiBearerAuth()
 @Controller('templates')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)

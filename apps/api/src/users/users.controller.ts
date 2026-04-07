@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards, Delete, Param, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -10,6 +11,8 @@ import { Role } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
 
+@ApiTags('Users')
+@ApiBearerAuth()
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
