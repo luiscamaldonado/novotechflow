@@ -142,6 +142,14 @@ export function formatCOP(value: number): string {
     return '$' + value.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/** Format a number as US Dollars (USD). */
+export function formatUSD(value: number): string {
+    return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** TRM public API endpoint (Colombian Central Bank rate). */
+export const TRM_API_URL = 'https://co.dolarapi.com/v1/trm';
+
 // ── Proposal Calculations constants ──────────────────────────
 
 /** Acquisition mode for a scenario (Venta vs DaaS). */

@@ -4,12 +4,18 @@ import {
     Copy, Search, Filter, X, Receipt,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { useDashboard } from '../hooks/useDashboard';
+import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
 import { useProjections } from '../hooks/useProjections';
-import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, formatCOP } from '../lib/constants';
+import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, formatCOP, formatUSD } from '../lib/constants';
 import type { ProposalStatus, AcquisitionType } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import ProjectionModal from './dashboard/ProjectionModal';
+
+/** Format a subtotal with its currency label (COP or USD). */
+function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
+    if (currency === 'USD') return `USD ${formatUSD(value)}`;
+    return `COP ${formatCOP(value)}`;
+}
 
 export default function Dashboard() {
     const navigate = useNavigate();
@@ -17,6 +23,7 @@ export default function Dashboard() {
 
     const {
         loading, filtered, billingCardsVenta, billingCardsDaas, cloning, setProjections,
+        trmRate, setTrmRate,
         showFilters, setShowFilters, searchTerm, setSearchTerm,
         statusFilters, subtotalMin, setSubtotalMin, subtotalMax, setSubtotalMax,
         hasActiveFilters,
@@ -54,6 +61,21 @@ export default function Dashboard() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    {/* TRM Input */}
+                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
+                        <label htmlFor="trm-input" className="text-[10px] font-bold uppercase tracking-wider text-gray-400 whitespace-nowrap">
+                            TRM (COP/USD)
+                        </label>
+                        <input
+                            id="trm-input"
+                            type="number"
+                            step="0.01"
+                            value={trmRate ?? ''}
+                            onChange={(e) => setTrmRate(e.target.value ? Number(e.target.value) : null)}
+                            className="w-[100px] text-sm font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1 text-right focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-300"
+                            placeholder="—"
+                        />
+                    </div>
                     <button
                         onClick={openNewProjectionModal}
                         className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-violet-600/25"
@@ -165,6 +187,7 @@ export default function Dashboard() {
                                 <th className="px-4 py-3 text-center">F. Cierre</th>
                                 <th className="px-4 py-3 text-center">Actualización</th>
                                 <th className="px-4 py-3 text-right">Subtotal Min.</th>
+                                <th className="px-4 py-3 text-right">USD Est.</th>
                                 <th className="px-4 py-3 text-center">Adquisición</th>
                                 <th className="px-4 py-3 text-center">Estado</th>
                                 <th className="px-4 py-3 text-center">Acciones</th>
@@ -173,12 +196,14 @@ export default function Dashboard() {
                         <tbody className="divide-y divide-gray-50">
                             {filtered.length === 0 ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'ADMIN' ? 9 : 8} className="px-6 py-16 text-center text-gray-400">
+                                    <td colSpan={user?.role === 'ADMIN' ? 10 : 9} className="px-6 py-16 text-center text-gray-400">
                                         No hay propuestas que coincidan con los filtros.
                                     </td>
                                 </tr>
                             ) : (
                                 filtered.map((row) => {
+                                    const usdEst = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate);
+
                                     if (row.isProjection) {
                                         // ── Projection Row ──
                                         const pr = row.originalProjection!;
@@ -209,7 +234,16 @@ export default function Dashboard() {
                                                     {new Date(row.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
                                                 </td>
                                                 <td className="px-4 py-4 text-right">
-                                                    <span className="font-mono font-black text-xs text-emerald-700">{formatCOP(Number(pr.subtotal))}</span>
+                                                    <span className="font-mono font-black text-xs text-emerald-700">
+                                                        {formatSubtotalWithCurrency(Number(pr.subtotal), row.minSubtotalCurrency)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-4 text-right">
+                                                    {usdEst !== null ? (
+                                                        <span className="font-mono font-black text-xs text-blue-700">USD {formatUSD(usdEst)}</span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-gray-300">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
                                                     <select
@@ -303,9 +337,18 @@ export default function Dashboard() {
                                             </td>
                                             <td className="px-4 py-4 text-right">
                                                 {row.minSubtotal !== null ? (
-                                                    <span className="font-mono font-black text-xs text-emerald-700">{formatCOP(row.minSubtotal)}</span>
+                                                    <span className="font-mono font-black text-xs text-emerald-700">
+                                                        {formatSubtotalWithCurrency(row.minSubtotal, row.minSubtotalCurrency)}
+                                                    </span>
                                                 ) : (
                                                     <span className="text-[10px] text-gray-300">Sin escenario</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-4 text-right">
+                                                {usdEst !== null ? (
+                                                    <span className="font-mono font-black text-xs text-blue-700">USD {formatUSD(usdEst)}</span>
+                                                ) : (
+                                                    <span className="text-[10px] text-gray-300">—</span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-4 text-center">

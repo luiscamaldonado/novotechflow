@@ -47,6 +47,7 @@ export interface ProposalSummary {
     scenarios?: Array<{
         id: string;
         name: string;
+        currency: string;
         scenarioItems: Array<{
             id: string;
             itemId: string;

@@ -1,41 +1,101 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
-import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType } from '../lib/types';
+import { TRM_API_URL } from '../lib/constants';
 import { calculateScenarioTotals } from '../lib/pricing-engine';
+import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType } from '../lib/types';
 
-// ── Utility: compute min-scenario subtotal (via pricing engine) ──
-function computeMinSubtotal(proposal: ProposalSummary): number | null {
-    if (!proposal.scenarios || proposal.scenarios.length === 0) return null;
+// ── Types ────────────────────────────────────────────────────
+
+type CurrencyCode = 'COP' | 'USD';
+
+interface MinSubtotalResult {
+    subtotal: number | null;
+    currency: CurrencyCode | null;
+}
+
+type ProposalWithSubtotal = ProposalSummary & MinSubtotalResult;
+
+export interface DashboardRow {
+    id: string;
+    code: string;
+    clientName: string;
+    subject: string;
+    minSubtotal: number | null;
+    minSubtotalCurrency: CurrencyCode | null;
+    status: ProposalStatus;
+    closeDate?: string | null;
+    billingDate?: string | null;
+    acquisitionType?: AcquisitionType | null;
+    updatedAt: string;
+    user?: { name: string; nomenclature: string };
+    isProjection: boolean;
+    originalProposal?: ProposalWithSubtotal;
+    originalProjection?: BillingProjection;
+}
+
+export interface BillingCards {
+    facturadoMesAnterior: number;
+    facturadoMesActual: number;
+    facturadoTrimestreActual: number;
+    proyeccionTrimestreSiguiente: number;
+    pendFactMesActual: number;
+    pendFactMesSiguiente: number;
+}
+
+// ── Pure helpers ─────────────────────────────────────────────
+
+/** Find the scenario with the minimum subtotal and return its value + currency. */
+function computeMinSubtotal(proposal: ProposalSummary): MinSubtotalResult {
+    if (!proposal.scenarios || proposal.scenarios.length === 0) {
+        return { subtotal: null, currency: null };
+    }
 
     let minSubtotal: number | null = null;
+    let minCurrency: CurrencyCode | null = null;
 
     for (const scenario of proposal.scenarios) {
-        // Delegate to centralized engine (includes dilution, children, etc.)
         const totals = calculateScenarioTotals(scenario.scenarioItems);
-        const subtotal = totals.subtotal;
+        const sub = totals.subtotal;
 
-        if (minSubtotal === null || subtotal < minSubtotal) {
-            minSubtotal = subtotal;
+        if (minSubtotal === null || sub < minSubtotal) {
+            minSubtotal = sub;
+            minCurrency = (scenario.currency === 'USD' ? 'USD' : 'COP') as CurrencyCode;
         }
     }
 
-    return minSubtotal;
+    return { subtotal: minSubtotal, currency: minCurrency };
 }
 
-// ── Helper: parse ISO date to { month (0-indexed), year } without timezone shift ──
+/**
+ * Convert a subtotal to USD.
+ * - If already in USD → return as-is.
+ * - If COP and trmRate > 0 → divide.
+ * - Otherwise → null.
+ */
+export function getSubtotalUsd(
+    subtotal: number | null,
+    currency: CurrencyCode | null,
+    trmRate: number | null,
+): number | null {
+    if (subtotal === null || currency === null) return null;
+    if (currency === 'USD') return subtotal;
+    if (currency === 'COP' && trmRate && trmRate > 0) return subtotal / trmRate;
+    return null;
+}
+
+/** Parse ISO date → { month (0-indexed), year } without timezone shift. */
 function parseDate(dateStr: string): { month: number; year: number } {
     const [datePart] = dateStr.split('T');
     const [y, m] = datePart.split('-').map(Number);
     return { month: m - 1, year: y };
 }
 
-// ── Helper: compute billing cards filtered by acquisition type ──
-type ProposalWithSubtotal = ProposalSummary & { minSubtotal: number | null };
-
+/** Compute billing cards for a single acquisition type. All subtotals converted to USD. */
 function computeBillingCards(
     proposals: ProposalWithSubtotal[],
     projections: BillingProjection[],
     acquisitionFilter: AcquisitionType,
+    trmRate: number | null,
 ): BillingCards {
     const now = new Date();
     const thisMonth = now.getMonth();
@@ -59,7 +119,7 @@ function computeBillingCards(
     const filteredProjections = projections.filter(pr => pr.acquisitionType === acquisitionFilter);
 
     for (const p of filteredProposals) {
-        const sub = p.minSubtotal || 0;
+        const sub = getSubtotalUsd(p.subtotal, p.currency, trmRate) ?? 0;
 
         if (p.status === 'FACTURADA' && p.billingDate) {
             const { month, year } = parseDate(p.billingDate);
@@ -82,8 +142,10 @@ function computeBillingCards(
         }
     }
 
+    // Projections: assumed COP if no currency info; convert to USD via TRM
     for (const pr of filteredProjections) {
-        const sub = Number(pr.subtotal) || 0;
+        const rawSub = Number(pr.subtotal) || 0;
+        const sub = getSubtotalUsd(rawSub, 'COP', trmRate) ?? 0;
 
         if (pr.status === 'FACTURADA' && pr.billingDate) {
             const { month, year } = parseDate(pr.billingDate);
@@ -104,39 +166,15 @@ function computeBillingCards(
     return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente, pendFactMesActual, pendFactMesSiguiente };
 }
 
-// ── Unified row type ──
-export interface DashboardRow {
-    id: string;
-    code: string;
-    clientName: string;
-    subject: string;
-    minSubtotal: number | null;
-    status: ProposalStatus;
-    closeDate?: string | null;
-    billingDate?: string | null;
-    acquisitionType?: AcquisitionType | null;
-    updatedAt: string;
-    user?: { name: string; nomenclature: string };
-    isProjection: boolean;
-    // Only for proposals
-    originalProposal?: ProposalSummary & { minSubtotal: number | null };
-    // Only for projections
-    originalProjection?: BillingProjection;
-}
-
-export interface BillingCards {
-    facturadoMesAnterior: number;
-    facturadoMesActual: number;
-    facturadoTrimestreActual: number;
-    proyeccionTrimestreSiguiente: number;
-    pendFactMesActual: number;
-    pendFactMesSiguiente: number;
-}
+// ── Hook ─────────────────────────────────────────────────────
 
 export function useDashboard() {
     const [proposals, setProposals] = useState<ProposalSummary[]>([]);
     const [projections, setProjections] = useState<BillingProjection[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // TRM (frontend-only, editable)
+    const [trmRate, setTrmRate] = useState<number | null>(null);
 
     // Filter state
     const [showFilters, setShowFilters] = useState(false);
@@ -150,6 +188,7 @@ export function useDashboard() {
 
     useEffect(() => {
         loadData();
+        fetchTrm();
     }, []);
 
     const loadData = async () => {
@@ -167,6 +206,17 @@ export function useDashboard() {
         }
     };
 
+    /** Fetch TRM once on mount as suggested default value. */
+    const fetchTrm = async () => {
+        try {
+            const res = await fetch(TRM_API_URL);
+            const data = await res.json();
+            setTrmRate(data.valor ?? null);
+        } catch (error) {
+            console.error('Error fetching TRM:', error);
+        }
+    };
+
     const loadProposals = async () => {
         try {
             const res = await api.get('/proposals');
@@ -178,10 +228,10 @@ export function useDashboard() {
 
     // ── Computed values ──
     const proposalsWithSubtotals = useMemo(() => {
-        return proposals.map(p => ({
-            ...p,
-            minSubtotal: computeMinSubtotal(p),
-        }));
+        return proposals.map(p => {
+            const { subtotal, currency } = computeMinSubtotal(p);
+            return { ...p, subtotal, currency };
+        });
     }, [proposals]);
 
     // ── Unified rows (proposals + projections) ──
@@ -191,7 +241,8 @@ export function useDashboard() {
             code: p.proposalCode,
             clientName: p.clientName,
             subject: p.subject,
-            minSubtotal: p.minSubtotal,
+            minSubtotal: p.subtotal,
+            minSubtotalCurrency: p.currency,
             status: p.status,
             closeDate: p.closeDate,
             billingDate: p.billingDate,
@@ -208,6 +259,7 @@ export function useDashboard() {
             clientName: pr.clientName,
             subject: '',
             minSubtotal: Number(pr.subtotal),
+            minSubtotalCurrency: 'COP' as CurrencyCode,
             status: pr.status as ProposalStatus,
             closeDate: null,
             billingDate: pr.billingDate,
@@ -223,7 +275,6 @@ export function useDashboard() {
 
     const filtered = useMemo(() => {
         return allRows.filter(p => {
-            // Text search
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
                 const matches = p.code?.toLowerCase().includes(term) ||
@@ -231,24 +282,22 @@ export function useDashboard() {
                     p.subject.toLowerCase().includes(term);
                 if (!matches) return false;
             }
-            // Status filter
             if (statusFilters.size > 0 && !statusFilters.has(p.status)) return false;
-            // Subtotal range
             if (subtotalMin && p.minSubtotal !== null && p.minSubtotal < parseFloat(subtotalMin)) return false;
             if (subtotalMax && p.minSubtotal !== null && p.minSubtotal > parseFloat(subtotalMax)) return false;
             return true;
         });
     }, [allRows, searchTerm, statusFilters, subtotalMin, subtotalMax]);
 
-    // ── Billing summary cards per acquisition type ──
+    // ── Billing summary cards per acquisition type (values in USD) ──
     const billingCardsVenta: BillingCards = useMemo(
-        () => computeBillingCards(proposalsWithSubtotals, projections, 'VENTA'),
-        [proposalsWithSubtotals, projections],
+        () => computeBillingCards(proposalsWithSubtotals, projections, 'VENTA', trmRate),
+        [proposalsWithSubtotals, projections, trmRate],
     );
 
     const billingCardsDaas: BillingCards = useMemo(
-        () => computeBillingCards(proposalsWithSubtotals, projections, 'DAAS'),
-        [proposalsWithSubtotals, projections],
+        () => computeBillingCards(proposalsWithSubtotals, projections, 'DAAS', trmRate),
+        [proposalsWithSubtotals, projections, trmRate],
     );
 
     // ── Actions ──
@@ -357,6 +406,8 @@ export function useDashboard() {
         billingCardsDaas,
         cloning,
         setProjections,
+        trmRate,
+        setTrmRate,
 
         // Filter state
         showFilters,

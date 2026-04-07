@@ -2,7 +2,7 @@ import {
     Clock, DollarSign, Calendar, TrendingUp, BarChart3, AlertCircle,
 } from 'lucide-react';
 import type { BillingCards as BillingCardsType } from '../../hooks/useDashboard';
-import { formatCOP, ACQUISITION_CONFIG } from '../../lib/constants';
+import { formatUSD, ACQUISITION_CONFIG } from '../../lib/constants';
 import type { AcquisitionType } from '../../lib/types';
 
 interface BillingCardsProps {
@@ -73,7 +73,7 @@ function BillingCardRow({ cards, acquisitionType }: { cards: BillingCardsType; a
                             </div>
                             <span className={`text-[10px] font-bold uppercase tracking-wider ${labelText}`}>{label}</span>
                         </div>
-                        <p className={`text-lg font-black ${valueText}`}>{formatCOP(cards[key])}</p>
+                        <p className={`text-lg font-black ${valueText}`}>USD {formatUSD(cards[key])}</p>
                     </div>
                 ))}
             </div>
