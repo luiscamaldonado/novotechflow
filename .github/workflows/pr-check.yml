@@ -1,0 +1,38 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: pr-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck Web (Vite)
+        run: npx tsc --noEmit --project apps/web/tsconfig.app.json
+
+      - name: Typecheck API (NestJS)
+        run: npx tsc --noEmit --project apps/api/tsconfig.build.json
