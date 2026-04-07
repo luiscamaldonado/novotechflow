@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
 import { TRM_API_URL } from '../lib/constants';
 import { calculateScenarioTotals } from '../lib/pricing-engine';
+import { getTrmMonthlyAverage } from '../lib/trm-service';
 import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType } from '../lib/types';
 
 // ── Types ────────────────────────────────────────────────────
@@ -176,6 +177,11 @@ export function useDashboard() {
     // TRM (frontend-only, editable)
     const [trmRate, setTrmRate] = useState<number | null>(null);
 
+    // TRM historical averages
+    const [trmCurrentMonthAvg, setTrmCurrentMonthAvg] = useState<number | null>(null);
+    const [trmPreviousMonthAvg, setTrmPreviousMonthAvg] = useState<number | null>(null);
+    const [isLoadingTrmAverages, setIsLoadingTrmAverages] = useState(true);
+
     // Filter state
     const [showFilters, setShowFilters] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -189,6 +195,7 @@ export function useDashboard() {
     useEffect(() => {
         loadData();
         fetchTrm();
+        fetchTrmAverages();
     }, []);
 
     const loadData = async () => {
@@ -214,6 +221,31 @@ export function useDashboard() {
             setTrmRate(data.valor ?? null);
         } catch (error) {
             console.error('Error fetching TRM:', error);
+        }
+    };
+
+    /** Fetch current and previous month TRM averages in parallel. */
+    const fetchTrmAverages = async () => {
+        setIsLoadingTrmAverages(true);
+
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+        const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+
+        try {
+            const [currentAvg, previousAvg] = await Promise.all([
+                getTrmMonthlyAverage(currentYear, currentMonth),
+                getTrmMonthlyAverage(prevYear, prevMonth),
+            ]);
+
+            setTrmCurrentMonthAvg(currentAvg);
+            setTrmPreviousMonthAvg(previousAvg);
+        } catch (error) {
+            console.error('Error fetching TRM averages:', error);
+        } finally {
+            setIsLoadingTrmAverages(false);
         }
     };
 
@@ -408,6 +440,9 @@ export function useDashboard() {
         setProjections,
         trmRate,
         setTrmRate,
+        trmCurrentMonthAvg,
+        trmPreviousMonthAvg,
+        isLoadingTrmAverages,
 
         // Filter state
         showFilters,

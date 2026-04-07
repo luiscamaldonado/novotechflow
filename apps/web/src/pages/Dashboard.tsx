@@ -10,6 +10,7 @@ import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, f
 import type { ProposalStatus, AcquisitionType } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import ProjectionModal from './dashboard/ProjectionModal';
+import TrmCards from './dashboard/TrmCards';
 
 /** Format a subtotal with its currency label (COP or USD). */
 function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
@@ -24,6 +25,7 @@ export default function Dashboard() {
     const {
         loading, filtered, billingCardsVenta, billingCardsDaas, cloning, setProjections,
         trmRate, setTrmRate,
+        trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
         showFilters, setShowFilters, searchTerm, setSearchTerm,
         statusFilters, subtotalMin, setSubtotalMin, subtotalMax, setSubtotalMax,
         hasActiveFilters,
@@ -92,6 +94,14 @@ export default function Dashboard() {
                     </button>
                 </div>
             </div>
+
+            {/* TRM Cards */}
+            <TrmCards
+                trmRate={trmRate}
+                trmCurrentMonthAvg={trmCurrentMonthAvg}
+                trmPreviousMonthAvg={trmPreviousMonthAvg}
+                isLoadingTrmAverages={isLoadingTrmAverages}
+            />
 
             {/* Financial Cards */}
             <BillingCards billingCardsVenta={billingCardsVenta} billingCardsDaas={billingCardsDaas} />

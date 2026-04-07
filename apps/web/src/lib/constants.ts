@@ -150,6 +150,15 @@ export function formatUSD(value: number): string {
 /** TRM public API endpoint (Colombian Central Bank rate). */
 export const TRM_API_URL = 'https://co.dolarapi.com/v1/trm';
 
+/** TRM historical data API endpoint (Datos Abiertos Colombia). */
+export const TRM_HISTORICAL_API_URL = 'https://www.datos.gov.co/resource/32sa-8pi3.json';
+
+/** Month names in Spanish (1-indexed: index 0 unused). */
+export const MONTH_NAMES_ES = [
+    '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+] as const;
+
 // ── Proposal Calculations constants ──────────────────────────
 
 /** Acquisition mode for a scenario (Venta vs DaaS). */
