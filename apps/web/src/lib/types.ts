@@ -199,6 +199,7 @@ export interface BillingProjection {
     projectionCode: string;
     clientName: string;
     subtotal: number | string;
+    currency?: string;
     status: 'PENDIENTE_FACTURAR' | 'FACTURADA';
     billingDate?: string | null;
     acquisitionType?: AcquisitionType | null;

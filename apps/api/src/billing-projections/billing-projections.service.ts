@@ -9,6 +9,7 @@ export interface CreateBillingProjectionDto {
     status?: string;
     billingDate?: string | null;
     acquisitionType?: string;
+    currency?: string;
 }
 
 export interface UpdateBillingProjectionDto {
@@ -17,6 +18,7 @@ export interface UpdateBillingProjectionDto {
     status?: string;
     billingDate?: string | null;
     acquisitionType?: string;
+    currency?: string;
 }
 
 @Injectable()
@@ -68,6 +70,7 @@ export class BillingProjectionsService {
                 status: (data.status as ProposalStatus) || ProposalStatus.PENDIENTE_FACTURAR,
                 billingDate: data.billingDate ? new Date(data.billingDate) : null,
                 acquisitionType: data.acquisitionType ? (data.acquisitionType as AcquisitionType) : undefined,
+                currency: data.currency || 'COP',
             },
             include: {
                 user: { select: { name: true, nomenclature: true } },
@@ -108,6 +111,7 @@ export class BillingProjectionsService {
                 status: data.status ? (data.status as ProposalStatus) : undefined,
                 billingDate: data.billingDate ? new Date(data.billingDate) : data.billingDate === null ? null : undefined,
                 acquisitionType: data.acquisitionType ? (data.acquisitionType as AcquisitionType) : undefined,
+                currency: data.currency ?? undefined,
             },
             include: {
                 user: { select: { name: true, nomenclature: true } },

@@ -313,6 +313,7 @@ model BillingProjection {
   projectionCode String         @unique @map("projection_code") @db.VarChar(20)
   clientName     String         @map("client_name") @db.VarChar(200)
   subtotal       Decimal        @db.Decimal(15, 2)
+  currency       String         @default("COP") @db.VarChar(5)
   status         ProposalStatus @default(PENDIENTE_FACTURAR)
   billingDate    DateTime?      @map("billing_date") @db.Date
   acquisitionType AcquisitionType? @map("acquisition_type")

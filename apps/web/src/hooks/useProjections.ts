@@ -8,6 +8,7 @@ export interface ProjForm {
     status: 'PENDIENTE_FACTURAR' | 'FACTURADA';
     billingDate: string;
     acquisitionType: '' | 'VENTA' | 'DAAS';
+    currency: 'COP' | 'USD';
 }
 
 export function useProjections(
@@ -21,12 +22,13 @@ export function useProjections(
         status: 'PENDIENTE_FACTURAR',
         billingDate: '',
         acquisitionType: '',
+        currency: 'COP',
     });
     const [savingProjection, setSavingProjection] = useState(false);
 
     const openNewProjectionModal = () => {
         setEditingProjection(null);
-        setProjForm({ clientName: '', subtotal: '', status: 'PENDIENTE_FACTURAR', billingDate: '', acquisitionType: '' });
+        setProjForm({ clientName: '', subtotal: '', status: 'PENDIENTE_FACTURAR', billingDate: '', acquisitionType: '', currency: 'COP' });
         setShowProjectionModal(true);
     };
 
@@ -38,6 +40,7 @@ export function useProjections(
             status: pr.status,
             billingDate: pr.billingDate ? new Date(pr.billingDate).toISOString().split('T')[0] : '',
             acquisitionType: (pr.acquisitionType || '') as '' | 'VENTA' | 'DAAS',
+            currency: (pr.currency === 'USD' ? 'USD' : 'COP') as 'COP' | 'USD',
         });
         setShowProjectionModal(true);
     };
@@ -53,6 +56,7 @@ export function useProjections(
                     status: projForm.status,
                     billingDate: projForm.billingDate || null,
                     acquisitionType: projForm.acquisitionType || undefined,
+                    currency: projForm.currency,
                 });
                 setProjections(prev => prev.map(pr => pr.id === editingProjection.id ? res.data : pr));
             } else {
@@ -62,6 +66,7 @@ export function useProjections(
                     status: projForm.status,
                     billingDate: projForm.billingDate || null,
                     acquisitionType: projForm.acquisitionType || undefined,
+                    currency: projForm.currency,
                 });
                 setProjections(prev => [res.data, ...prev]);
             }

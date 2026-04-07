@@ -143,10 +143,11 @@ function computeBillingCards(
         }
     }
 
-    // Projections: assumed COP if no currency info; convert to USD via TRM
+    // Projections: use stored currency for conversion
     for (const pr of filteredProjections) {
         const rawSub = Number(pr.subtotal) || 0;
-        const sub = getSubtotalUsd(rawSub, 'COP', trmRate) ?? 0;
+        const prCurrency: CurrencyCode = pr.currency === 'USD' ? 'USD' : 'COP';
+        const sub = getSubtotalUsd(rawSub, prCurrency, trmRate) ?? 0;
 
         if (pr.status === 'FACTURADA' && pr.billingDate) {
             const { month, year } = parseDate(pr.billingDate);
@@ -291,7 +292,7 @@ export function useDashboard() {
             clientName: pr.clientName,
             subject: '',
             minSubtotal: Number(pr.subtotal),
-            minSubtotalCurrency: 'COP' as CurrencyCode,
+            minSubtotalCurrency: (pr.currency === 'USD' ? 'USD' : 'COP') as CurrencyCode,
             status: pr.status as ProposalStatus,
             closeDate: null,
             billingDate: pr.billingDate,

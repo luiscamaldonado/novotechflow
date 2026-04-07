@@ -53,18 +53,44 @@ export default function ProjectionModal({
                         />
                     </div>
 
-                    {/* Subtotal */}
+                    {/* Subtotal + Currency */}
                     <div>
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Subtotal</label>
-                        <div className="relative">
-                            <span className="absolute left-4 top-3 text-gray-400 font-bold text-sm">$</span>
-                            <input
-                                type="number"
-                                value={projForm.subtotal}
-                                onChange={(e) => setProjForm(prev => ({ ...prev, subtotal: e.target.value }))}
-                                placeholder="0"
-                                className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all"
-                            />
+                        <div className="flex gap-3">
+                            <div className="relative flex-1">
+                                <span className="absolute left-4 top-3 text-gray-400 font-bold text-sm">$</span>
+                                <input
+                                    type="number"
+                                    value={projForm.subtotal}
+                                    onChange={(e) => setProjForm(prev => ({ ...prev, subtotal: e.target.value }))}
+                                    placeholder="0"
+                                    className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all"
+                                />
+                            </div>
+                            <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setProjForm(prev => ({ ...prev, currency: 'COP' }))}
+                                    className={`px-4 py-3 text-xs font-bold transition-all ${
+                                        projForm.currency === 'COP'
+                                            ? 'bg-violet-600 text-white shadow-inner'
+                                            : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    COP
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setProjForm(prev => ({ ...prev, currency: 'USD' }))}
+                                    className={`px-4 py-3 text-xs font-bold transition-all ${
+                                        projForm.currency === 'USD'
+                                            ? 'bg-emerald-600 text-white shadow-inner'
+                                            : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    USD
+                                </button>
+                            </div>
                         </div>
                     </div>
 
