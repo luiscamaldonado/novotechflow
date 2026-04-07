@@ -41,3 +41,9 @@ yarn-error.log*
 apps/api/.env
 apps/api/dist/
 apps/agent/dist/
+
+# Backup directories
+backups/
+
+# Loose data files
+*.csv
