@@ -16,7 +16,7 @@ export default function Dashboard() {
     const { user } = useAuthStore();
 
     const {
-        loading, filtered, billingCards, cloning, setProjections,
+        loading, filtered, billingCardsVenta, billingCardsDaas, cloning, setProjections,
         showFilters, setShowFilters, searchTerm, setSearchTerm,
         statusFilters, subtotalMin, setSubtotalMin, subtotalMax, setSubtotalMax,
         hasActiveFilters,
@@ -72,7 +72,7 @@ export default function Dashboard() {
             </div>
 
             {/* Financial Cards */}
-            <BillingCards billingCards={billingCards} />
+            <BillingCards billingCardsVenta={billingCardsVenta} billingCardsDaas={billingCardsDaas} />
 
             {/* Filter Toggle + Search */}
             <div className="flex items-center gap-3">

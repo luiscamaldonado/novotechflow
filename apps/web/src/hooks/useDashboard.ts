@@ -22,6 +22,88 @@ function computeMinSubtotal(proposal: ProposalSummary): number | null {
     return minSubtotal;
 }
 
+// ── Helper: parse ISO date to { month (0-indexed), year } without timezone shift ──
+function parseDate(dateStr: string): { month: number; year: number } {
+    const [datePart] = dateStr.split('T');
+    const [y, m] = datePart.split('-').map(Number);
+    return { month: m - 1, year: y };
+}
+
+// ── Helper: compute billing cards filtered by acquisition type ──
+type ProposalWithSubtotal = ProposalSummary & { minSubtotal: number | null };
+
+function computeBillingCards(
+    proposals: ProposalWithSubtotal[],
+    projections: BillingProjection[],
+    acquisitionFilter: AcquisitionType,
+): BillingCards {
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const prevMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+    const prevMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+    const currentQuarter = Math.floor(thisMonth / 3);
+    const nextQuarter = (currentQuarter + 1) % 4;
+    const nextQuarterYear = nextQuarter === 0 ? thisYear + 1 : thisYear;
+    const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
+    const nextMonthYear = thisMonth === 11 ? thisYear + 1 : thisYear;
+
+    let facturadoMesAnterior = 0;
+    let facturadoMesActual = 0;
+    let facturadoTrimestreActual = 0;
+    let proyeccionTrimestreSiguiente = 0;
+    let pendFactMesActual = 0;
+    let pendFactMesSiguiente = 0;
+
+    const filteredProposals = proposals.filter(p => p.acquisitionType === acquisitionFilter);
+    const filteredProjections = projections.filter(pr => pr.acquisitionType === acquisitionFilter);
+
+    for (const p of filteredProposals) {
+        const sub = p.minSubtotal || 0;
+
+        if (p.status === 'FACTURADA' && p.billingDate) {
+            const { month, year } = parseDate(p.billingDate);
+            if (month === prevMonth && year === prevMonthYear) facturadoMesAnterior += sub;
+            if (month === thisMonth && year === thisYear) facturadoMesActual += sub;
+            if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
+        }
+
+        if (p.status === 'PENDIENTE_FACTURAR' && p.billingDate) {
+            const { month, year } = parseDate(p.billingDate);
+            if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
+            if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
+            if (month === thisMonth && year === thisYear) pendFactMesActual += sub;
+            if (month === nextMonth && year === nextMonthYear) pendFactMesSiguiente += sub;
+        }
+
+        if (p.status === 'GANADA' && p.closeDate) {
+            const { month, year } = parseDate(p.closeDate);
+            if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
+        }
+    }
+
+    for (const pr of filteredProjections) {
+        const sub = Number(pr.subtotal) || 0;
+
+        if (pr.status === 'FACTURADA' && pr.billingDate) {
+            const { month, year } = parseDate(pr.billingDate);
+            if (month === prevMonth && year === prevMonthYear) facturadoMesAnterior += sub;
+            if (month === thisMonth && year === thisYear) facturadoMesActual += sub;
+            if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
+        }
+
+        if (pr.status === 'PENDIENTE_FACTURAR' && pr.billingDate) {
+            const { month, year } = parseDate(pr.billingDate);
+            if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
+            if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
+            if (month === thisMonth && year === thisYear) pendFactMesActual += sub;
+            if (month === nextMonth && year === nextMonthYear) pendFactMesSiguiente += sub;
+        }
+    }
+
+    return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente, pendFactMesActual, pendFactMesSiguiente };
+}
+
 // ── Unified row type ──
 export interface DashboardRow {
     id: string;
@@ -158,124 +240,16 @@ export function useDashboard() {
         });
     }, [allRows, searchTerm, statusFilters, subtotalMin, subtotalMax]);
 
-    // ── Billing summary cards (includes projections) ──
-    const billingCards: BillingCards = useMemo(() => {
-        const now = new Date();
-        const thisMonth = now.getMonth();
-        const thisYear = now.getFullYear();
-        const prevMonth = thisMonth === 0 ? 11 : thisMonth - 1;
-        const prevMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+    // ── Billing summary cards per acquisition type ──
+    const billingCardsVenta: BillingCards = useMemo(
+        () => computeBillingCards(proposalsWithSubtotals, projections, 'VENTA'),
+        [proposalsWithSubtotals, projections],
+    );
 
-        const currentQuarter = Math.floor(thisMonth / 3);
-        const nextQuarter = (currentQuarter + 1) % 4;
-        const nextQuarterYear = nextQuarter === 0 ? thisYear + 1 : thisYear;
-
-        let facturadoMesAnterior = 0;
-        let facturadoMesActual = 0;
-        let facturadoTrimestreActual = 0;
-        let proyeccionTrimestreSiguiente = 0;
-        let pendFactMesActual = 0;
-        let pendFactMesSiguiente = 0;
-
-        const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
-        const nextMonthYear = thisMonth === 11 ? thisYear + 1 : thisYear;
-
-        // Helper: parse ISO date string to { month (0-indexed), year } without timezone shift
-        const parseDate = (dateStr: string) => {
-            const [datePart] = dateStr.split('T');
-            const [y, m] = datePart.split('-').map(Number);
-            return { month: m - 1, year: y }; // month is 0-indexed to match JS convention
-        };
-
-        // Process proposals
-        for (const p of proposalsWithSubtotals) {
-            const sub = p.minSubtotal || 0;
-
-            // FACTURADA — uses billingDate for mes anterior, mes actual, trimestre actual
-            if (p.status === 'FACTURADA' && p.billingDate) {
-                const { month, year } = parseDate(p.billingDate);
-                if (month === prevMonth && year === prevMonthYear) {
-                    facturadoMesAnterior += sub;
-                }
-                if (month === thisMonth && year === thisYear) {
-                    facturadoMesActual += sub;
-                }
-                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
-                    facturadoTrimestreActual += sub;
-                }
-            }
-
-            // PENDIENTE_FACTURAR — uses billingDate for trimestre actual, projection, and monthly cards
-            if (p.status === 'PENDIENTE_FACTURAR' && p.billingDate) {
-                const { month, year } = parseDate(p.billingDate);
-
-                // Trimestre actual
-                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
-                    facturadoTrimestreActual += sub;
-                }
-
-                // Proyección trimestre siguiente
-                if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) {
-                    proyeccionTrimestreSiguiente += sub;
-                }
-
-                // Pend. Facturar por mes
-                if (month === thisMonth && year === thisYear) {
-                    pendFactMesActual += sub;
-                }
-                if (month === nextMonth && year === nextMonthYear) {
-                    pendFactMesSiguiente += sub;
-                }
-            }
-
-            // GANADA — uses closeDate for projection
-            if (p.status === 'GANADA' && p.closeDate) {
-                const { month, year } = parseDate(p.closeDate);
-                if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) {
-                    proyeccionTrimestreSiguiente += sub;
-                }
-            }
-        }
-
-        // Process billing projections (same logic as proposals)
-        for (const pr of projections) {
-            const sub = Number(pr.subtotal) || 0;
-
-            if (pr.status === 'FACTURADA' && pr.billingDate) {
-                const { month, year } = parseDate(pr.billingDate);
-                if (month === prevMonth && year === prevMonthYear) {
-                    facturadoMesAnterior += sub;
-                }
-                if (month === thisMonth && year === thisYear) {
-                    facturadoMesActual += sub;
-                }
-                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
-                    facturadoTrimestreActual += sub;
-                }
-            }
-
-            if (pr.status === 'PENDIENTE_FACTURAR' && pr.billingDate) {
-                const { month, year } = parseDate(pr.billingDate);
-
-                if (Math.floor(month / 3) === currentQuarter && year === thisYear) {
-                    facturadoTrimestreActual += sub;
-                }
-
-                if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) {
-                    proyeccionTrimestreSiguiente += sub;
-                }
-
-                if (month === thisMonth && year === thisYear) {
-                    pendFactMesActual += sub;
-                }
-                if (month === nextMonth && year === nextMonthYear) {
-                    pendFactMesSiguiente += sub;
-                }
-            }
-        }
-
-        return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente, pendFactMesActual, pendFactMesSiguiente };
-    }, [proposalsWithSubtotals, projections]);
+    const billingCardsDaas: BillingCards = useMemo(
+        () => computeBillingCards(proposalsWithSubtotals, projections, 'DAAS'),
+        [proposalsWithSubtotals, projections],
+    );
 
     // ── Actions ──
     const handleStatusChange = async (id: string, newStatus: ProposalStatus) => {
@@ -379,7 +353,8 @@ export function useDashboard() {
         // State
         loading,
         filtered,
-        billingCards,
+        billingCardsVenta,
+        billingCardsDaas,
         cloning,
         setProjections,
 
