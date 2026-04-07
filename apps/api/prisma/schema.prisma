@@ -104,6 +104,10 @@ model Proposal {
   syncedFiles      SyncedFile[]
   emailLogs        EmailLog[]
 
+  @@index([userId])
+  @@index([status])
+  @@index([clientId])
+  @@index([createdAt])
   @@map("proposals")
 }
 
@@ -116,9 +120,10 @@ model ProposalVersion {
   isLocked      Boolean  @default(true) @map("is_locked")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  proposal  Proposal   @relation(fields: [proposalId], references: [id])
+  proposal  Proposal   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   emailLogs EmailLog[]
 
+  @@index([proposalId])
   @@map("proposal_versions")
 }
 
@@ -132,10 +137,11 @@ model ProposalPage {
   sortOrder  Int      @default(0) @map("sort_order")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  proposal      Proposal           @relation(fields: [proposalId], references: [id])
+  proposal      Proposal           @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   blocks        ProposalPageBlock[]
   proposalItems ProposalItem[]
 
+  @@index([proposalId])
   @@map("proposal_pages")
 }
 
@@ -149,6 +155,7 @@ model ProposalPageBlock {
 
   page ProposalPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
+  @@index([pageId])
   @@map("proposal_page_blocks")
 }
 
@@ -174,10 +181,11 @@ model ProposalItem {
   technicalSpecs Json?    @map("technical_specs")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  proposal      Proposal         @relation(fields: [proposalId], references: [id])
+  proposal      Proposal         @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   page          ProposalPage?    @relation(fields: [pageId], references: [id])
   scenarioItems ScenarioItem[]
 
+  @@index([proposalId])
   @@map("proposal_items")
 }
 
@@ -189,9 +197,10 @@ model Scenario {
   description String? @db.Text
   sortOrder   Int     @default(0) @map("sort_order")
 
-  proposal      Proposal       @relation(fields: [proposalId], references: [id])
+  proposal      Proposal       @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   scenarioItems ScenarioItem[]
 
+  @@index([proposalId])
   @@map("scenarios")
 }
 
@@ -206,11 +215,14 @@ model ScenarioItem {
   unitPriceOverride Decimal? @map("unit_price_override") @db.Decimal(15, 2)
   isDilpidate       Boolean  @default(false) @map("is_dilpidate")
 
-  scenario Scenario      @relation(fields: [scenarioId], references: [id])
+  scenario Scenario      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
   item     ProposalItem  @relation(fields: [itemId], references: [id])
   parent   ScenarioItem? @relation("ScenarioItemChildren", fields: [parentId], references: [id])
   children ScenarioItem[] @relation("ScenarioItemChildren")
 
+  @@index([scenarioId])
+  @@index([itemId])
+  @@index([parentId])
   @@map("scenario_items")
 }
 
@@ -241,8 +253,10 @@ model SyncedFile {
   syncedAt   DateTime   @default(now()) @map("synced_at")
 
   user     User      @relation(fields: [userId], references: [id])
-  proposal Proposal? @relation(fields: [proposalId], references: [id])
+  proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
+  @@index([proposalId])
   @@map("synced_files")
 }
 
@@ -262,9 +276,11 @@ model EmailLog {
   hasAttachment Boolean @default(false) @map("has_attachment")
 
   user            User             @relation(fields: [userId], references: [id])
-  proposal        Proposal         @relation(fields: [proposalId], references: [id])
+  proposal        Proposal         @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   proposalVersion ProposalVersion? @relation(fields: [proposalVersionId], references: [id])
 
+  @@index([userId])
+  @@index([proposalId])
   @@map("email_logs")
 }
 
@@ -305,5 +321,6 @@ model BillingProjection {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId])
   @@map("billing_projections")
 }

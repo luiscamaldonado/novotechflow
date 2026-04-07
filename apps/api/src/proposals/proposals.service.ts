@@ -434,40 +434,12 @@ export class ProposalsService {
 
   /**
    * Elimina una propuesta completa y sus dependencias.
-   * Implementa limpieza manual de ítems previa a la eliminación de la cabecera.
+   * Las cascadas en el schema (onDelete: Cascade) eliminan automáticamente:
+   * pages, blocks, items, scenarios, scenarioItems, versions, emailLogs.
+   * SyncedFiles se desvinculan (onDelete: SetNull).
    */
   async deleteProposal(id: string, user: AuthenticatedUser) {
     await this.verifyProposalOwnership(id, user);
-    return this.prisma.$transaction(async (tx) => {
-      // Delete page blocks first (they reference pages)
-      await tx.proposalPageBlock.deleteMany({
-        where: { page: { proposalId: id } }
-      });
-
-      // Delete pages (they reference the proposal)
-      await tx.proposalPage.deleteMany({
-        where: { proposalId: id }
-      });
-
-      // Delete linked scenario items first
-      await tx.scenarioItem.deleteMany({
-        where: { scenario: { proposalId: id } }
-      });
-
-      // Delete scenarios
-      await tx.scenario.deleteMany({
-        where: { proposalId: id }
-      });
-
-      // Delete regular items
-      await tx.proposalItem.deleteMany({
-        where: { proposalId: id },
-      });
-
-      // Delete proposal
-      return tx.proposal.delete({
-        where: { id },
-      });
-    });
+    return this.prisma.proposal.delete({ where: { id } });
   }
 }

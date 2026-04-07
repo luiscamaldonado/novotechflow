@@ -90,14 +90,12 @@ export class ScenariosService {
   }
 
   /**
-   * Elimina un escenario y sus items vinculados.
+   * Elimina un escenario.
+   * La cascada (onDelete: Cascade) elimina automáticamente los scenarioItems.
    */
   async deleteScenario(id: string, user: AuthenticatedUser) {
     await this.verifyScenarioOwnership(id, user);
-    return this.prisma.$transaction(async (tx) => {
-      await tx.scenarioItem.deleteMany({ where: { scenarioId: id } });
-      return tx.scenario.delete({ where: { id } });
-    });
+    return this.prisma.scenario.delete({ where: { id } });
   }
 
   /**

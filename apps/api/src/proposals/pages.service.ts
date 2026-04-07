@@ -185,12 +185,12 @@ export class PagesService {
 
   /**
    * Elimina una página (solo si no es predeterminada).
+   * La cascada (onDelete: Cascade en ProposalPageBlock) elimina automáticamente los bloques.
    */
   async deletePage(pageId: string, user: AuthenticatedUser) {
     const page = await this.verifyPageOwnership(pageId, user);
     if (page.isLocked) throw new Error('No se puede eliminar una página predeterminada.');
 
-    await this.prisma.proposalPageBlock.deleteMany({ where: { pageId } });
     return this.prisma.proposalPage.delete({ where: { id: pageId } });
   }
 
