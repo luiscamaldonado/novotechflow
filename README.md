@@ -1,159 +1,176 @@
-# Turborepo starter
+# NovoTechFlow
 
-This Turborepo starter is maintained by the Turborepo core team.
+**Sistema de cotizaciones comerciales para NOVOTECHNO.**
 
-## Using this example
+NovoTechFlow es una plataforma integral para la gestión y generación de cotizaciones/propuestas comerciales: creación de escenarios, cálculo automático de precios, generación de documentos PDF y seguimiento del pipeline de ventas.
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## Stack Técnico
+
+| Capa | Tecnología |
+|------|------------|
+| Monorepo | pnpm workspaces + Turborepo |
+| Frontend | React 18 + Vite + TypeScript |
+| Backend | NestJS 10 + TypeScript |
+| Base de datos | PostgreSQL 15 + Prisma ORM |
+| Desktop agent | Tauri (Rust + WebView) |
+| Containerización | Docker + docker-compose |
+
+---
+
+## Prerequisites
+
+- **Node.js** ≥ 20
+- **pnpm** ≥ 9 (`npm install -g pnpm`)
+- **PostgreSQL** 15+ (local o vía Docker)
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/tu-org/novotechflow.git
+cd novotechflow
+
+# 2. Instalar dependencias
+pnpm install
+
+# 3. Configurar variables de entorno
+cp apps/api/.env.example apps/api/.env
+# Editar apps/api/.env con tus valores reales
+
+# 4. Ejecutar migraciones de base de datos
+cd apps/api
+pnpm migrate:dev
+cd ../..
+
+# 5. Seed de datos iniciales
+cd apps/api
+pnpm db:seed
+cd ../..
+
+# 6. Arrancar en modo desarrollo
+pnpm dev
 ```
 
-## What's inside?
+La API arranca en `http://localhost:3000` y el frontend en `http://localhost:5173`.
 
-This Turborepo includes the following packages/apps:
+---
 
-### Apps and Packages
+## Variables de Entorno
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+Consulta [`apps/api/.env.example`](apps/api/.env.example) para la referencia completa. Variables principales:
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | Connection string de PostgreSQL | — |
+| `JWT_SECRET` | Secreto para firmar tokens JWT | — |
+| `CORS_ORIGIN` | Orígenes permitidos (CORS) | `http://localhost:5173` |
+| `DB_USER` | Usuario de PostgreSQL (Docker) | `novotechflow` |
+| `DB_PASSWORD` | Contraseña de PostgreSQL (Docker) | `changeme` |
+| `DB_NAME` | Nombre de la base de datos (Docker) | `novotechflow` |
 
-### Utilities
+---
 
-This Turborepo has some additional tools already setup for you:
+## Scripts Disponibles
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+### Raíz del monorepo
 
-### Build
+| Script | Descripción |
+|--------|-------------|
+| `pnpm dev` | Arranca todos los servicios en modo desarrollo |
+| `pnpm build` | Compila todos los apps y packages |
+| `pnpm lint` | Ejecuta el linter en todo el monorepo |
+| `pnpm format` | Formatea el código con Prettier |
+| `pnpm check-types` | Verifica tipos TypeScript |
 
-To build all apps and packages, run the following command:
+### API (`apps/api`)
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+| Script | Descripción |
+|--------|-------------|
+| `pnpm dev` | Arranca el servidor NestJS con hot-reload |
+| `pnpm build` | Compila el proyecto NestJS |
+| `pnpm test` | Ejecuta tests unitarios |
+| `pnpm migrate:dev` | Ejecuta migraciones en desarrollo |
+| `pnpm migrate:deploy` | Aplica migraciones en producción |
+| `pnpm db:seed` | Ejecuta el seed de datos |
+| `pnpm db:studio` | Abre Prisma Studio |
 
-```sh
-cd my-turborepo
-turbo build
+---
+
+## Docker Deployment
+
+Levanta toda la infraestructura con un solo comando:
+
+```bash
+# Crear archivo .env en la raíz con las variables necesarias
+# (ver apps/api/.env.example para referencia)
+
+docker-compose up -d --build
 ```
 
-Without global `turbo`, use your package manager:
+Esto levanta tres servicios:
 
-```sh
-cd my-turborepo
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+| Servicio | Puerto | Descripción |
+|----------|--------|-------------|
+| `db` | 5432 | PostgreSQL 15 Alpine |
+| `api` | 3000 | Backend NestJS |
+| `web` | 80 | Frontend Nginx + React |
+
+Para detener:
+
+```bash
+docker-compose down
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Para detener y eliminar volúmenes:
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+docker-compose down -v
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+## Estructura del Monorepo
+
+```
+novotechflow/
+├── apps/
+│   ├── api/                 # Backend — NestJS + Prisma
+│   │   ├── prisma/          # Schema, migraciones y seeds
+│   │   ├── src/             # Módulos, controladores, servicios
+│   │   ├── Dockerfile       # Build multi-stage (Node Alpine)
+│   │   └── .env.example     # Variables de entorno de referencia
+│   ├── web/                 # Frontend — React + Vite
+│   │   ├── src/             # Componentes, páginas, hooks, stores
+│   │   ├── Dockerfile       # Build multi-stage (Node + Nginx)
+│   │   └── nginx.conf       # Configuración Nginx con SPA fallback
+│   └── agent/               # Desktop agent — Tauri
+├── packages/
+│   ├── eslint-config/       # Configuración ESLint compartida
+│   ├── typescript-config/   # tsconfig.json compartidos
+│   └── ui/                  # Componentes React reutilizables
+├── docs/
+│   ├── audits/              # Auditorías técnicas y reportes
+│   └── NovoTechFlow_Plan_Implementacion.txt
+├── docker-compose.yml       # Orquestación de servicios
+├── CONVENTIONS.md           # Convenciones de código del proyecto
+├── turbo.json               # Configuración de Turborepo
+├── pnpm-workspace.yaml      # Definición del workspace
+└── package.json             # Scripts y dependencias del monorepo
 ```
 
-### Develop
+---
 
-To develop all apps and packages, run the following command:
+## Documentación Adicional
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+- [CONVENTIONS.md](CONVENTIONS.md) — Convenciones de código, nombrado y arquitectura del proyecto
+- [docs/audits/](docs/audits/) — Auditorías técnicas y reportes de calidad
 
-```sh
-cd my-turborepo
-turbo dev
-```
+---
 
-Without global `turbo`, use your package manager:
+## Licencia
 
-```sh
-cd my-turborepo
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+Proyecto privado — NOVOTECHNO © 2026. Todos los derechos reservados.

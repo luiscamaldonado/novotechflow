@@ -13,5 +13,32 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-novotechflow}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-novotechflow}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+    depends_on:
+      - db
+    volumes:
+      - api_uploads:/app/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
 volumes:
   postgres-data:
+  api_uploads:
