@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { IVA_RATE } from '../lib/constants';
+import { convertCost } from '../lib/pricing-engine';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ export interface ProposalItemData {
     brand?: string;
     partNumber?: string;
     unitCost: number;
+    costCurrency?: string;
     marginPct: number;
     unitPrice: number;
     quantity: number;
@@ -35,6 +37,7 @@ export interface ScenarioData {
     id: string;
     name: string;
     currency: string;
+    conversionTrm?: number | null;
     scenarioItems: ScenarioItemData[];
 }
 
@@ -74,11 +77,14 @@ export interface ProcessedScenario {
 export function calculateItemUnitPrice(
     si: ScenarioItemData,
     allItems: ScenarioItemData[],
+    scenarioCurrency?: string,
+    conversionTrm?: number | null,
 ): number {
     if (si.isDilpidate) return 0;
 
     const item = si.item;
-    const cost = Number(item.unitCost);
+    const rawCost = Number(item.unitCost);
+    const cost = convertCost(rawCost, item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
     const flete = Number(item.internalCosts?.fletePct || 0);
     const parentLandedCost = cost * (1 + flete / 100);
 
@@ -86,7 +92,8 @@ export function calculateItemUnitPrice(
     let childrenCostPerUnit = 0;
     const children = si.children || [];
     children.forEach(child => {
-        const cCost = Number(child.item.unitCost);
+        const cRawCost = Number(child.item.unitCost);
+        const cCost = convertCost(cRawCost, child.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
         const cFlete = Number(child.item.internalCosts?.fletePct || 0);
         childrenCostPerUnit += cCost * (1 + cFlete / 100) * child.quantity;
     });
@@ -98,12 +105,14 @@ export function calculateItemUnitPrice(
 
     let totalDilutedCost = 0;
     dilutedItems.forEach(di => {
-        totalDilutedCost += Number(di.item.unitCost) * di.quantity;
+        const diCost = convertCost(Number(di.item.unitCost), di.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
+        totalDilutedCost += diCost * di.quantity;
     });
 
     let totalNormalSubtotal = 0;
     normalItems.forEach(ni => {
-        totalNormalSubtotal += Number(ni.item.unitCost) * ni.quantity;
+        const niCost = convertCost(Number(ni.item.unitCost), ni.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
+        totalNormalSubtotal += niCost * ni.quantity;
     });
 
     let effectiveLandedCost = baseLandedCost;
@@ -135,7 +144,7 @@ function processScenario(scenario: ScenarioData): ProcessedScenario {
     for (const si of allItems) {
         if (si.isDilpidate) continue;
 
-        const unitSalePrice = calculateItemUnitPrice(si, allItems);
+        const unitSalePrice = calculateItemUnitPrice(si, allItems, scenario.currency, scenario.conversionTrm);
         const subtotalBeforeVat = unitSalePrice * si.quantity;
         const ivaAmount = si.item.isTaxable ? subtotalBeforeVat * IVA_RATE : 0;
 
