@@ -1,12 +1,14 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     PlusCircle, Trash2, Edit2, Loader2,
-    Copy, Search, Filter, X, Receipt,
+    Copy, Search, Filter, X, Receipt, FileSpreadsheet,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
 import { useProjections } from '../hooks/useProjections';
 import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, formatCOP, formatUSD } from '../lib/constants';
+import { exportDashboardToExcel } from '../lib/exportDashboard';
 import type { ProposalStatus, AcquisitionType } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import PipelineCards from './dashboard/PipelineCards';
@@ -23,6 +25,22 @@ function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | nul
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user } = useAuthStore();
+    const [isExporting, setIsExporting] = useState(false);
+
+    const handleExportExcel = async () => {
+        setIsExporting(true);
+        try {
+            await exportDashboardToExcel({
+                rows: filtered,
+                trmRate,
+                userName: user?.name ?? 'Usuario',
+            });
+        } catch (error) {
+            console.error('Error exportando Excel:', error);
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const {
         loading, filtered, billingCardsVenta, billingCardsDaas,
@@ -205,6 +223,17 @@ export default function Dashboard() {
                     <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
                         {filtered.length} Registro{filtered.length !== 1 ? 's' : ''}
                     </h3>
+                    <button
+                        onClick={handleExportExcel}
+                        disabled={isExporting || filtered.length === 0}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isExporting
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <FileSpreadsheet className="h-4 w-4" />
+                        }
+                        <span>Exportar Excel</span>
+                    </button>
                 </div>
 
                 <div className="overflow-x-auto">
