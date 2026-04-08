@@ -28,7 +28,7 @@ export default function ProposalCalculations() {
         createScenario, deleteScenario,
         addItemToScenario, removeItemFromScenario,
         addChildItem, removeChildItem, updateChildQuantity,
-        changeCurrency, updateMargin, updateQuantity,
+        changeCurrency, updateConversionTrm, updateMargin, updateQuantity,
         updateUnitPrice, updateGlobalMargin, toggleDilpidate,
         renameScenario,
         cloneScenario,
@@ -243,6 +243,9 @@ export default function ProposalCalculations() {
                                     changeCurrency={changeCurrency}
                                     renameScenario={renameScenario}
                                     setIsPickingItems={setIsPickingItems}
+                                    updateConversionTrm={updateConversionTrm}
+                                    trm={trm}
+                                    conversionTrm={activeScenario?.conversionTrm ?? null}
                                 />
 
                                 <div className="flex-1 overflow-x-auto">

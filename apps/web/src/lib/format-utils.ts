@@ -27,3 +27,31 @@ export function parseFormattedNumber(formatted: string): number {
     const cleaned = formatted.replace(/\D/g, '');
     return Number(cleaned) || 0;
 }
+
+/**
+ * Formats a TRM value with thousands separators and 2 decimal places.
+ * Uses Colombian standard: dot as thousands separator, comma as decimal separator.
+ * @example formatTrmValue(4250.37) → "4.250,37"
+ * @example formatTrmValue("4250") → "4.250,00"
+ */
+export function formatTrmValue(value: number | string): string {
+    const num = typeof value === 'string' ? parseFloat(value.replace(/\./g, '').replace(',', '.')) : value;
+    if (isNaN(num) || num === 0) return '';
+
+    const fixed = num.toFixed(2);
+    const [intPart, decPart] = fixed.split('.');
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `${formattedInt},${decPart}`;
+}
+
+/**
+ * Parses a Colombian-formatted TRM string back to a number.
+ * Handles dot as thousands separator and comma as decimal separator.
+ * @example parseTrmValue("4.250,37") → 4250.37
+ * @example parseTrmValue("4250") → 4250
+ */
+export function parseTrmValue(formatted: string): number {
+    if (!formatted.trim()) return 0;
+    const normalized = formatted.replace(/\./g, '').replace(',', '.');
+    return parseFloat(normalized) || 0;
+}

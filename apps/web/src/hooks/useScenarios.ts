@@ -278,6 +278,18 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
+    const updateConversionTrm = async (value: number) => {
+        if (!activeScenarioId) return;
+        try {
+            await api.patch(`/proposals/scenarios/${activeScenarioId}`, { conversionTrm: value });
+            setScenarios(prev =>
+                prev.map(s => (s.id === activeScenarioId ? { ...s, conversionTrm: value } : s)),
+            );
+        } catch (error) {
+            console.error('Error updating conversion TRM', error);
+        }
+    };
+
     const renameScenario = async (scenarioId: string, name: string) => {
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -446,6 +458,7 @@ export function useScenarios(proposalId: string | undefined) {
         removeChildItem,
         updateChildQuantity,
         changeCurrency,
+        updateConversionTrm,
         updateMargin,
         updateQuantity,
         updateUnitPrice,

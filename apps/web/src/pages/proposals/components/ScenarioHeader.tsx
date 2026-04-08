@@ -1,10 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import {
-    Plus, TrendingUp, Pencil, ShoppingCart,
+    Plus, TrendingUp, Pencil, ShoppingCart, RefreshCw,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { Scenario, ScenarioTotals } from '../../../hooks/useScenarios';
 import { ACQUISITION_OPTIONS, type AcquisitionMode } from '../../../lib/constants';
+import { formatTrmValue, parseTrmValue } from '../../../lib/format-utils';
+
+interface TrmData {
+    valor: number;
+    fechaActualizacion: string;
+}
 
 interface ScenarioHeaderProps {
     activeScenario: Scenario;
@@ -19,6 +25,9 @@ interface ScenarioHeaderProps {
     changeCurrency: (c: string) => void;
     renameScenario: (id: string, name: string) => void;
     setIsPickingItems: (v: boolean) => void;
+    updateConversionTrm: (value: number) => Promise<void>;
+    trm: TrmData | null;
+    conversionTrm: number | null;
 }
 
 export default function ScenarioHeader({
@@ -34,9 +43,44 @@ export default function ScenarioHeader({
     changeCurrency,
     renameScenario,
     setIsPickingItems,
+    updateConversionTrm,
+    trm,
+    conversionTrm,
 }: ScenarioHeaderProps) {
     const [editingScenarioName, setEditingScenarioName] = useState<string | null>(null);
     const scenarioNameInputRef = useRef<HTMLInputElement>(null);
+    const [trmBuffer, setTrmBuffer] = useState<string | null>(null);
+
+    /** Whether all items in the scenario share the same currency as the scenario */
+    const isConversionUnnecessary = useMemo(() => {
+        const scenarioCurrency = activeScenario.currency || 'COP';
+        const items = activeScenario.scenarioItems;
+        if (items.length === 0) return false;
+        return items.every(si => (si.item.costCurrency || 'COP') === scenarioCurrency);
+    }, [activeScenario.currency, activeScenario.scenarioItems]);
+
+    const effectiveTrm = conversionTrm ?? trm?.valor ?? null;
+
+    const handleTrmBlur = () => {
+        if (trmBuffer === null) return;
+        const parsed = parseTrmValue(trmBuffer);
+        if (parsed > 0) {
+            updateConversionTrm(parsed);
+        }
+        setTrmBuffer(null);
+    };
+
+    const handleFillTodayTrm = () => {
+        if (!trm) return;
+        updateConversionTrm(trm.valor);
+        setTrmBuffer(null);
+    };
+
+    const displayTrmValue = (): string => {
+        if (trmBuffer !== null) return trmBuffer;
+        if (effectiveTrm !== null) return formatTrmValue(effectiveTrm);
+        return '';
+    };
 
     return (
         <div className="p-8 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
@@ -155,6 +199,65 @@ export default function ScenarioHeader({
                     >
                         USD
                     </button>
+                </div>
+
+                {/* TRM Conversion Input */}
+                <div className="flex flex-col items-end" title={isConversionUnnecessary ? 'Todos los items están en la misma moneda — no se requiere conversión' : undefined}>
+                    <span className={cn(
+                        "text-[9px] font-black uppercase tracking-widest mb-1",
+                        isConversionUnnecessary ? "text-slate-400" : "text-amber-600"
+                    )}>TRM Conversión</span>
+                    <div className={cn(
+                        "flex items-center px-4 py-2 rounded-xl border shadow-sm",
+                        isConversionUnnecessary
+                            ? "bg-slate-100 border-slate-200"
+                            : "bg-amber-50 border-amber-100"
+                    )}>
+                        <span className={cn(
+                            "text-xs font-black mr-1",
+                            isConversionUnnecessary ? "text-slate-400" : "text-amber-500"
+                        )}>$</span>
+                        <input
+                            type="text"
+                            value={displayTrmValue()}
+                            placeholder={trm ? formatTrmValue(trm.valor) : '—'}
+                            onFocus={() => {
+                                if (isConversionUnnecessary) return;
+                                const current = effectiveTrm ?? trm?.valor ?? 0;
+                                setTrmBuffer(current > 0 ? formatTrmValue(current) : '');
+                            }}
+                            onChange={(e) => {
+                                if (isConversionUnnecessary) return;
+                                setTrmBuffer(e.target.value);
+                            }}
+                            onBlur={handleTrmBlur}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    (e.target as HTMLInputElement).blur();
+                                }
+                                if (e.key === 'Escape') {
+                                    setTrmBuffer(null);
+                                }
+                            }}
+                            disabled={isConversionUnnecessary}
+                            className={cn(
+                                "w-24 bg-transparent border-none text-right font-black p-0 focus:ring-0 text-sm",
+                                isConversionUnnecessary
+                                    ? "text-slate-400 cursor-not-allowed"
+                                    : "text-amber-700"
+                            )}
+                        />
+                        {!isConversionUnnecessary && trm && (
+                            <button
+                                onClick={handleFillTodayTrm}
+                                className="ml-2 flex items-center space-x-1 px-2 py-1 text-[9px] font-black text-amber-600 bg-white hover:bg-amber-100 rounded-lg border border-amber-200 transition-colors whitespace-nowrap"
+                                title={`Usar TRM del día: $${trm.valor.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`}
+                            >
+                                <RefreshCw className="h-3 w-3" />
+                                <span>Hoy</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <button 
