@@ -18,6 +18,7 @@ export interface ProposalItemData {
     unitPrice: number;
     quantity: number;
     isTaxable: boolean;
+    deliveryDays?: number | null;
     technicalSpecs?: Record<string, string>;
     internalCosts?: { fletePct?: number; proveedor?: string };
 }

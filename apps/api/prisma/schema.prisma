@@ -178,6 +178,7 @@ model ProposalItem {
   unitPrice     Decimal? @map("unit_price") @db.Decimal(15, 2)
 
   isTaxable      Boolean  @default(true) @map("is_taxable")
+  deliveryDays   Int?     @map("delivery_days")
   sortOrder      Int      @default(0) @map("sort_order")
   technicalSpecs Json?    @map("technical_specs")
   createdAt      DateTime @default(now()) @map("created_at")

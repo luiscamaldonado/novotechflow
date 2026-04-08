@@ -24,6 +24,7 @@ export function useProposalBuilder(proposalId: string | undefined) {
         unitPrice: '',
         technicalSpecs: {},
         isTaxable: true,
+        deliveryDays: null,
         internalCosts: {
             proveedor: PROVEEDOR_MAYORISTA,
             fletePct: MAYORISTA_FLETE_PCT,
@@ -69,6 +70,11 @@ export function useProposalBuilder(proposalId: string | undefined) {
             // Normalizar tipos: los inputs HTML siempre devuelven strings,
             // pero el backend DTO espera números.
             // Only send fields accepted by CreateProposalItemDto / UpdateProposalItemDto
+            const deliveryDaysRaw = itemForm.deliveryDays;
+            const deliveryDays = deliveryDaysRaw != null && deliveryDaysRaw !== ''
+                ? Number(deliveryDaysRaw)
+                : null;
+
             const payload = {
                 itemType: itemForm.itemType,
                 name: itemForm.name,
@@ -81,6 +87,7 @@ export function useProposalBuilder(proposalId: string | undefined) {
                 marginPct: Number(itemForm.marginPct) || 0,
                 unitPrice: Number(itemForm.unitPrice) || 0,
                 isTaxable: itemForm.isTaxable,
+                deliveryDays: Number.isFinite(deliveryDays) ? deliveryDays : undefined,
                 technicalSpecs: itemForm.technicalSpecs,
                 internalCosts: itemForm.internalCosts,
             };

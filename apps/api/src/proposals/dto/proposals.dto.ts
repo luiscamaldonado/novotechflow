@@ -122,6 +122,11 @@ export class CreateProposalItemDto {
     @IsOptional()
     @IsString()
     costCurrency?: string;
+
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    deliveryDays?: number;
 }
 
 /**
@@ -179,6 +184,11 @@ export class UpdateProposalItemDto {
     @IsOptional()
     @IsString()
     costCurrency?: string;
+
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    deliveryDays?: number;
 }
 
 /**

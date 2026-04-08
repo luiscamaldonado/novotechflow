@@ -366,6 +366,27 @@ export default function ProposalItemsBuilder() {
                                             onSelectSuggestion={selectSuggestion}
                                         />
 
+                                        {/* Tiempo de Entrega */}
+                                        <div className="md:col-span-3 space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Tiempo de Entrega (días)</label>
+                                            <input
+                                                type="number"
+                                                name="deliveryDays"
+                                                value={itemForm.deliveryDays ?? ''}
+                                                onChange={(e) => {
+                                                    const raw = e.target.value;
+                                                    setItemForm(prev => ({
+                                                        ...prev,
+                                                        deliveryDays: raw === '' ? null : parseInt(raw, 10),
+                                                    }));
+                                                }}
+                                                min={0}
+                                                step={1}
+                                                placeholder="Ej: 30"
+                                                className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all"
+                                            />
+                                        </div>
+
                                         {/* Descripción General */}
                                         <div className="md:col-span-12 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Notas Técnicas Complementarias</label>

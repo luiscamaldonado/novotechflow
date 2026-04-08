@@ -107,6 +107,7 @@ export interface ProposalItem {
     unitPrice: number | string;
     technicalSpecs?: TechnicalSpecs;
     isTaxable?: boolean;
+    deliveryDays?: number | null;
     internalCosts?: InternalCosts;
 }
 
@@ -123,6 +124,7 @@ export interface ProposalItemFromApi {
     unitPrice: number;
     quantity: number;
     isTaxable: boolean;
+    deliveryDays?: number | null;
     internalCosts?: InternalCosts;
     technicalSpecs?: TechnicalSpecs;
 }

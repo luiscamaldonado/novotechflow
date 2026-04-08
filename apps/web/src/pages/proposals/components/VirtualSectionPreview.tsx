@@ -59,18 +59,25 @@ function VirtualSectionPreview({ sectionId, processedScenarios }: VirtualSection
                                 {isTechSpec ? (
                                     <div className="divide-y divide-slate-100">
                                         {scenario.visibleItems.map((vi, idx) => (
-                                            <div key={vi.scenarioItem.id} className="px-6 py-3 flex items-center justify-between">
-                                                <div className="flex items-center space-x-3">
-                                                    <span className="text-[10px] font-black text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded">
-                                                        #{idx + 1}
-                                                    </span>
-                                                    <span className="text-sm font-bold text-slate-700">
-                                                        {vi.scenarioItem.item.name}
+                                            <div key={vi.scenarioItem.id}>
+                                                <div className="px-6 py-3 flex items-center justify-between">
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="text-[10px] font-black text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded">
+                                                            #{idx + 1}
+                                                        </span>
+                                                        <span className="text-sm font-bold text-slate-700">
+                                                            {vi.scenarioItem.item.name}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-sm font-mono font-bold text-indigo-600">
+                                                        ${vi.unitSalePrice.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                 </div>
-                                                <span className="text-sm font-mono font-bold text-indigo-600">
-                                                    ${vi.unitSalePrice.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </span>
+                                                {vi.scenarioItem.item.deliveryDays != null && vi.scenarioItem.item.deliveryDays > 0 && (
+                                                    <div className="px-6 py-1 text-xs text-slate-500">
+                                                        <span className="font-bold">Tiempo de Entrega:</span> {vi.scenarioItem.item.deliveryDays} días
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
