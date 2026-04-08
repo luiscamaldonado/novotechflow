@@ -56,15 +56,16 @@ export async function exportToExcel(opts: ExportOptions) {
             { width: 18 },  // D - TIPO
             { width: 18 },  // E - FABRICANTE
             { width: 40 },  // F - DESCRIPCIÓN
-            { width: 10 },  // G - CANTIDAD
-            { width: 18 },  // H - COSTO UNITARIO
-            { width: 8 },   // I - IVA
-            { width: 18 },  // J - SUBTOTAL COSTO
-            { width: 20 },  // K - TOTAL COSTO + IVA
-            { width: 16 },  // L - MARGEN UNITARIO
-            { width: 18 },  // M - VENTA UNITARIA
-            { width: 18 },  // N - SUBTOTAL VENTA
-            { width: 20 },  // O - TOTAL VENTA + IVA
+            { width: 10 },  // G - MONEDA
+            { width: 10 },  // H - CANTIDAD
+            { width: 18 },  // I - COSTO UNITARIO
+            { width: 8 },   // J - IVA
+            { width: 18 },  // K - SUBTOTAL COSTO
+            { width: 20 },  // L - TOTAL COSTO + IVA
+            { width: 16 },  // M - MARGEN UNITARIO
+            { width: 18 },  // N - VENTA UNITARIA
+            { width: 18 },  // O - SUBTOTAL VENTA
+            { width: 20 },  // P - TOTAL VENTA + IVA
         ];
 
         // ── Acquisition mode ──
@@ -101,10 +102,10 @@ export async function exportToExcel(opts: ExportOptions) {
             valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
 
             if (r === 0) {
-                ws.mergeCells(row.number, 1, row.number, 15);
+                ws.mergeCells(row.number, 1, row.number, 16);
                 labelCell.alignment = { vertical: 'middle', horizontal: 'center' };
             } else {
-                ws.mergeCells(row.number, 2, row.number, 15);
+                ws.mergeCells(row.number, 2, row.number, 16);
             }
         }
 
@@ -114,7 +115,7 @@ export async function exportToExcel(opts: ExportOptions) {
         // ── Table header ──
         const TABLE_HEADERS = [
             'ITEM', 'CATEGORÍA', 'NOMBRE', 'TIPO', 'FABRICANTE',
-            'DESCRIPCIÓN', 'CANT.', 'COSTO UNIT.', 'IVA',
+            'DESCRIPCIÓN', 'MONEDA', 'CANT.', 'COSTO UNIT.', 'IVA',
             'SUBTOTAL COSTO', 'TOTAL COSTO + IVA',
             'MARGEN UNIT.', 'VENTA UNIT.',
             'SUBTOTAL VENTA', 'TOTAL VENTA + IVA',
@@ -166,6 +167,8 @@ export async function exportToExcel(opts: ExportOptions) {
                 const fabricanteField = getManufacturerField(specs);
                 const descriptionField = piFromArchitect?.description || (item as unknown as { description?: string }).description || '';
 
+                const currencyLabel = item.costCurrency || 'COP';
+
                 const dataRow = ws.addRow([
                     displayIdx,
                     categoryLabel,
@@ -173,6 +176,7 @@ export async function exportToExcel(opts: ExportOptions) {
                     tipoField,
                     fabricanteField,
                     descriptionField,
+                    currencyLabel,
                     si.quantity,
                     dv.effectiveLandedCost,
                     `${ivaPct}%`,
@@ -197,25 +201,25 @@ export async function exportToExcel(opts: ExportOptions) {
                     cell.alignment = { vertical: 'middle', wrapText: colNumber === 6 };
 
                     // Numeric columns: right alignment + currency format
-                    if ([8, 10, 11, 13, 14, 15].includes(colNumber)) {
+                    if ([9, 11, 12, 14, 15, 16].includes(colNumber)) {
                         cell.alignment = { vertical: 'middle', horizontal: 'right' };
                         cell.numFmt = '"$"#,##0.00';
                     }
-                    // Center columns
-                    if ([1, 7, 9, 12].includes(colNumber)) {
+                    // Center columns (ITEM, MONEDA, CANT., IVA, MARGEN)
+                    if ([1, 7, 8, 10, 13].includes(colNumber)) {
                         cell.alignment = { vertical: 'middle', horizontal: 'center' };
                     }
 
                     // Color highlights
-                    if (colNumber === 8 || colNumber === 10 || colNumber === 11) {
+                    if (colNumber === 9 || colNumber === 11 || colNumber === 12) {
                         // Cost columns: amber tint
-                        cell.font = { size: 10, color: { argb: AMBER_600 }, bold: colNumber === 11 };
+                        cell.font = { size: 10, color: { argb: AMBER_600 }, bold: colNumber === 12 };
                     }
-                    if (colNumber === 13 || colNumber === 14 || colNumber === 15) {
+                    if (colNumber === 14 || colNumber === 15 || colNumber === 16) {
                         // Sales columns: emerald tint
-                        cell.font = { size: 10, color: { argb: EMERALD_600 }, bold: colNumber === 15 };
+                        cell.font = { size: 10, color: { argb: EMERALD_600 }, bold: colNumber === 16 };
                     }
-                    if (colNumber === 12) {
+                    if (colNumber === 13) {
                         // Margin: indigo
                         cell.font = { size: 10, color: { argb: INDIGO_600 }, bold: true };
                     }
@@ -230,15 +234,15 @@ export async function exportToExcel(opts: ExportOptions) {
             ws.addRow([]); // spacer
             const sumRow = ws.addRow([
                 '', '', '', '', '', 'TOTALES', '', '', '', '',
-                '', '', '', '', '',
+                '', '', '', '', '', '',
             ]);
 
             // Sum formulas for numeric columns
             const sumColumns = [
-                { col: 10, letter: 'J' }, // SUBTOTAL COSTO
-                { col: 11, letter: 'K' }, // TOTAL COSTO + IVA
-                { col: 14, letter: 'N' }, // SUBTOTAL VENTA
-                { col: 15, letter: 'O' }, // TOTAL VENTA + IVA
+                { col: 11, letter: 'K' }, // SUBTOTAL COSTO
+                { col: 12, letter: 'L' }, // TOTAL COSTO + IVA
+                { col: 15, letter: 'O' }, // SUBTOTAL VENTA
+                { col: 16, letter: 'P' }, // TOTAL VENTA + IVA
             ];
 
             const labelCell = sumRow.getCell(6);
@@ -250,8 +254,8 @@ export async function exportToExcel(opts: ExportOptions) {
                 const cell = sumRow.getCell(col);
                 cell.value = { formula: `SUM(${letter}${totalsStartRow}:${letter}${totalsEndRow})` };
                 cell.numFmt = '"$"#,##0.00';
-                cell.font = { bold: true, size: 11, color: { argb: col <= 11 ? AMBER_600 : EMERALD_600 } };
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col <= 11 ? 'FFFFFBEB' : EMERALD_50 } };
+                cell.font = { bold: true, size: 11, color: { argb: col <= 12 ? AMBER_600 : EMERALD_600 } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col <= 12 ? 'FFFFFBEB' : EMERALD_50 } };
                 cell.alignment = { vertical: 'middle', horizontal: 'right' };
                 cell.border = {
                     top:    { style: 'medium', color: { argb: INDIGO_600 } },
@@ -260,8 +264,8 @@ export async function exportToExcel(opts: ExportOptions) {
             });
 
             // Style remaining cells in sum row
-            for (let c = 1; c <= 15; c++) {
-                if (c !== 6 && ![10, 11, 14, 15].includes(c)) {
+            for (let c = 1; c <= 16; c++) {
+                if (c !== 6 && ![11, 12, 15, 16].includes(c)) {
                     const cell = sumRow.getCell(c);
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INDIGO_50 } };
                     cell.border = {
