@@ -71,9 +71,7 @@ export function useProposalBuilder(proposalId: string | undefined) {
             // pero el backend DTO espera números.
             // Only send fields accepted by CreateProposalItemDto / UpdateProposalItemDto
             const deliveryDaysRaw = itemForm.deliveryDays;
-            const deliveryDays = deliveryDaysRaw != null && deliveryDaysRaw !== ''
-                ? Number(deliveryDaysRaw)
-                : null;
+            const deliveryDays = deliveryDaysRaw != null ? Number(deliveryDaysRaw) : null;
 
             const payload = {
                 itemType: itemForm.itemType,
