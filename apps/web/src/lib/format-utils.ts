@@ -65,6 +65,7 @@ export function parseTrmValue(formatted: string): number {
  * @example formatDecimalWithThousands("50") → "50"
  */
 export function formatDecimalWithThousands(value: string): string {
+    const isNegative = value.trim().startsWith('-');
     const cleaned = value.replace(/[^0-9.,]/g, '');
     // Normalize comma → dot to split integer/decimal parts
     const normalized = cleaned.replace(',', '.');
@@ -73,9 +74,9 @@ export function formatDecimalWithThousands(value: string): string {
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     // If there was a decimal portion, join with comma
     if (parts.length > 1) {
-        return parts[0] + ',' + parts.slice(1).join('');
+        return (isNegative ? '-' : '') + parts[0] + ',' + parts.slice(1).join('');
     }
-    return parts[0];
+    return (isNegative ? '-' : '') + parts[0];
 }
 
 /**
