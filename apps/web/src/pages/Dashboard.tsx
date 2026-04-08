@@ -11,6 +11,7 @@ import type { ProposalStatus, AcquisitionType } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import ProjectionModal from './dashboard/ProjectionModal';
 import TrmCards from './dashboard/TrmCards';
+import DashboardFilters from './dashboard/DashboardFilters';
 
 /** Format a subtotal with its currency label (COP or USD). */
 function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
@@ -29,6 +30,14 @@ export default function Dashboard() {
         showFilters, setShowFilters, searchTerm, setSearchTerm,
         statusFilters, subtotalMin, setSubtotalMin, subtotalMax, setSubtotalMax,
         hasActiveFilters,
+        closeDateRange, setCloseDateRange,
+        billingDateRange, setBillingDateRange,
+        categoryFilter, setCategoryFilter,
+        manufacturerFilter, setManufacturerFilter,
+        subtotalUsdMin, setSubtotalUsdMin,
+        subtotalUsdMax, setSubtotalUsdMax,
+        acquisitionFilter, setAcquisitionFilter,
+        manufacturerSuggestions,
         handleStatusChange, handleDateChange, handleClone, handleDelete,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
         handleProjectionStatusChange, handleProjectionDateChange,
@@ -135,47 +144,70 @@ export default function Dashboard() {
 
             {/* Collapsible Filters */}
             {showFilters && (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4 animate-in slide-in-from-top-2">
-                    <div>
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Estado</label>
-                        <div className="flex flex-wrap gap-2">
-                            {ALL_STATUSES.map(s => {
-                                const cfg = STATUS_CONFIG[s];
-                                const active = statusFilters.has(s);
-                                return (
-                                    <button
-                                        key={s}
-                                        onClick={() => toggleStatusFilter(s)}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}
-                                    >
-                                        {cfg.label}
-                                    </button>
-                                );
-                            })}
+                <div className="space-y-4">
+                    {/* Status filters row */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4 animate-in slide-in-from-top-2">
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Estado</label>
+                            <div className="flex flex-wrap gap-2">
+                                {ALL_STATUSES.map(s => {
+                                    const cfg = STATUS_CONFIG[s];
+                                    const active = statusFilters.has(s);
+                                    return (
+                                        <button
+                                            key={s}
+                                            onClick={() => toggleStatusFilter(s)}
+                                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}
+                                        >
+                                            {cfg.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Subtotal mín.</label>
+                                <input
+                                    type="number"
+                                    placeholder="0"
+                                    value={subtotalMin}
+                                    onChange={(e) => setSubtotalMin(e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Subtotal máx.</label>
+                                <input
+                                    type="number"
+                                    placeholder="∞"
+                                    value={subtotalMax}
+                                    onChange={(e) => setSubtotalMax(e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                                />
+                            </div>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Subtotal mín.</label>
-                            <input
-                                type="number"
-                                placeholder="0"
-                                value={subtotalMin}
-                                onChange={(e) => setSubtotalMin(e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Subtotal máx.</label>
-                            <input
-                                type="number"
-                                placeholder="∞"
-                                value={subtotalMax}
-                                onChange={(e) => setSubtotalMax(e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                            />
-                        </div>
-                    </div>
+
+                    {/* Advanced filters */}
+                    <DashboardFilters
+                        closeDateRange={closeDateRange}
+                        onCloseDateRangeChange={setCloseDateRange}
+                        billingDateRange={billingDateRange}
+                        onBillingDateRangeChange={setBillingDateRange}
+                        categoryFilter={categoryFilter}
+                        onCategoryFilterChange={setCategoryFilter}
+                        manufacturerFilter={manufacturerFilter}
+                        onManufacturerFilterChange={setManufacturerFilter}
+                        manufacturerSuggestions={manufacturerSuggestions}
+                        subtotalUsdMin={subtotalUsdMin}
+                        onSubtotalUsdMinChange={setSubtotalUsdMin}
+                        subtotalUsdMax={subtotalUsdMax}
+                        onSubtotalUsdMaxChange={setSubtotalUsdMax}
+                        acquisitionFilter={acquisitionFilter}
+                        onAcquisitionFilterChange={setAcquisitionFilter}
+                        onClearAll={clearFilters}
+                    />
                 </div>
             )}
 

@@ -3,7 +3,8 @@ import { api } from '../lib/api';
 import { TRM_API_URL } from '../lib/constants';
 import { calculateScenarioTotals } from '../lib/pricing-engine';
 import { getTrmMonthlyAverage } from '../lib/trm-service';
-import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType } from '../lib/types';
+import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType, ItemType } from '../lib/types';
+import type { DateRange } from '../pages/dashboard/DashboardFilters';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -190,6 +191,15 @@ export function useDashboard() {
     const [subtotalMin, setSubtotalMin] = useState('');
     const [subtotalMax, setSubtotalMax] = useState('');
 
+    // Advanced filter state
+    const [closeDateRange, setCloseDateRange] = useState<DateRange>({ from: '', to: '' });
+    const [billingDateRange, setBillingDateRange] = useState<DateRange>({ from: '', to: '' });
+    const [categoryFilter, setCategoryFilter] = useState<Set<ItemType>>(new Set());
+    const [manufacturerFilter, setManufacturerFilter] = useState('');
+    const [subtotalUsdMin, setSubtotalUsdMin] = useState('');
+    const [subtotalUsdMax, setSubtotalUsdMax] = useState('');
+    const [acquisitionFilter, setAcquisitionFilter] = useState<AcquisitionType | 'ALL'>('ALL');
+
     // Clone action state
     const [cloning, setCloning] = useState<string | null>(null);
 
@@ -306,21 +316,97 @@ export function useDashboard() {
         return [...proposalRows, ...projectionRows];
     }, [proposalsWithSubtotals, projections]);
 
+    /** Unique fabricante/responsable values from all proposals for autocomplete. */
+    const manufacturerSuggestions = useMemo(() => {
+        const values = new Set<string>();
+        for (const p of proposals) {
+            const scenarioItems = p.scenarios?.flatMap(s => s.scenarioItems) ?? [];
+            for (const si of scenarioItems) {
+                const specs = si.item.technicalSpecs;
+                if (specs?.fabricante) values.add(specs.fabricante);
+                if (specs?.responsable) values.add(specs.responsable);
+            }
+        }
+        return Array.from(values).sort();
+    }, [proposals]);
+
     const filtered = useMemo(() => {
-        return allRows.filter(p => {
+        return allRows.filter(row => {
+            // Search term
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
-                const matches = p.code?.toLowerCase().includes(term) ||
-                    p.clientName.toLowerCase().includes(term) ||
-                    p.subject.toLowerCase().includes(term);
-                if (!matches) return false;
+                const isMatch = row.code?.toLowerCase().includes(term) ||
+                    row.clientName.toLowerCase().includes(term) ||
+                    row.subject.toLowerCase().includes(term);
+                if (!isMatch) return false;
             }
-            if (statusFilters.size > 0 && !statusFilters.has(p.status)) return false;
-            if (subtotalMin && p.minSubtotal !== null && p.minSubtotal < parseFloat(subtotalMin)) return false;
-            if (subtotalMax && p.minSubtotal !== null && p.minSubtotal > parseFloat(subtotalMax)) return false;
+
+            // Status
+            if (statusFilters.size > 0 && !statusFilters.has(row.status)) return false;
+
+            // Original subtotal range (legacy)
+            if (subtotalMin && row.minSubtotal !== null && row.minSubtotal < parseFloat(subtotalMin)) return false;
+            if (subtotalMax && row.minSubtotal !== null && row.minSubtotal > parseFloat(subtotalMax)) return false;
+
+            // Close date range
+            if (closeDateRange.from || closeDateRange.to) {
+                const raw = row.closeDate;
+                if (!raw) return false;
+                const dateStr = raw.split('T')[0];
+                if (closeDateRange.from && dateStr < closeDateRange.from) return false;
+                if (closeDateRange.to && dateStr > closeDateRange.to) return false;
+            }
+
+            // Billing date range
+            if (billingDateRange.from || billingDateRange.to) {
+                const raw = row.billingDate;
+                if (!raw) return false;
+                const dateStr = raw.split('T')[0];
+                if (billingDateRange.from && dateStr < billingDateRange.from) return false;
+                if (billingDateRange.to && dateStr > billingDateRange.to) return false;
+            }
+
+            // Category filter
+            if (categoryFilter.size > 0) {
+                const itemTypes = row.originalProposal?.scenarios
+                    ?.flatMap(s => s.scenarioItems)
+                    ?.map(si => si.item.itemType as ItemType) ?? [];
+                const hasMatch = itemTypes.some(t => categoryFilter.has(t));
+                if (!hasMatch) return false;
+            }
+
+            // Manufacturer / Responsable
+            if (manufacturerFilter) {
+                const term = manufacturerFilter.toLowerCase();
+                const items = row.originalProposal?.scenarios
+                    ?.flatMap(s => s.scenarioItems)
+                    ?.map(si => si.item) ?? [];
+                const hasMatch = items.some(item => {
+                    const specs = item.technicalSpecs;
+                    return specs?.fabricante?.toLowerCase().includes(term) ||
+                        specs?.responsable?.toLowerCase().includes(term);
+                });
+                if (!hasMatch) return false;
+            }
+
+            // USD Subtotal range
+            if (subtotalUsdMin || subtotalUsdMax) {
+                const usd = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate);
+                if (usd === null) return false;
+                if (subtotalUsdMin && usd < parseFloat(subtotalUsdMin)) return false;
+                if (subtotalUsdMax && usd > parseFloat(subtotalUsdMax)) return false;
+            }
+
+            // Acquisition type
+            if (acquisitionFilter !== 'ALL' && row.acquisitionType !== acquisitionFilter) return false;
+
             return true;
         });
-    }, [allRows, searchTerm, statusFilters, subtotalMin, subtotalMax]);
+    }, [
+        allRows, searchTerm, statusFilters, subtotalMin, subtotalMax,
+        closeDateRange, billingDateRange, categoryFilter, manufacturerFilter,
+        subtotalUsdMin, subtotalUsdMax, acquisitionFilter, trmRate,
+    ]);
 
     // ── Billing summary cards per acquisition type (values in USD) ──
     const billingCardsVenta: BillingCards = useMemo(
@@ -427,9 +513,20 @@ export function useDashboard() {
         setStatusFilters(new Set());
         setSubtotalMin('');
         setSubtotalMax('');
+        setCloseDateRange({ from: '', to: '' });
+        setBillingDateRange({ from: '', to: '' });
+        setCategoryFilter(new Set());
+        setManufacturerFilter('');
+        setSubtotalUsdMin('');
+        setSubtotalUsdMax('');
+        setAcquisitionFilter('ALL');
     };
 
-    const hasActiveFilters = searchTerm || statusFilters.size > 0 || subtotalMin || subtotalMax;
+    const hasActiveFilters = searchTerm || statusFilters.size > 0 || subtotalMin || subtotalMax
+        || closeDateRange.from || closeDateRange.to
+        || billingDateRange.from || billingDateRange.to
+        || categoryFilter.size > 0 || manufacturerFilter
+        || subtotalUsdMin || subtotalUsdMax || acquisitionFilter !== 'ALL';
 
     return {
         // State
@@ -456,6 +553,23 @@ export function useDashboard() {
         subtotalMax,
         setSubtotalMax,
         hasActiveFilters,
+
+        // Advanced filter state
+        closeDateRange,
+        setCloseDateRange,
+        billingDateRange,
+        setBillingDateRange,
+        categoryFilter,
+        setCategoryFilter,
+        manufacturerFilter,
+        setManufacturerFilter,
+        subtotalUsdMin,
+        setSubtotalUsdMin,
+        subtotalUsdMax,
+        setSubtotalUsdMax,
+        acquisitionFilter,
+        setAcquisitionFilter,
+        manufacturerSuggestions,
 
         // Actions
         handleStatusChange,
