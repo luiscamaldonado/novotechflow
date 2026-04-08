@@ -92,11 +92,10 @@ function parseDate(dateStr: string): { month: number; year: number } {
     return { month: m - 1, year: y };
 }
 
-/** Compute billing cards for a single acquisition type. All subtotals converted to USD. */
+/** Compute billing cards from already-filtered DashboardRows for one acquisition type. */
 function computeBillingCards(
-    proposals: ProposalWithSubtotal[],
-    projections: BillingProjection[],
-    acquisitionFilter: AcquisitionType,
+    rows: DashboardRow[],
+    acqType: AcquisitionType,
     trmRate: number | null,
 ): BillingCards {
     const now = new Date();
@@ -117,52 +116,29 @@ function computeBillingCards(
     let pendFactMesActual = 0;
     let pendFactMesSiguiente = 0;
 
-    const filteredProposals = proposals.filter(p => p.acquisitionType === acquisitionFilter);
-    const filteredProjections = projections.filter(pr => pr.acquisitionType === acquisitionFilter);
+    const acqRows = rows.filter(r => r.acquisitionType === acqType);
 
-    for (const p of filteredProposals) {
-        const sub = getSubtotalUsd(p.subtotal, p.currency, trmRate) ?? 0;
+    for (const row of acqRows) {
+        const sub = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate) ?? 0;
 
-        if (p.status === 'FACTURADA' && p.billingDate) {
-            const { month, year } = parseDate(p.billingDate);
+        if (row.status === 'FACTURADA' && row.billingDate) {
+            const { month, year } = parseDate(row.billingDate);
             if (month === prevMonth && year === prevMonthYear) facturadoMesAnterior += sub;
             if (month === thisMonth && year === thisYear) facturadoMesActual += sub;
             if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
         }
 
-        if (p.status === 'PENDIENTE_FACTURAR' && p.billingDate) {
-            const { month, year } = parseDate(p.billingDate);
+        if (row.status === 'PENDIENTE_FACTURAR' && row.billingDate) {
+            const { month, year } = parseDate(row.billingDate);
             if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
             if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
             if (month === thisMonth && year === thisYear) pendFactMesActual += sub;
             if (month === nextMonth && year === nextMonthYear) pendFactMesSiguiente += sub;
         }
 
-        if (p.status === 'GANADA' && p.closeDate) {
-            const { month, year } = parseDate(p.closeDate);
+        if (row.status === 'GANADA' && row.closeDate) {
+            const { month, year } = parseDate(row.closeDate);
             if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
-        }
-    }
-
-    // Projections: use stored currency for conversion
-    for (const pr of filteredProjections) {
-        const rawSub = Number(pr.subtotal) || 0;
-        const prCurrency: CurrencyCode = pr.currency === 'USD' ? 'USD' : 'COP';
-        const sub = getSubtotalUsd(rawSub, prCurrency, trmRate) ?? 0;
-
-        if (pr.status === 'FACTURADA' && pr.billingDate) {
-            const { month, year } = parseDate(pr.billingDate);
-            if (month === prevMonth && year === prevMonthYear) facturadoMesAnterior += sub;
-            if (month === thisMonth && year === thisYear) facturadoMesActual += sub;
-            if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
-        }
-
-        if (pr.status === 'PENDIENTE_FACTURAR' && pr.billingDate) {
-            const { month, year } = parseDate(pr.billingDate);
-            if (Math.floor(month / 3) === currentQuarter && year === thisYear) facturadoTrimestreActual += sub;
-            if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
-            if (month === thisMonth && year === thisYear) pendFactMesActual += sub;
-            if (month === nextMonth && year === nextMonthYear) pendFactMesSiguiente += sub;
         }
     }
 
@@ -405,15 +381,15 @@ export function useDashboard() {
         subtotalUsdMin, subtotalUsdMax, acquisitionFilter, trmRate,
     ]);
 
-    // ── Billing summary cards per acquisition type (values in USD) ──
+    // ── Billing summary cards per acquisition type (from filtered rows, in USD) ──
     const billingCardsVenta: BillingCards = useMemo(
-        () => computeBillingCards(proposalsWithSubtotals, projections, 'VENTA', trmRate),
-        [proposalsWithSubtotals, projections, trmRate],
+        () => computeBillingCards(filtered, 'VENTA', trmRate),
+        [filtered, trmRate],
     );
 
     const billingCardsDaas: BillingCards = useMemo(
-        () => computeBillingCards(proposalsWithSubtotals, projections, 'DAAS', trmRate),
-        [proposalsWithSubtotals, projections, trmRate],
+        () => computeBillingCards(filtered, 'DAAS', trmRate),
+        [filtered, trmRate],
     );
 
     // ── Actions ──
