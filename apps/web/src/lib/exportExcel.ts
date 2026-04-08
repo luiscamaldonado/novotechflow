@@ -50,22 +50,24 @@ export async function exportToExcel(opts: ExportOptions) {
 
         // ── Column widths ──
         ws.columns = [
-            { width: 8 },   // A - ITEM
-            { width: 22 },  // B - CATEGORÍA
-            { width: 35 },  // C - NOMBRE
-            { width: 18 },  // D - TIPO
-            { width: 18 },  // E - FABRICANTE
-            { width: 40 },  // F - DESCRIPCIÓN
-            { width: 10 },  // G - MONEDA
-            { width: 10 },  // H - CANTIDAD
-            { width: 18 },  // I - COSTO UNITARIO
-            { width: 8 },   // J - IVA
-            { width: 18 },  // K - SUBTOTAL COSTO
-            { width: 20 },  // L - TOTAL COSTO + IVA
-            { width: 16 },  // M - MARGEN UNITARIO
-            { width: 18 },  // N - VENTA UNITARIA
-            { width: 18 },  // O - SUBTOTAL VENTA
-            { width: 20 },  // P - TOTAL VENTA + IVA
+            { width: 8 },   // A  - ITEM
+            { width: 22 },  // B  - CATEGORÍA
+            { width: 35 },  // C  - NOMBRE
+            { width: 18 },  // D  - TIPO
+            { width: 18 },  // E  - FABRICANTE
+            { width: 40 },  // F  - DESCRIPCIÓN
+            { width: 14 },  // G  - Moneda Costo
+            { width: 10 },  // H  - CANTIDAD
+            { width: 18 },  // I  - COSTO UNITARIO
+            { width: 8 },   // J  - IVA
+            { width: 18 },  // K  - SUBTOTAL COSTO
+            { width: 20 },  // L  - TOTAL COSTO + IVA
+            { width: 16 },  // M  - MARGEN UNITARIO
+            { width: 16 },  // N  - TRM Conversión
+            { width: 14 },  // O  - Moneda Venta
+            { width: 18 },  // P  - VENTA UNITARIA
+            { width: 18 },  // Q  - SUBTOTAL VENTA
+            { width: 20 },  // R  - TOTAL VENTA + IVA
         ];
 
         // ── Acquisition mode ──
@@ -102,10 +104,10 @@ export async function exportToExcel(opts: ExportOptions) {
             valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
 
             if (r === 0) {
-                ws.mergeCells(row.number, 1, row.number, 16);
+                ws.mergeCells(row.number, 1, row.number, 18);
                 labelCell.alignment = { vertical: 'middle', horizontal: 'center' };
             } else {
-                ws.mergeCells(row.number, 2, row.number, 16);
+                ws.mergeCells(row.number, 2, row.number, 18);
             }
         }
 
@@ -115,10 +117,10 @@ export async function exportToExcel(opts: ExportOptions) {
         // ── Table header ──
         const TABLE_HEADERS = [
             'ITEM', 'CATEGORÍA', 'NOMBRE', 'TIPO', 'FABRICANTE',
-            'DESCRIPCIÓN', 'MONEDA', 'CANT.', 'COSTO UNIT.', 'IVA',
+            'DESCRIPCIÓN', 'Moneda Costo', 'CANT.', 'COSTO UNIT.', 'IVA',
             'SUBTOTAL COSTO', 'TOTAL COSTO + IVA',
-            'MARGEN UNIT.', 'VENTA UNIT.',
-            'SUBTOTAL VENTA', 'TOTAL VENTA + IVA',
+            'MARGEN UNIT.', 'TRM Conversión', 'Moneda Venta',
+            'VENTA UNIT.', 'SUBTOTAL VENTA', 'TOTAL VENTA + IVA',
         ];
 
         const headerRow = ws.addRow(TABLE_HEADERS);
@@ -167,7 +169,9 @@ export async function exportToExcel(opts: ExportOptions) {
                 const fabricanteField = getManufacturerField(specs);
                 const descriptionField = piFromArchitect?.description || (item as unknown as { description?: string }).description || '';
 
-                const currencyLabel = item.costCurrency || 'COP';
+                const costCurrencyLabel = item.costCurrency || 'COP';
+                const trmConversionValue = scenario.conversionTrm ?? null;
+                const saleCurrencyLabel = scenario.currency || 'COP';
 
                 const dataRow = ws.addRow([
                     displayIdx,
@@ -176,13 +180,15 @@ export async function exportToExcel(opts: ExportOptions) {
                     tipoField,
                     fabricanteField,
                     descriptionField,
-                    currencyLabel,
+                    costCurrencyLabel,
                     si.quantity,
                     dv.effectiveLandedCost,
                     `${ivaPct}%`,
                     subtotalCost,
                     totalCostConIva,
                     `${dv.margin.toFixed(2)}%`,
+                    trmConversionValue !== null ? trmConversionValue : 'N/A',
+                    saleCurrencyLabel,
                     dv.unitPrice,
                     subtotalVenta,
                     totalVentaConIva,
@@ -201,12 +207,19 @@ export async function exportToExcel(opts: ExportOptions) {
                     cell.alignment = { vertical: 'middle', wrapText: colNumber === 6 };
 
                     // Numeric columns: right alignment + currency format
-                    if ([9, 11, 12, 14, 15, 16].includes(colNumber)) {
+                    if ([9, 11, 12, 16, 17, 18].includes(colNumber)) {
                         cell.alignment = { vertical: 'middle', horizontal: 'right' };
                         cell.numFmt = '"$"#,##0.00';
                     }
-                    // Center columns (ITEM, MONEDA, CANT., IVA, MARGEN)
-                    if ([1, 7, 8, 10, 13].includes(colNumber)) {
+                    // TRM Conversión column: right alignment + thousands format
+                    if (colNumber === 14) {
+                        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+                        if (typeof cell.value === 'number') {
+                            cell.numFmt = '#,##0.00';
+                        }
+                    }
+                    // Center columns (ITEM, Moneda Costo, CANT., IVA, MARGEN, Moneda Venta)
+                    if ([1, 7, 8, 10, 13, 15].includes(colNumber)) {
                         cell.alignment = { vertical: 'middle', horizontal: 'center' };
                     }
 
@@ -215,9 +228,9 @@ export async function exportToExcel(opts: ExportOptions) {
                         // Cost columns: amber tint
                         cell.font = { size: 10, color: { argb: AMBER_600 }, bold: colNumber === 12 };
                     }
-                    if (colNumber === 14 || colNumber === 15 || colNumber === 16) {
+                    if (colNumber === 16 || colNumber === 17 || colNumber === 18) {
                         // Sales columns: emerald tint
-                        cell.font = { size: 10, color: { argb: EMERALD_600 }, bold: colNumber === 16 };
+                        cell.font = { size: 10, color: { argb: EMERALD_600 }, bold: colNumber === 18 };
                     }
                     if (colNumber === 13) {
                         // Margin: indigo
@@ -234,15 +247,15 @@ export async function exportToExcel(opts: ExportOptions) {
             ws.addRow([]); // spacer
             const sumRow = ws.addRow([
                 '', '', '', '', '', 'TOTALES', '', '', '', '',
-                '', '', '', '', '', '',
+                '', '', '', '', '', '', '', '',
             ]);
 
             // Sum formulas for numeric columns
             const sumColumns = [
                 { col: 11, letter: 'K' }, // SUBTOTAL COSTO
                 { col: 12, letter: 'L' }, // TOTAL COSTO + IVA
-                { col: 15, letter: 'O' }, // SUBTOTAL VENTA
-                { col: 16, letter: 'P' }, // TOTAL VENTA + IVA
+                { col: 17, letter: 'Q' }, // SUBTOTAL VENTA
+                { col: 18, letter: 'R' }, // TOTAL VENTA + IVA
             ];
 
             const labelCell = sumRow.getCell(6);
@@ -264,8 +277,8 @@ export async function exportToExcel(opts: ExportOptions) {
             });
 
             // Style remaining cells in sum row
-            for (let c = 1; c <= 16; c++) {
-                if (c !== 6 && ![11, 12, 15, 16].includes(c)) {
+            for (let c = 1; c <= 18; c++) {
+                if (c !== 6 && ![11, 12, 17, 18].includes(c)) {
                     const cell = sumRow.getCell(c);
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INDIGO_50 } };
                     cell.border = {
