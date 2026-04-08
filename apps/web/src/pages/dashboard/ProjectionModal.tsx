@@ -1,6 +1,7 @@
 import { Loader2, Receipt, X } from 'lucide-react';
 import type { ProjForm } from '../../hooks/useProjections';
 import type { BillingProjection } from '../../lib/types';
+import { formatNumberWithThousands, parseFormattedNumber } from '../../lib/format-utils';
 
 interface ProjectionModalProps {
     editingProjection: BillingProjection | null;
@@ -60,10 +61,15 @@ export default function ProjectionModal({
                             <div className="relative flex-1">
                                 <span className="absolute left-4 top-3 text-gray-400 font-bold text-sm">$</span>
                                 <input
-                                    type="number"
-                                    value={projForm.subtotal}
-                                    onChange={(e) => setProjForm(prev => ({ ...prev, subtotal: e.target.value }))}
-                                    placeholder="0"
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formatNumberWithThousands(projForm.subtotal)}
+                                    onChange={(e) => {
+                                        const numeric = parseFormattedNumber(e.target.value);
+                                        setProjForm(prev => ({ ...prev, subtotal: numeric ? String(numeric) : '' }));
+                                    }}
+                                    onFocus={(e) => e.target.select()}
+                                    placeholder="1.000.000"
                                     className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-300 transition-all"
                                 />
                             </div>

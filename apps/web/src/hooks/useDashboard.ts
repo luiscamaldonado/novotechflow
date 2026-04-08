@@ -188,8 +188,7 @@ export function useDashboard() {
     const [showFilters, setShowFilters] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilters, setStatusFilters] = useState<Set<ProposalStatus>>(new Set());
-    const [subtotalMin, setSubtotalMin] = useState('');
-    const [subtotalMax, setSubtotalMax] = useState('');
+
 
     // Advanced filter state
     const [closeDateRange, setCloseDateRange] = useState<DateRange>({ from: '', to: '' });
@@ -344,9 +343,7 @@ export function useDashboard() {
             // Status
             if (statusFilters.size > 0 && !statusFilters.has(row.status)) return false;
 
-            // Original subtotal range (legacy)
-            if (subtotalMin && row.minSubtotal !== null && row.minSubtotal < parseFloat(subtotalMin)) return false;
-            if (subtotalMax && row.minSubtotal !== null && row.minSubtotal > parseFloat(subtotalMax)) return false;
+
 
             // Close date range
             if (closeDateRange.from || closeDateRange.to) {
@@ -403,7 +400,7 @@ export function useDashboard() {
             return true;
         });
     }, [
-        allRows, searchTerm, statusFilters, subtotalMin, subtotalMax,
+        allRows, searchTerm, statusFilters,
         closeDateRange, billingDateRange, categoryFilter, manufacturerFilter,
         subtotalUsdMin, subtotalUsdMax, acquisitionFilter, trmRate,
     ]);
@@ -511,8 +508,6 @@ export function useDashboard() {
     const clearFilters = () => {
         setSearchTerm('');
         setStatusFilters(new Set());
-        setSubtotalMin('');
-        setSubtotalMax('');
         setCloseDateRange({ from: '', to: '' });
         setBillingDateRange({ from: '', to: '' });
         setCategoryFilter(new Set());
@@ -522,7 +517,7 @@ export function useDashboard() {
         setAcquisitionFilter('ALL');
     };
 
-    const hasActiveFilters = searchTerm || statusFilters.size > 0 || subtotalMin || subtotalMax
+    const hasActiveFilters = searchTerm || statusFilters.size > 0
         || closeDateRange.from || closeDateRange.to
         || billingDateRange.from || billingDateRange.to
         || categoryFilter.size > 0 || manufacturerFilter
@@ -548,10 +543,6 @@ export function useDashboard() {
         searchTerm,
         setSearchTerm,
         statusFilters,
-        subtotalMin,
-        setSubtotalMin,
-        subtotalMax,
-        setSubtotalMax,
         hasActiveFilters,
 
         // Advanced filter state

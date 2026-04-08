@@ -28,7 +28,7 @@ export default function Dashboard() {
         trmRate, setTrmRate,
         trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
         showFilters, setShowFilters, searchTerm, setSearchTerm,
-        statusFilters, subtotalMin, setSubtotalMin, subtotalMax, setSubtotalMax,
+        statusFilters,
         hasActiveFilters,
         closeDateRange, setCloseDateRange,
         billingDateRange, setBillingDateRange,
@@ -164,29 +164,7 @@ export default function Dashboard() {
                                     );
                                 })}
                             </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Subtotal mín.</label>
-                                <input
-                                    type="number"
-                                    placeholder="0"
-                                    value={subtotalMin}
-                                    onChange={(e) => setSubtotalMin(e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 block">Subtotal máx.</label>
-                                <input
-                                    type="number"
-                                    placeholder="∞"
-                                    value={subtotalMax}
-                                    onChange={(e) => setSubtotalMax(e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                                />
-                            </div>
-                        </div>
+                    </div>
                     </div>
 
                     {/* Advanced filters */}

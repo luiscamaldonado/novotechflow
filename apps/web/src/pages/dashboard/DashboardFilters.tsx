@@ -1,5 +1,6 @@
 import { Calendar, Tag, Factory, DollarSign, ShoppingCart, X } from 'lucide-react';
 import { ITEM_TYPE_LABELS, ACQUISITION_CONFIG } from '../../lib/constants';
+import { formatNumberWithThousands, parseFormattedNumber } from '../../lib/format-utils';
 import type { ItemType, AcquisitionType } from '../../lib/types';
 
 // ── Types ────────────────────────────────────────────────────
@@ -168,6 +169,11 @@ function SubtotalUsdFilter({ min, max, onMinChange, onMaxChange }: {
     onMinChange: (value: string) => void;
     onMaxChange: (value: string) => void;
 }) {
+    const handleChange = (raw: string, setter: (value: string) => void) => {
+        const numeric = parseFormattedNumber(raw);
+        setter(numeric ? String(numeric) : '');
+    };
+
     return (
         <div>
             <label className={LABEL_CLASSES}>
@@ -175,18 +181,22 @@ function SubtotalUsdFilter({ min, max, onMinChange, onMaxChange }: {
             </label>
             <div className="flex items-center gap-2">
                 <input
-                    type="number"
-                    placeholder="USD Mín"
-                    value={min}
-                    onChange={(e) => onMinChange(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="1.000.000"
+                    value={formatNumberWithThousands(min)}
+                    onChange={(e) => handleChange(e.target.value, onMinChange)}
+                    onFocus={(e) => e.target.select()}
                     className={INPUT_CLASSES}
                 />
                 <span className="text-gray-300 text-xs font-bold">→</span>
                 <input
-                    type="number"
-                    placeholder="USD Máx"
-                    value={max}
-                    onChange={(e) => onMaxChange(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="1.000.000"
+                    value={formatNumberWithThousands(max)}
+                    onChange={(e) => handleChange(e.target.value, onMaxChange)}
+                    onFocus={(e) => e.target.select()}
                     className={INPUT_CLASSES}
                 />
             </div>
