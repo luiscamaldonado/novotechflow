@@ -7,6 +7,10 @@ import type { ScenarioItem } from '../../../hooks/useScenarios';
 import type { ProposalCalcItem } from '../../../hooks/useScenarios';
 import type { ItemDisplayValues } from '../../../lib/pricing-engine';
 import { calculateParentLandedCost } from '../../../lib/pricing-engine';
+import {
+    formatNumberWithThousands,
+    formatDecimalWithThousands,
+} from '../../../lib/format-utils';
 
 interface ScenarioItemRowProps {
     si: ScenarioItem;
@@ -96,9 +100,23 @@ export default function ScenarioItemRow({
             <td className="px-4 py-6">
                 <input 
                     type="text" 
-                    value={si.quantity}
-                    onChange={(e) => updateQuantity(si.id!, e.target.value)}
-                    className="w-16 mx-auto bg-slate-100 border-none rounded-xl text-center font-black text-xs py-2"
+                    value={editingCell?.id === si.id && editingCell?.field === 'quantity'
+                        ? editingCell.value
+                        : formatNumberWithThousands(si.quantity)}
+                    onFocus={() => setEditingCell({ id: si.id!, field: 'quantity', value: String(si.quantity) })}
+                    onChange={(e) => setEditingCell({ id: si.id!, field: 'quantity', value: e.target.value })}
+                    onBlur={(e) => {
+                        const parsed = parseInt(e.target.value.replace(/\D/g, ''), 10);
+                        if (!isNaN(parsed) && parsed > 0) {
+                            updateQuantity(si.id!, String(parsed));
+                        }
+                        setEditingCell(null);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                        if (e.key === 'Escape') setEditingCell(null);
+                    }}
+                    className="w-20 mx-auto bg-slate-100 border-none rounded-xl text-center font-black text-xs py-2 focus:ring-2 focus:ring-indigo-600/20"
                 />
             </td>
             <td className="px-4 py-6">
@@ -128,14 +146,21 @@ export default function ScenarioItemRow({
                             type="text" 
                             value={editingCell?.id === si.id && editingCell?.field === 'margin' 
                                 ? editingCell.value 
-                                : margin.toFixed(2)}
+                                : formatDecimalWithThousands(margin.toFixed(2))}
                             onFocus={() => {
                                 setEditingCell({ id: si.id!, field: 'margin', value: margin.toFixed(2) });
                             }}
                             onChange={(e) => setEditingCell({ id: si.id!, field: 'margin', value: e.target.value })}
                             onBlur={(e) => {
-                                updateMargin(si.id!, e.target.value);
+                                const parsed = parseFloat(e.target.value.replace(',', '.'));
+                                if (!isNaN(parsed)) {
+                                    updateMargin(si.id!, String(parsed));
+                                }
                                 setEditingCell(null);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                if (e.key === 'Escape') setEditingCell(null);
                             }}
                             className={cn(
                                 "w-full bg-indigo-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6",
@@ -154,16 +179,23 @@ export default function ScenarioItemRow({
                 ) : (
                     <input 
                         type="text"
-                        value={editingCell?.id === si.id && editingCell?.field === 'price' 
+                        value={editingCell?.id === si.id && editingCell?.field === 'unitPrice' 
                             ? editingCell.value 
-                            : unitPrice.toFixed(2)}
-                        onFocus={() => setEditingCell({ id: si.id!, field: 'price', value: unitPrice.toFixed(2) })}
-                        onChange={(e) => setEditingCell({ id: si.id!, field: 'price', value: e.target.value })}
+                            : formatDecimalWithThousands(unitPrice.toFixed(2))}
+                        onFocus={() => setEditingCell({ id: si.id!, field: 'unitPrice', value: unitPrice.toFixed(2) })}
+                        onChange={(e) => setEditingCell({ id: si.id!, field: 'unitPrice', value: e.target.value })}
                         onBlur={(e) => {
-                            updateUnitPrice(si.id!, e.target.value);
+                            const parsed = parseFloat(e.target.value.replace(',', '.'));
+                            if (!isNaN(parsed) && parsed > 0) {
+                                updateUnitPrice(si.id!, String(parsed));
+                            }
                             setEditingCell(null);
                         }}
-                        className="w-24 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20"
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            if (e.key === 'Escape') setEditingCell(null);
+                        }}
+                        className="w-28 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20"
                     />
                 )}
             </td>

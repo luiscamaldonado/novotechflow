@@ -396,12 +396,19 @@ export function useScenarios(proposalId: string | undefined) {
         const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
         const newMargin = calculateMarginFromPrice(val, effectiveLanded);
 
+        if (isNaN(newMargin) || !isFinite(newMargin)) {
+            console.warn('Invalid margin calculated:', newMargin);
+            return;
+        }
+        // Round to 4 decimal places to match DB precision Decimal(10,4)
+        const roundedMargin = Math.round(newMargin * 10000) / 10000;
+
         try {
-            await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: newMargin });
+            await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: roundedMargin });
             setScenarios(prev =>
                 prev.map(s => ({
                     ...s,
-                    scenarioItems: s.scenarioItems.map(i => (i.id === siId ? { ...i, marginPctOverride: newMargin } : i)),
+                    scenarioItems: s.scenarioItems.map(i => (i.id === siId ? { ...i, marginPctOverride: roundedMargin } : i)),
                 })),
             );
         } catch (error) {

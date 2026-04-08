@@ -55,3 +55,35 @@ export function parseTrmValue(formatted: string): number {
     const normalized = formatted.replace(/\./g, '').replace(',', '.');
     return parseFloat(normalized) || 0;
 }
+
+/**
+ * Formats a numeric string with Colombian thousands separators (dot) and
+ * optional decimal part (comma). Designed for inline editing of prices and margins.
+ * Allows the user to type freely while seeing thousands formatting.
+ * @example formatDecimalWithThousands("1234567.89") → "1.234.567,89"
+ * @example formatDecimalWithThousands("1234567,89") → "1.234.567,89"
+ * @example formatDecimalWithThousands("50") → "50"
+ */
+export function formatDecimalWithThousands(value: string): string {
+    const cleaned = value.replace(/[^0-9.,]/g, '');
+    // Normalize comma → dot to split integer/decimal parts
+    const normalized = cleaned.replace(',', '.');
+    const parts = normalized.split('.');
+    // Format integer part with thousands
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    // If there was a decimal portion, join with comma
+    if (parts.length > 1) {
+        return parts[0] + ',' + parts.slice(1).join('');
+    }
+    return parts[0];
+}
+
+/**
+ * Removes Colombian thousands formatting, returning a plain numeric string
+ * suitable for parseFloat(). Dots removed, comma → dot.
+ * @example parseDecimalFormatted("1.234.567,89") → "1234567.89"
+ * @example parseDecimalFormatted("50") → "50"
+ */
+export function parseDecimalFormatted(value: string): string {
+    return value.replace(/\./g, '').replace(',', '.');
+}

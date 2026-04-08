@@ -174,7 +174,7 @@ model ProposalItem {
   unitCost      Decimal  @map("unit_cost") @db.Decimal(15, 2)
   costCurrency  String   @default("COP") @map("cost_currency") @db.VarChar(5)
   internalCosts Json?    @map("internal_costs") @db.JsonB // Additional flexible cost fields
-  marginPct     Decimal? @map("margin_pct") @db.Decimal(5, 2)
+  marginPct     Decimal? @map("margin_pct") @db.Decimal(10, 4)
   unitPrice     Decimal? @map("unit_price") @db.Decimal(15, 2)
 
   isTaxable      Boolean  @default(true) @map("is_taxable")
@@ -213,7 +213,7 @@ model ScenarioItem {
   parentId          String?  @map("parent_id") @db.Uuid
   quantity          Int      @default(1)
   unitCostOverride  Decimal? @map("unit_cost_override") @db.Decimal(15, 2)
-  marginPctOverride Decimal? @map("margin_pct_override") @db.Decimal(5, 2)
+  marginPctOverride Decimal? @map("margin_pct_override") @db.Decimal(10, 4)
   unitPriceOverride Decimal? @map("unit_price_override") @db.Decimal(15, 2)
   isDilpidate       Boolean  @default(false) @map("is_dilpidate")
 
