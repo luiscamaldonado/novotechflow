@@ -118,6 +118,10 @@ export class CreateProposalItemDto {
     @IsOptional()
     @IsObject()
     internalCosts?: Record<string, unknown>;
+
+    @IsOptional()
+    @IsString()
+    costCurrency?: string;
 }
 
 /**
@@ -171,6 +175,10 @@ export class UpdateProposalItemDto {
     @IsOptional()
     @IsObject()
     internalCosts?: Record<string, unknown>;
+
+    @IsOptional()
+    @IsString()
+    costCurrency?: string;
 }
 
 /**
@@ -188,6 +196,10 @@ export class CreateScenarioDto {
     @IsOptional()
     @IsString()
     description?: string;
+
+    @IsOptional()
+    @IsNumber()
+    conversionTrm?: number;
 }
 
 /**
@@ -205,6 +217,10 @@ export class UpdateScenarioDto {
     @IsOptional()
     @IsString()
     description?: string;
+
+    @IsOptional()
+    @IsNumber()
+    conversionTrm?: number;
 }
 
 /**

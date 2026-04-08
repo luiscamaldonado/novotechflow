@@ -68,7 +68,7 @@ function computeMinSubtotal(proposal: ProposalSummary): MinSubtotalResult {
     let minCurrency: CurrencyCode | null = null;
 
     for (const scenario of proposal.scenarios) {
-        const totals = calculateScenarioTotals(scenario.scenarioItems);
+        const totals = calculateScenarioTotals(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
         const sub = totals.subtotal;
 
         if (minSubtotal === null || sub < minSubtotal) {

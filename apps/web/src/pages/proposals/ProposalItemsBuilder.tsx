@@ -389,7 +389,29 @@ export default function ProposalItemsBuilder() {
                                             </div>
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Costo Unitario ($)</label>
-                                                <input type="text" inputMode="decimal" name="unitCost" value={itemForm.unitCost !== undefined ? itemForm.unitCost : ''} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-emerald-400 text-right focus:ring-2 focus:ring-emerald-500/20" />
+                                                <div className="flex items-stretch gap-0">
+                                                    <input type="text" inputMode="decimal" name="unitCost" value={itemForm.unitCost !== undefined ? itemForm.unitCost : ''} onChange={handleItemChange} required className="flex-1 min-w-0 px-5 py-4 rounded-l-2xl bg-slate-800 border-none text-sm font-black text-emerald-400 text-right focus:ring-2 focus:ring-emerald-500/20" />
+                                                    <div className="flex flex-col">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setItemForm(prev => ({ ...prev, costCurrency: 'COP' }))}
+                                                            className={`flex-1 px-3 text-[9px] font-black tracking-wider rounded-tr-2xl transition-all ${
+                                                                (itemForm.costCurrency || 'COP') === 'COP'
+                                                                    ? 'bg-emerald-500 text-white'
+                                                                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                                            }`}
+                                                        >COP</button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setItemForm(prev => ({ ...prev, costCurrency: 'USD' }))}
+                                                            className={`flex-1 px-3 text-[9px] font-black tracking-wider rounded-br-2xl transition-all ${
+                                                                itemForm.costCurrency === 'USD'
+                                                                    ? 'bg-indigo-500 text-white'
+                                                                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                                            }`}
+                                                        >USD</button>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-amber-300 uppercase tracking-widest ml-1">Nuevo Costo Unitario ($)</label>
@@ -523,7 +545,16 @@ export default function ProposalItemsBuilder() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-8 text-right font-mono text-[13px] text-slate-400 tracking-tighter">${(Number(i.unitCost) * (1 + Number(i.internalCosts?.fletePct || 0) / 100)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td className="px-4 py-8 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-wider ${
+                                                        i.costCurrency === 'USD'
+                                                            ? 'bg-indigo-100 text-indigo-600'
+                                                            : 'bg-slate-100 text-slate-500'
+                                                    }`}>{i.costCurrency || 'COP'}</span>
+                                                    <span className="font-mono text-[13px] text-slate-400 tracking-tighter">${(Number(i.unitCost) * (1 + Number(i.internalCosts?.fletePct || 0) / 100)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                </div>
+                                            </td>
                                             <td className="px-8 py-8 text-center">
                                                 <div className="flex items-center justify-center space-x-1">
                                                     <button onClick={() => editItem(i)} title="Editar" className="p-2 sm:p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 hover:shadow-lg hover:shadow-indigo-100 rounded-2xl transition-all border border-transparent hover:border-indigo-100">

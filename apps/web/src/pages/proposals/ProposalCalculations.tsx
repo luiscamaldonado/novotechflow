@@ -282,7 +282,7 @@ export default function ProposalCalculations() {
                                                         return 0;
                                                     })
                                                     .map((si, idx) => {
-                                                    const displayValues = calculateItemDisplayValues(si, activeScenario.scenarioItems);
+                                                    const displayValues = calculateItemDisplayValues(si, activeScenario.scenarioItems, activeScenario.currency, activeScenario.conversionTrm);
                                                     const item = si.item;
                                                     const globalItemIdx = proposal?.proposalItems.findIndex((pi: ProposalCalcItem) => pi.id === si.itemId) ?? -1;
                                                     const displayIdx = globalItemIdx !== -1 ? globalItemIdx + 1 : idx + 1;

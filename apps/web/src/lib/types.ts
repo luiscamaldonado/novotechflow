@@ -48,6 +48,7 @@ export interface ProposalSummary {
         id: string;
         name: string;
         currency: string;
+        conversionTrm?: number | null;
         scenarioItems: Array<{
             id: string;
             itemId: string;
@@ -101,6 +102,7 @@ export interface ProposalItem {
     partNumber: string;
     quantity: number | string;
     unitCost: number | string;
+    costCurrency?: string;
     marginPct: number | string;
     unitPrice: number | string;
     technicalSpecs?: TechnicalSpecs;
@@ -116,6 +118,7 @@ export interface ProposalItemFromApi {
     brand: string;
     partNumber?: string;
     unitCost: number;
+    costCurrency?: string;
     marginPct: number;
     unitPrice: number;
     quantity: number;
@@ -159,6 +162,7 @@ export interface Scenario {
     id: string;
     name: string;
     currency: string;
+    conversionTrm?: number | null;
     description?: string;
     scenarioItems: ScenarioItem[];
 }

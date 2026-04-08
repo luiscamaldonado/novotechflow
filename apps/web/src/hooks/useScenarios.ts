@@ -10,6 +10,7 @@ import {
     calculateTotalDilutedCost,
     calculateTotalNormalSubtotal,
     calculateMarginFromPrice,
+    convertCost,
     type ScenarioTotals,
 } from '../lib/pricing-engine';
 
@@ -21,6 +22,7 @@ export interface ProposalCalcItem {
     name: string;
     itemType: string;
     unitCost: number;
+    costCurrency?: string;
     marginPct: number;
     unitPrice: number;
     quantity: number;
@@ -48,6 +50,7 @@ export interface Scenario {
     id: string;
     name: string;
     currency: string;
+    conversionTrm?: number | null;
     description?: string;
     scenarioItems: ScenarioItem[];
 }
@@ -367,15 +370,16 @@ export function useScenarios(proposalId: string | undefined) {
         const si = scenario.scenarioItems.find(i => i.id === siId);
         if (!si) return;
 
-        const cost = Number(si.item.unitCost);
+        const rawCost = Number(si.item.unitCost);
+        const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenario.currency || 'COP', scenario.conversionTrm);
         const flete = Number(si.item.internalCosts?.fletePct || 0);
         const parentLanded = calculateParentLandedCost(cost, flete);
-        const childrenCost = calculateChildrenCostPerUnit(si.children || []);
+        const childrenCost = calculateChildrenCostPerUnit(si.children || [], scenario.currency, scenario.conversionTrm);
         const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
         // Include dilution in effective cost for accurate margin reverse-calc
-        const totalDilutedCost = calculateTotalDilutedCost(scenario.scenarioItems);
-        const totalNormalSub = calculateTotalNormalSubtotal(scenario.scenarioItems);
+        const totalDilutedCost = calculateTotalDilutedCost(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
+        const totalNormalSub = calculateTotalNormalSubtotal(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
         const dilution = calculateDilutionPerUnit(cost, si.quantity, totalNormalSub, totalDilutedCost);
         const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
         const newMargin = calculateMarginFromPrice(val, effectiveLanded);
@@ -413,7 +417,7 @@ export function useScenarios(proposalId: string | undefined) {
 
     // ── Cálculos (delegated to pricing-engine) ────────────────
     const calculateTotals = (scenario: Scenario): ScenarioTotals => {
-        return calculateScenarioTotals(scenario.scenarioItems);
+        return calculateScenarioTotals(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
     };
 
     const activeScenario = scenarios.find(s => s.id === activeScenarioId) ?? null;

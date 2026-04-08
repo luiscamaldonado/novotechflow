@@ -150,7 +150,7 @@ export async function exportToExcel(opts: ExportOptions) {
                 const displayIdx = globalItemIdx !== -1 ? globalItemIdx + 1 : idx + 1;
 
                 // ── Delegate all cost calculations to pricing engine ──
-                const dv = calculateItemDisplayValues(si, scenario.scenarioItems);
+                const dv = calculateItemDisplayValues(si, scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
 
                 const ivaPct = item.isTaxable ? 19 : 0;
                 const ivaMultiplier = 1 + ivaPct / 100;

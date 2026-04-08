@@ -68,6 +68,7 @@ export class ScenariosService {
         proposalId,
         name: data.name,
         currency: data.currency || 'COP',
+        conversionTrm: data.conversionTrm ?? undefined,
         description: data.description ? sanitizePlainText(data.description) : undefined,
         sortOrder: nextOrder
       }
@@ -84,6 +85,7 @@ export class ScenariosService {
       data: {
         name: data.name,
         currency: data.currency,
+        conversionTrm: data.conversionTrm,
         description: data.description ? sanitizePlainText(data.description) : data.description
       }
     });
@@ -125,6 +127,7 @@ export class ScenariosService {
         proposalId: original.proposalId,
         name: `${original.name} (Copia)`,
         currency: original.currency,
+        conversionTrm: original.conversionTrm,
         description: original.description,
         sortOrder: nextOrder,
       },

@@ -7,9 +7,26 @@
 export const IVA_RATE = 0.19;
 export const MAX_MARGIN = 100;
 
+/**
+ * Convierte un costo de una moneda a otra usando la TRM.
+ * Si las monedas son iguales o no hay TRM, retorna el costo sin cambios.
+ */
+export function convertCost(
+    unitCost: number,
+    itemCurrency: string,
+    scenarioCurrency: string,
+    trm: number | null | undefined,
+): number {
+    if (itemCurrency === scenarioCurrency || !trm || trm <= 0) return unitCost;
+    if (itemCurrency === 'USD' && scenarioCurrency === 'COP') return unitCost * trm;
+    if (itemCurrency === 'COP' && scenarioCurrency === 'USD') return unitCost / trm;
+    return unitCost;
+}
+
 // ── Types ────────────────────────────────────────────────
 export interface PricingItem {
     unitCost: number;
+    costCurrency?: string;
     internalCosts?: { fletePct?: number | string };
     marginPct: number;
     isTaxable: boolean;
@@ -45,10 +62,15 @@ export function calculateParentLandedCost(unitCost: number, fletePct: number): n
  * Sum of (childLanded × childQuantity) across all children.
  * Returns the TOTAL children cost (not per-parent-unit).
  */
-export function calculateChildrenCostPerUnit(children: PricingScenarioItem[]): number {
+export function calculateChildrenCostPerUnit(
+    children: PricingScenarioItem[],
+    scenarioCurrency?: string,
+    conversionTrm?: number | null,
+): number {
     let total = 0;
     for (const child of children) {
-        const cCost = Number(child.item.unitCost);
+        const rawCost = Number(child.item.unitCost);
+        const cCost = convertCost(rawCost, child.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
         const cFlete = Number(child.item.internalCosts?.fletePct || 0);
         total += cCost * (1 + cFlete / 100) * child.quantity;
     }
@@ -69,11 +91,17 @@ export function calculateBaseLandedCost(
 /**
  * Total cost of all diluted items: Σ(unitCost × quantity) for isDilpidate=true.
  */
-export function calculateTotalDilutedCost(items: PricingScenarioItem[]): number {
+export function calculateTotalDilutedCost(
+    items: PricingScenarioItem[],
+    scenarioCurrency?: string,
+    conversionTrm?: number | null,
+): number {
     let total = 0;
     for (const si of items) {
         if (si.isDilpidate) {
-            total += Number(si.item.unitCost) * si.quantity;
+            const rawCost = Number(si.item.unitCost);
+            const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
+            total += cost * si.quantity;
         }
     }
     return total;
@@ -83,11 +111,17 @@ export function calculateTotalDilutedCost(items: PricingScenarioItem[]): number 
  * Total normal subtotal: Σ(unitCost × quantity) for isDilpidate=false.
  * Used as the weight denominator for dilution distribution.
  */
-export function calculateTotalNormalSubtotal(items: PricingScenarioItem[]): number {
+export function calculateTotalNormalSubtotal(
+    items: PricingScenarioItem[],
+    scenarioCurrency?: string,
+    conversionTrm?: number | null,
+): number {
     let total = 0;
     for (const si of items) {
         if (!si.isDilpidate) {
-            total += Number(si.item.unitCost) * si.quantity;
+            const rawCost = Number(si.item.unitCost);
+            const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
+            total += cost * si.quantity;
         }
     }
     return total;
@@ -179,31 +213,24 @@ export interface ItemDisplayValues {
 export function calculateItemDisplayValues(
     si: PricingScenarioItem,
     allItems: PricingScenarioItem[],
+    scenarioCurrency?: string,
+    conversionTrm?: number | null,
 ): ItemDisplayValues {
-    const cost = Number(si.item.unitCost);
+    const rawCost = Number(si.item.unitCost);
+    const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
     const flete = Number(si.item.internalCosts?.fletePct || 0);
     const parentLanded = calculateParentLandedCost(cost, flete);
 
     const children = si.children || [];
-    const childrenCost = calculateChildrenCostPerUnit(children);
+    const childrenCost = calculateChildrenCostPerUnit(children, scenarioCurrency, conversionTrm);
     const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
     // Dilution (only for non-diluted items)
     let dilution = 0;
     if (!si.isDilpidate) {
-        const totalDilutedCost = calculateTotalDilutedCost(allItems);
-        const totalNormalSub = calculateTotalNormalSubtotal(allItems);
+        const totalDilutedCost = calculateTotalDilutedCost(allItems, scenarioCurrency, conversionTrm);
+        const totalNormalSub = calculateTotalNormalSubtotal(allItems, scenarioCurrency, conversionTrm);
         dilution = calculateDilutionPerUnit(cost, si.quantity, totalNormalSub, totalDilutedCost);
-
-        // ── DEBUG (temporary) ──────────────────────────────────
-        console.log(`[PRICING-ENGINE DEBUG] item="${si.item.unitCost}" qty=${si.quantity} isDilpidate=${si.isDilpidate}`);
-        console.log(`  raw types → unitCost=${typeof si.item.unitCost}, marginPct=${typeof si.item.marginPct}, marginPctOverride=${typeof si.marginPctOverride} val=${si.marginPctOverride}`);
-        console.log(`  cost=${cost}, flete=${flete}`);
-        console.log(`  parentLandedCost=${parentLanded}`);
-        console.log(`  childrenCostPerUnit=${childrenCost}, baseLandedCost=${baseLanded}`);
-        console.log(`  totalDilutedCost=${totalDilutedCost}, totalNormalSubtotal=${totalNormalSub}`);
-        console.log(`  dilutionPerUnit=${dilution}`);
-        // ── END DEBUG ──────────────────────────────────────────
     }
 
     const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
@@ -215,13 +242,6 @@ export function calculateItemDisplayValues(
     }
 
     const lineTotal = calculateLineTotal(unitPrice, si.quantity);
-
-    // ── DEBUG (temporary) ──────────────────────────────────
-    console.log(`  effectiveLandedCost=${effectiveLanded}`);
-    console.log(`  margin=${margin} (override=${si.marginPctOverride}, item=${si.item.marginPct})`);
-    console.log(`  unitPrice=${unitPrice}, lineTotal=${lineTotal}`);
-    console.log(`  ─────────────────────────────`);
-    // ── END DEBUG ──────────────────────────────────────────
 
     return {
         parentLandedCost: parentLanded,
@@ -241,24 +261,29 @@ export function calculateItemDisplayValues(
  * Calculate full financial totals for a scenario.
  * Includes dilution, taxable/non-taxable split, IVA, and global margin.
  */
-export function calculateScenarioTotals(scenarioItems: PricingScenarioItem[]): ScenarioTotals {
+export function calculateScenarioTotals(
+    scenarioItems: PricingScenarioItem[],
+    scenarioCurrency?: string,
+    conversionTrm?: number | null,
+): ScenarioTotals {
     let beforeVat = 0;
     let nonTaxed = 0;
     let totalCost = 0;
 
     // Pre-compute dilution aggregates
-    const totalDilutedCost = calculateTotalDilutedCost(scenarioItems);
-    const totalNormalSubtotal = calculateTotalNormalSubtotal(scenarioItems);
+    const totalDilutedCost = calculateTotalDilutedCost(scenarioItems, scenarioCurrency, conversionTrm);
+    const totalNormalSubtotal = calculateTotalNormalSubtotal(scenarioItems, scenarioCurrency, conversionTrm);
 
     const normalItems = scenarioItems.filter(si => !si.isDilpidate);
 
     for (const si of normalItems) {
-        const cost = Number(si.item.unitCost);
+        const rawCost = Number(si.item.unitCost);
+        const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
         const flete = Number(si.item.internalCosts?.fletePct || 0);
         const parentLanded = calculateParentLandedCost(cost, flete);
 
         const children = si.children || [];
-        const childrenCost = calculateChildrenCostPerUnit(children);
+        const childrenCost = calculateChildrenCostPerUnit(children, scenarioCurrency, conversionTrm);
         const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
         const dilution = calculateDilutionPerUnit(
