@@ -9,6 +9,7 @@ import { useProjections } from '../hooks/useProjections';
 import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, formatCOP, formatUSD } from '../lib/constants';
 import type { ProposalStatus, AcquisitionType } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
+import PipelineCards from './dashboard/PipelineCards';
 import ProjectionModal from './dashboard/ProjectionModal';
 import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
@@ -24,7 +25,9 @@ export default function Dashboard() {
     const { user } = useAuthStore();
 
     const {
-        loading, filtered, billingCardsVenta, billingCardsDaas, cloning, setProjections,
+        loading, filtered, billingCardsVenta, billingCardsDaas,
+        pipelineCards, forecastCurrentQuarter, forecastNextQuarter,
+        cloning, setProjections,
         trmRate, setTrmRate,
         trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
         showFilters, setShowFilters, searchTerm, setSearchTerm,
@@ -114,6 +117,13 @@ export default function Dashboard() {
 
             {/* Financial Cards */}
             <BillingCards billingCardsVenta={billingCardsVenta} billingCardsDaas={billingCardsDaas} />
+
+            {/* Pipeline & Forecast Cards */}
+            <PipelineCards
+                pipelineCards={pipelineCards}
+                forecastCurrentQuarter={forecastCurrentQuarter}
+                forecastNextQuarter={forecastNextQuarter}
+            />
 
             {/* Filter Toggle + Search */}
             <div className="flex items-center gap-3">

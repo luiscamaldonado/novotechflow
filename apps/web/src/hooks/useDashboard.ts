@@ -15,6 +15,12 @@ interface MinSubtotalResult {
     currency: CurrencyCode | null;
 }
 
+export interface PipelineByStatus {
+    status: ProposalStatus;
+    currentQuarter: number;
+    nextQuarter: number;
+}
+
 type ProposalWithSubtotal = ProposalSummary & MinSubtotalResult;
 
 export interface DashboardRow {
@@ -43,6 +49,12 @@ export interface BillingCards {
     pendFactMesActual: number;
     pendFactMesSiguiente: number;
 }
+
+/** Statuses displayed in the pipeline cards. */
+const PIPELINE_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA'];
+
+/** Statuses that count towards the active forecast (not yet won/lost). */
+const FORECAST_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA'];
 
 // ── Pure helpers ─────────────────────────────────────────────
 
@@ -90,6 +102,25 @@ function parseDate(dateStr: string): { month: number; year: number } {
     const [datePart] = dateStr.split('T');
     const [y, m] = datePart.split('-').map(Number);
     return { month: m - 1, year: y };
+}
+
+/** Parse ISO date → { quarter (1-4), year } for pipeline grouping. */
+function getQuarter(dateStr: string): { quarter: number; year: number } {
+    const { month, year } = parseDate(dateStr);
+    return { quarter: Math.floor(month / 3) + 1, year };
+}
+
+/** Resolve the current and next quarter numbers (1-4) and their years. */
+function resolveCurrentAndNextQuarter(): {
+    currentQ: number; currentQYear: number;
+    nextQ: number; nextQYear: number;
+} {
+    const now = new Date();
+    const currentQ = Math.floor(now.getMonth() / 3) + 1;
+    const currentQYear = now.getFullYear();
+    const nextQ = currentQ === 4 ? 1 : currentQ + 1;
+    const nextQYear = currentQ === 4 ? currentQYear + 1 : currentQYear;
+    return { currentQ, currentQYear, nextQ, nextQYear };
 }
 
 /** Compute billing cards from already-filtered DashboardRows for one acquisition type. */
@@ -392,6 +423,37 @@ export function useDashboard() {
         [filtered, trmRate],
     );
 
+    // ── Pipeline cards per status + forecast (from filtered rows, in USD) ──
+    const { pipelineCards, forecastCurrentQuarter, forecastNextQuarter } = useMemo(() => {
+        const { currentQ, currentQYear, nextQ, nextQYear } = resolveCurrentAndNextQuarter();
+
+        const cardsByStatus: PipelineByStatus[] = PIPELINE_STATUSES.map(status => {
+            let currentQuarterSum = 0;
+            let nextQuarterSum = 0;
+
+            for (const row of filtered) {
+                if (row.status !== status || !row.closeDate) continue;
+                const usd = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate) ?? 0;
+                const { quarter, year } = getQuarter(row.closeDate);
+
+                if (quarter === currentQ && year === currentQYear) currentQuarterSum += usd;
+                if (quarter === nextQ && year === nextQYear) nextQuarterSum += usd;
+            }
+
+            return { status, currentQuarter: currentQuarterSum, nextQuarter: nextQuarterSum };
+        });
+
+        const forecastCards = cardsByStatus.filter(c => FORECAST_STATUSES.includes(c.status));
+        const fcCurrentQ = forecastCards.reduce((sum, c) => sum + c.currentQuarter, 0);
+        const fcNextQ = forecastCards.reduce((sum, c) => sum + c.nextQuarter, 0);
+
+        return {
+            pipelineCards: cardsByStatus,
+            forecastCurrentQuarter: fcCurrentQ,
+            forecastNextQuarter: fcNextQ,
+        };
+    }, [filtered, trmRate]);
+
     // ── Actions ──
     const handleStatusChange = async (id: string, newStatus: ProposalStatus) => {
         try {
@@ -505,6 +567,9 @@ export function useDashboard() {
         filtered,
         billingCardsVenta,
         billingCardsDaas,
+        pipelineCards,
+        forecastCurrentQuarter,
+        forecastNextQuarter,
         cloning,
         setProjections,
         trmRate,
