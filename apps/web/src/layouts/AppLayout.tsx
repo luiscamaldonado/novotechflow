@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { Menu, Bell } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 export default function AppLayout() {
@@ -35,12 +35,7 @@ export default function AppLayout() {
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-4">
-                        <button className="p-2 text-gray-400 hover:text-novo-primary transition-colors relative">
-                            <Bell className="h-6 w-6" />
-                            <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-                        </button>
-                    </div>
+
                 </header>
 
                 {/* Page Content */}
