@@ -205,6 +205,7 @@ export function useDashboard() {
     const [subtotalUsdMin, setSubtotalUsdMin] = useState('');
     const [subtotalUsdMax, setSubtotalUsdMax] = useState('');
     const [acquisitionFilter, setAcquisitionFilter] = useState<AcquisitionType | 'ALL'>('ALL');
+    const [userFilter, setUserFilter] = useState('');
 
     // Clone action state
     const [cloning, setCloning] = useState<string | null>(null);
@@ -404,12 +405,19 @@ export function useDashboard() {
             // Acquisition type
             if (acquisitionFilter !== 'ALL' && row.acquisitionType !== acquisitionFilter) return false;
 
+            // User (commercial advisor)
+            if (userFilter) {
+                const term = userFilter.toLowerCase();
+                const userName = (row.user?.name || '').toLowerCase();
+                if (!userName.includes(term)) return false;
+            }
+
             return true;
         });
     }, [
         allRows, searchTerm, statusFilters,
         closeDateRange, billingDateRange, categoryFilter, manufacturerFilter,
-        subtotalUsdMin, subtotalUsdMax, acquisitionFilter, trmRate,
+        subtotalUsdMin, subtotalUsdMax, acquisitionFilter, userFilter, trmRate,
     ]);
 
     // ── Billing summary cards per acquisition type (from filtered rows, in USD) ──
@@ -553,13 +561,15 @@ export function useDashboard() {
         setSubtotalUsdMin('');
         setSubtotalUsdMax('');
         setAcquisitionFilter('ALL');
+        setUserFilter('');
     };
 
     const hasActiveFilters = searchTerm || statusFilters.size > 0
         || closeDateRange.from || closeDateRange.to
         || billingDateRange.from || billingDateRange.to
         || categoryFilter.size > 0 || manufacturerFilter
-        || subtotalUsdMin || subtotalUsdMax || acquisitionFilter !== 'ALL';
+        || subtotalUsdMin || subtotalUsdMax || acquisitionFilter !== 'ALL'
+        || userFilter;
 
     return {
         // State
@@ -601,6 +611,8 @@ export function useDashboard() {
         setSubtotalUsdMax,
         acquisitionFilter,
         setAcquisitionFilter,
+        userFilter,
+        setUserFilter,
         manufacturerSuggestions,
 
         // Actions

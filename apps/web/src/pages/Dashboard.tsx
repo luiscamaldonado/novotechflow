@@ -58,6 +58,7 @@ export default function Dashboard() {
         subtotalUsdMin, setSubtotalUsdMin,
         subtotalUsdMax, setSubtotalUsdMax,
         acquisitionFilter, setAcquisitionFilter,
+        userFilter, setUserFilter,
         manufacturerSuggestions,
         handleStatusChange, handleDateChange, handleClone, handleDelete,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
@@ -212,6 +213,8 @@ export default function Dashboard() {
                         onSubtotalUsdMaxChange={setSubtotalUsdMax}
                         acquisitionFilter={acquisitionFilter}
                         onAcquisitionFilterChange={setAcquisitionFilter}
+                        userFilter={userFilter}
+                        onUserFilterChange={setUserFilter}
                         onClearAll={clearFilters}
                     />
                 </div>
