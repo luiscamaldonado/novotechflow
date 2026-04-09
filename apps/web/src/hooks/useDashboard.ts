@@ -574,6 +574,7 @@ export function useDashboard() {
     return {
         // State
         loading,
+        proposals,
         filtered,
         billingCardsVenta,
         billingCardsDaas,

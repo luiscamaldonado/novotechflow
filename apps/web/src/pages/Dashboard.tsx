@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
 import { useProjections } from '../hooks/useProjections';
+import { useNotifications } from '../hooks/useNotifications';
 import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, formatCOP, formatUSD } from '../lib/constants';
 import { exportDashboardToExcel } from '../lib/exportDashboard';
 import type { ProposalStatus, AcquisitionType } from '../lib/types';
@@ -15,6 +16,7 @@ import PipelineCards from './dashboard/PipelineCards';
 import ProjectionModal from './dashboard/ProjectionModal';
 import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
+import NotificationBells from './dashboard/NotificationBells';
 
 /** Format a subtotal with its currency label (COP or USD). */
 function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
@@ -43,7 +45,7 @@ export default function Dashboard() {
     };
 
     const {
-        loading, filtered, billingCardsVenta, billingCardsDaas,
+        loading, proposals, filtered, billingCardsVenta, billingCardsDaas,
         pipelineCards, forecastCurrentQuarter, forecastNextQuarter,
         cloning, setProjections,
         trmRate, setTrmRate,
@@ -73,6 +75,12 @@ export default function Dashboard() {
         handleSaveProjection, handleDeleteProjection,
     } = useProjections(setProjections);
 
+    const {
+        warnings, urgents, unreadWarnings, unreadUrgents, markAllRead,
+    } = useNotifications(proposals, trmRate);
+
+    const [_showAllNotifications, setShowAllNotifications] = useState(false);
+
     if (loading) {
         return (
             <div className="flex justify-center items-center py-20">
@@ -94,6 +102,14 @@ export default function Dashboard() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <NotificationBells
+                        warnings={warnings}
+                        urgents={urgents}
+                        unreadWarnings={unreadWarnings}
+                        unreadUrgents={unreadUrgents}
+                        markAllRead={markAllRead}
+                        onViewAll={() => setShowAllNotifications(true)}
+                    />
                     {/* TRM Input */}
                     <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
                         <label htmlFor="trm-input" className="text-[10px] font-bold uppercase tracking-wider text-gray-400 whitespace-nowrap">
