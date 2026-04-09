@@ -182,7 +182,7 @@ export default function ProposalDocBuilder() {
                 </div>
                 <button
                     onClick={() => setShowPreview(true)}
-                    className="flex items-center space-x-3 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest"
+                    className="flex items-center space-x-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-lg shadow-indigo-200 transition-all font-black text-[10px] uppercase tracking-widest"
                 >
                     <Eye className="h-4 w-4" />
                     <span>Vista Previa PDF</span>

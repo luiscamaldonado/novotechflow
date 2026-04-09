@@ -278,7 +278,7 @@ export default function ProposalItemsBuilder() {
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-emerald-500">
                                     <Save className="h-3 w-3 mr-1.5" /> Acción
                                 </label>
-                                <button type="submit" disabled={saving} className="w-full flex justify-center items-center h-[46px] px-6 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg shadow-slate-200 active:scale-95 disabled:opacity-50">
+                                <button type="submit" disabled={saving} className="w-full flex justify-center items-center h-[46px] px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-lg shadow-indigo-200 text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50">
                                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "ACTUALIZAR"}
                                 </button>
                             </div>
@@ -467,7 +467,7 @@ export default function ProposalItemsBuilder() {
                                         <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
                                             Descartar
                                         </button>
-                                        <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
+                                        <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
                                             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-3" /> : (
                                                 <>
                                                     <Save className="h-4 w-4 mr-3" />
