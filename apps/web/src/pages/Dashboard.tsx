@@ -17,6 +17,7 @@ import ProjectionModal from './dashboard/ProjectionModal';
 import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
 import NotificationBells from './dashboard/NotificationBells';
+import NotificationPanel from './dashboard/NotificationPanel';
 
 /** Format a subtotal with its currency label (COP or USD). */
 function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
@@ -76,10 +77,11 @@ export default function Dashboard() {
     } = useProjections(setProjections);
 
     const {
-        warnings, urgents, unreadWarnings, unreadUrgents, markAllRead,
+        notifications, warnings, urgents, unreadWarnings, unreadUrgents,
+        markAsRead, markAllRead,
     } = useNotifications(proposals, trmRate);
 
-    const [_showAllNotifications, setShowAllNotifications] = useState(false);
+    const [showAllNotifications, setShowAllNotifications] = useState(false);
 
     if (loading) {
         return (
@@ -518,6 +520,15 @@ export default function Dashboard() {
                     savingProjection={savingProjection}
                     onSave={handleSaveProjection}
                     onClose={() => setShowProjectionModal(false)}
+                />
+            )}
+
+            {/* Notification Panel */}
+            {showAllNotifications && (
+                <NotificationPanel
+                    notifications={notifications}
+                    onClose={() => setShowAllNotifications(false)}
+                    markAsRead={markAsRead}
                 />
             )}
         </div>
