@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     Calculator, Loader2, Package,
-    ArrowLeft, RotateCcw, Layers, BookOpen, FileSpreadsheet
+    RotateCcw, Layers, FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScenarios, type ProposalCalcItem } from '../../hooks/useScenarios';
@@ -16,6 +16,7 @@ import { resolveMargin } from '../../lib/pricing-engine';
 import ScenarioItemRow from './components/ScenarioItemRow';
 import ScenarioSidebar from './components/ScenarioSidebar';
 import ScenarioHeader from './components/ScenarioHeader';
+import ProposalStepper from '../../components/proposals/ProposalStepper';
 
 export default function ProposalCalculations() {
     const { id } = useParams<{ id: string }>();
@@ -101,15 +102,11 @@ export default function ProposalCalculations() {
 
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
+            <ProposalStepper proposalId={id!} currentStep={2} />
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                    <button 
-                        onClick={() => navigate(`/proposals/${id}/builder`)}
-                        className="p-3 bg-white border border-slate-100 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-600 transition-colors"
-                    >
-                        <ArrowLeft className="h-5 w-5" />
-                    </button>
                     <div>
                         <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center">
                             <Calculator className="h-8 w-8 mr-3 text-indigo-600" />
@@ -183,8 +180,8 @@ export default function ProposalCalculations() {
                 </div>
             </div>
 
-            {/* Navigation to Document Builder + Export */}
-            <div className="flex justify-end space-x-3">
+            {/* Export */}
+            <div className="flex justify-end">
                 <button 
                     onClick={async () => {
                         const { user } = useAuthStore.getState();
@@ -202,13 +199,6 @@ export default function ProposalCalculations() {
                 >
                     <FileSpreadsheet className="h-4 w-4" />
                     <span>Exportar Excel</span>
-                </button>
-                <button 
-                    onClick={() => navigate(`/proposals/${id}/document`)}
-                    className="flex items-center space-x-3 px-6 py-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all font-black text-[10px] uppercase tracking-widest"
-                >
-                    <BookOpen className="h-4 w-4" />
-                    <span>Construir Documento</span>
                 </button>
             </div>
 

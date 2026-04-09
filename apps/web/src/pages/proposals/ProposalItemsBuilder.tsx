@@ -12,6 +12,7 @@ import type { ProposalItem, ProposalDetail } from '../../lib/types';
 import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../../lib/constants';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';
+import ProposalStepper from '../../components/proposals/ProposalStepper';
 
 export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -200,6 +201,8 @@ export default function ProposalItemsBuilder() {
 
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
+            <ProposalStepper proposalId={id!} currentStep={1} />
+
             {/* Header del Asistente */}
             <div className="flex items-center justify-between">
                 <div>
@@ -597,21 +600,13 @@ export default function ProposalItemsBuilder() {
                     </div>
                 </div>
 
-                <div className="flex justify-between items-center pt-8 border-t border-slate-100">
+                <div className="flex justify-start items-center pt-8 border-t border-slate-100">
                     <button 
                         onClick={() => navigate('/proposals/new')}
                         className="flex items-center space-x-2 text-slate-400 hover:text-indigo-600 font-black text-[10px] uppercase tracking-widest transition-all"
                     >
                         <ChevronRight className="h-4 w-4 rotate-180" />
                         <span>Volver a Cabecera</span>
-                    </button>
-                    <button
-                        disabled={items.length === 0}
-                        onClick={() => navigate(`/proposals/${id}/calculations`)}
-                        className="flex items-center space-x-4 bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-200 text-white px-16 py-6 rounded-[2rem] transition-all font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-slate-200 group active:scale-95"
-                    >
-                        <span>Ir a Ventana de Cálculos</span>
-                        <ArrowRight className="h-5 w-5 group-hover:translate-x-3 transition-transform" />
                     </button>
                 </div>
             </div>

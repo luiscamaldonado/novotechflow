@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    FileText, Plus, Trash2, ArrowLeft, Loader2,
+    FileText, Plus, Trash2, Loader2,
     Lock, GripVertical,
     BookOpen, Eye, ShieldAlert,
     ChevronUp, ChevronDown, MapPin, Cpu, DollarSign,
@@ -20,6 +20,7 @@ import CityCombobox from './components/CityCombobox';
 import LockedPageView from './components/LockedPageView';
 import VirtualSectionPreview from './components/VirtualSectionPreview';
 import PageEditor from './components/PageEditor';
+import ProposalStepper from '../../components/proposals/ProposalStepper';
 
 export default function ProposalDocBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -164,15 +165,11 @@ export default function ProposalDocBuilder() {
                 onChange={handleFileChange}
             />
 
+            <ProposalStepper proposalId={id!} currentStep={3} />
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                    <button
-                        onClick={() => navigate(`/proposals/${id}/calculations`)}
-                        className="p-3 bg-white border border-slate-100 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-600 transition-colors"
-                    >
-                        <ArrowLeft className="h-5 w-5" />
-                    </button>
                     <div>
                         <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center">
                             <BookOpen className="h-8 w-8 mr-3 text-indigo-600" />
