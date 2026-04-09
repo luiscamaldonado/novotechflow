@@ -154,7 +154,7 @@ export interface ScenarioItem {
     parentId?: string | null;
     quantity: number;
     marginPctOverride?: number | null;
-    isDilpidate?: boolean;
+    isDiluted?: boolean;
     item: ProposalItemFromApi;
     children?: ScenarioItem[];
 }

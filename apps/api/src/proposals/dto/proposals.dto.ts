@@ -269,7 +269,7 @@ export class UpdateScenarioItemDto {
 
     @IsOptional()
     @IsBoolean()
-    isDilpidate?: boolean;
+    isDiluted?: boolean;
 }
 
 /**

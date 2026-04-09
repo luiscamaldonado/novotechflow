@@ -144,7 +144,7 @@ export class ScenariosService {
           itemId: si.itemId,
           quantity: si.quantity,
           marginPctOverride: si.marginPctOverride,
-          isDilpidate: si.isDilpidate,
+          isDiluted: si.isDiluted,
         },
       });
       siIdMap.set(si.id, newSi.id);
@@ -161,7 +161,7 @@ export class ScenariosService {
           parentId: newParentId,
           quantity: child.quantity,
           marginPctOverride: child.marginPctOverride,
-          isDilpidate: child.isDilpidate,
+          isDiluted: child.isDiluted,
         },
       });
     }
@@ -213,7 +213,7 @@ export class ScenariosService {
       data: {
         quantity: data.quantity,
         marginPctOverride: data.marginPct,
-        isDilpidate: data.isDilpidate,
+        isDiluted: data.isDiluted,
       }
     });
   }

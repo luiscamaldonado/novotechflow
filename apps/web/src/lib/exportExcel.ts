@@ -138,7 +138,7 @@ export async function exportToExcel(opts: ExportOptions) {
         });
 
         // ── Data rows (only visible/normal items) ──
-        const normalItems = scenario.scenarioItems.filter(i => !i.isDilpidate);
+        const normalItems = scenario.scenarioItems.filter(i => !i.isDiluted);
 
         normalItems
             .sort((a, b) => {

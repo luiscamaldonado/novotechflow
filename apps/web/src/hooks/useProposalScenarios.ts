@@ -29,7 +29,7 @@ export interface ScenarioItemData {
     parentId?: string | null;
     quantity: number;
     marginPctOverride?: number | null;
-    isDilpidate?: boolean;
+    isDiluted?: boolean;
     item: ProposalItemData;
     children?: ScenarioItemData[];
 }
@@ -81,7 +81,7 @@ export function calculateItemUnitPrice(
     scenarioCurrency?: string,
     conversionTrm?: number | null,
 ): number {
-    if (si.isDilpidate) return 0;
+    if (si.isDiluted) return 0;
 
     const item = si.item;
     const rawCost = Number(item.unitCost);
@@ -101,8 +101,8 @@ export function calculateItemUnitPrice(
     const baseLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
 
     // Dilution: proportional share of diluted items' cost
-    const dilutedItems = allItems.filter(i => i.isDilpidate);
-    const normalItems = allItems.filter(i => !i.isDilpidate);
+    const dilutedItems = allItems.filter(i => i.isDiluted);
+    const normalItems = allItems.filter(i => !i.isDiluted);
 
     let totalDilutedCost = 0;
     dilutedItems.forEach(di => {
@@ -143,7 +143,7 @@ function processScenario(scenario: ScenarioData): ProcessedScenario {
     let subtotalNoGravado = 0;
 
     for (const si of allItems) {
-        if (si.isDilpidate) continue;
+        if (si.isDiluted) continue;
 
         const unitSalePrice = calculateItemUnitPrice(si, allItems, scenario.currency, scenario.conversionTrm);
         const subtotalBeforeVat = unitSalePrice * si.quantity;

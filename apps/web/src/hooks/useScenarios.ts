@@ -41,7 +41,7 @@ export interface ScenarioItem {
     parentId?: string | null;
     quantity: number;
     marginPctOverride?: number;
-    isDilpidate?: boolean;
+    isDiluted?: boolean;
     item: ProposalCalcItem;
     children?: ScenarioItem[];
 }
@@ -352,10 +352,10 @@ export function useScenarios(proposalId: string | undefined) {
         if (!scenario) return;
         const si = scenario.scenarioItems.find(i => i.id === siId);
         if (!si) return;
-        const newVal = !si.isDilpidate;
+        const newVal = !si.isDiluted;
         try {
             // When enabling dilute, force margin to 0
-            const patchData: Record<string, unknown> = { isDilpidate: newVal };
+            const patchData: Record<string, unknown> = { isDiluted: newVal };
             if (newVal) patchData.marginPct = 0;
             await api.patch(`/proposals/scenarios/items/${siId}`, patchData);
             setScenarios(prev =>
@@ -363,7 +363,7 @@ export function useScenarios(proposalId: string | undefined) {
                     ...s,
                     scenarioItems: s.scenarioItems.map(item =>
                         item.id === siId
-                            ? { ...item, isDilpidate: newVal, ...(newVal ? { marginPctOverride: 0 } : {}) }
+                            ? { ...item, isDiluted: newVal, ...(newVal ? { marginPctOverride: 0 } : {}) }
                             : item,
                     ),
                 })),

@@ -63,7 +63,7 @@ export default function ScenarioItemRow({
         <>
         <tr key={si.id} className={cn(
             "group transition-colors",
-            si.isDilpidate
+            si.isDiluted
                 ? "bg-amber-50/70 hover:bg-amber-50"
                 : "hover:bg-slate-50"
         )}>
@@ -120,7 +120,7 @@ export default function ScenarioItemRow({
                 />
             </td>
             <td className="px-4 py-6">
-                {si.isDilpidate ? (
+                {si.isDiluted ? (
                     <div className="relative w-24 mx-auto">
                         <input 
                             type="text" 
@@ -172,7 +172,7 @@ export default function ScenarioItemRow({
                 )}
             </td>
             <td className="px-4 py-6 text-right font-mono text-xs text-slate-500">
-                {si.isDilpidate ? (
+                {si.isDiluted ? (
                     <span className="text-xs font-black text-amber-400">—</span>
                 ) : isDaasMode ? (
                     <span className="text-xs font-black text-pink-400 bg-pink-50 px-3 py-2 rounded-xl">{unitPrice.toFixed(2)}</span>
@@ -200,7 +200,7 @@ export default function ScenarioItemRow({
                 )}
             </td>
             <td className="px-4 py-6 text-right font-mono font-black text-indigo-600">
-                {si.isDilpidate ? (
+                {si.isDiluted ? (
                     <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-3 py-1.5 rounded-lg uppercase tracking-widest">
                         Diluido
                     </span>
@@ -213,11 +213,11 @@ export default function ScenarioItemRow({
                     onClick={() => toggleDilpidate(si.id!)}
                     className={cn(
                         "p-2 rounded-xl transition-all border-2",
-                        si.isDilpidate
+                        si.isDiluted
                             ? "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-200 scale-110"
                             : "bg-white border-slate-200 text-slate-300 hover:border-amber-300 hover:text-amber-500"
                     )}
-                    title={si.isDilpidate ? 'Quitar dilución de costo' : 'Diluir costo entre los demás ítems'}
+                    title={si.isDiluted ? 'Quitar dilución de costo' : 'Diluir costo entre los demás ítems'}
                 >
                     <Layers className="h-3.5 w-3.5" />
                 </button>

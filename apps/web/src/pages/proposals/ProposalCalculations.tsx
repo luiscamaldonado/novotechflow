@@ -270,8 +270,8 @@ export default function ProposalCalculations() {
                                             ) : (
                                                 [...activeScenario.scenarioItems]
                                                     .sort((a, b) => {
-                                                        if (a.isDilpidate && !b.isDilpidate) return -1;
-                                                        if (!a.isDilpidate && b.isDilpidate) return 1;
+                                                        if (a.isDiluted && !b.isDiluted) return -1;
+                                                        if (!a.isDiluted && b.isDiluted) return 1;
                                                         return 0;
                                                     })
                                                     .map((si, idx) => {

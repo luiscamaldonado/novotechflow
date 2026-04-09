@@ -35,7 +35,7 @@ export interface PricingItem {
 export interface PricingScenarioItem {
     quantity: number;
     marginPctOverride?: number | null;
-    isDilpidate?: boolean;
+    isDiluted?: boolean;
     item: PricingItem;
     children?: PricingScenarioItem[];
 }
@@ -89,7 +89,7 @@ export function calculateBaseLandedCost(
 }
 
 /**
- * Total cost of all diluted items: Σ(unitCost × quantity) for isDilpidate=true.
+ * Total cost of all diluted items: Σ(unitCost × quantity) for isDiluted=true.
  */
 export function calculateTotalDilutedCost(
     items: PricingScenarioItem[],
@@ -98,7 +98,7 @@ export function calculateTotalDilutedCost(
 ): number {
     let total = 0;
     for (const si of items) {
-        if (si.isDilpidate) {
+        if (si.isDiluted) {
             const rawCost = Number(si.item.unitCost);
             const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
             total += cost * si.quantity;
@@ -108,7 +108,7 @@ export function calculateTotalDilutedCost(
 }
 
 /**
- * Total normal subtotal: Σ(unitCost × quantity) for isDilpidate=false.
+ * Total normal subtotal: Σ(unitCost × quantity) for isDiluted=false.
  * Used as the weight denominator for dilution distribution.
  */
 export function calculateTotalNormalSubtotal(
@@ -118,7 +118,7 @@ export function calculateTotalNormalSubtotal(
 ): number {
     let total = 0;
     for (const si of items) {
-        if (!si.isDilpidate) {
+        if (!si.isDiluted) {
             const rawCost = Number(si.item.unitCost);
             const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
             total += cost * si.quantity;
@@ -227,7 +227,7 @@ export function calculateItemDisplayValues(
 
     // Dilution (only for non-diluted items)
     let dilution = 0;
-    if (!si.isDilpidate) {
+    if (!si.isDiluted) {
         const totalDilutedCost = calculateTotalDilutedCost(allItems, scenarioCurrency, conversionTrm);
         const totalNormalSub = calculateTotalNormalSubtotal(allItems, scenarioCurrency, conversionTrm);
         dilution = calculateDilutionPerUnit(cost, si.quantity, totalNormalSub, totalDilutedCost);
@@ -237,7 +237,7 @@ export function calculateItemDisplayValues(
     const margin = resolveMargin(si.marginPctOverride, si.item.marginPct);
 
     let unitPrice = 0;
-    if (!si.isDilpidate) {
+    if (!si.isDiluted) {
         unitPrice = calculateUnitPrice(effectiveLanded, margin);
     }
 
@@ -274,7 +274,7 @@ export function calculateScenarioTotals(
     const totalDilutedCost = calculateTotalDilutedCost(scenarioItems, scenarioCurrency, conversionTrm);
     const totalNormalSubtotal = calculateTotalNormalSubtotal(scenarioItems, scenarioCurrency, conversionTrm);
 
-    const normalItems = scenarioItems.filter(si => !si.isDilpidate);
+    const normalItems = scenarioItems.filter(si => !si.isDiluted);
 
     for (const si of normalItems) {
         const rawCost = Number(si.item.unitCost);
