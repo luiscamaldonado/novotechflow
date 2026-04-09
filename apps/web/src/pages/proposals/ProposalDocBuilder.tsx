@@ -21,6 +21,7 @@ import LockedPageView from './components/LockedPageView';
 import VirtualSectionPreview from './components/VirtualSectionPreview';
 import PageEditor from './components/PageEditor';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
+import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 
 export default function ProposalDocBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -517,6 +518,8 @@ export default function ProposalDocBuilder() {
                     )}
                 </div>
             </div>
+
+            <ProposalNavBar proposalId={id!} currentStep={3} />
         </div>
     );
 }

@@ -13,6 +13,7 @@ import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../.
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
+import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 
 export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -600,16 +601,9 @@ export default function ProposalItemsBuilder() {
                     </div>
                 </div>
 
-                <div className="flex justify-start items-center pt-8 border-t border-slate-100">
-                    <button 
-                        onClick={() => navigate('/proposals/new')}
-                        className="flex items-center space-x-2 text-slate-400 hover:text-indigo-600 font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                        <ChevronRight className="h-4 w-4 rotate-180" />
-                        <span>Volver a Cabecera</span>
-                    </button>
-                </div>
             </div>
+
+            <ProposalNavBar proposalId={id!} currentStep={1} />
         </div>
     );
 }

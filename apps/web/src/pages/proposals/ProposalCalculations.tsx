@@ -17,6 +17,7 @@ import ScenarioItemRow from './components/ScenarioItemRow';
 import ScenarioSidebar from './components/ScenarioSidebar';
 import ScenarioHeader from './components/ScenarioHeader';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
+import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 
 export default function ProposalCalculations() {
     const { id } = useParams<{ id: string }>();
@@ -348,6 +349,8 @@ export default function ProposalCalculations() {
                     }
                 }}
             />
+
+            <ProposalNavBar proposalId={id!} currentStep={2} />
         </div>
     );
 }
