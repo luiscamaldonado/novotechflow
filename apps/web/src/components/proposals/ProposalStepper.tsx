@@ -44,8 +44,7 @@ const LABEL_STYLES: Record<StepStatus, string> = {
 export default function ProposalStepper({ proposalId, currentStep }: ProposalStepperProps) {
   const navigate = useNavigate();
 
-  const handleStepClick = (step: typeof STEPS[number], status: StepStatus) => {
-    if (status === 'pending') return;
+  const handleStepClick = (step: typeof STEPS[number]) => {
     navigate(`/proposals/${proposalId}/${step.path}`);
   };
 
@@ -54,7 +53,7 @@ export default function ProposalStepper({ proposalId, currentStep }: ProposalSte
       <ol className="flex items-center justify-center">
         {STEPS.map((step, index) => {
           const status = getStepStatus(step.number, currentStep);
-          const isClickable = status !== 'pending';
+          const isClickable = true;
 
           return (
             <li key={step.number} className="flex items-center">
@@ -72,7 +71,7 @@ export default function ProposalStepper({ proposalId, currentStep }: ProposalSte
               <div className="flex flex-col items-center">
                 <button
                   type="button"
-                  onClick={() => handleStepClick(step, status)}
+                  onClick={() => handleStepClick(step)}
                   disabled={!isClickable}
                   aria-current={status === 'active' ? 'step' : undefined}
                   className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold
