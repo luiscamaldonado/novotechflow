@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Package, Save, Loader2,
@@ -17,7 +17,6 @@ import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 
 export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
 
     const {
         loading, saving, catalogs, proposal, setProposal, items,
