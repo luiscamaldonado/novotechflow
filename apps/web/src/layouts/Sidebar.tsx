@@ -7,8 +7,6 @@ import {
     LogOut,
     X,
     PlusCircle,
-    Calculator,
-    Mail,
     BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,8 +29,6 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: user?.role === 'ADMIN' ? '/admin' : '/dashboard', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: PlusCircle, label: 'Nueva Propuesta', path: '/proposals/new', roles: ['ADMIN', 'COMMERCIAL'] },
-        { icon: Calculator, label: 'Calculadora', path: '/calculator', roles: ['ADMIN', 'COMMERCIAL'] },
-        { icon: Mail, label: 'Envíos (Microsoft 365)', path: '/mail', roles: ['ADMIN', 'COMMERCIAL'] },
         { icon: Users, label: 'Usuarios', path: '/users', roles: ['ADMIN'] },
         { icon: BookOpen, label: 'Plantillas de Documento', path: '/admin/templates', roles: ['ADMIN'] },
         { icon: Settings, label: 'Configuración', path: '/settings', roles: ['ADMIN'] },
