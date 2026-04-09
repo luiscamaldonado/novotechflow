@@ -219,7 +219,7 @@ function buildTrmDeviationNotifications(
       clientName: proposal.clientName,
       type: 'TRM_DEVIATION',
       severity: 'URGENT',
-      message: `El escenario '${scenario.name}' de ${proposal.proposalCode} usa TRM ${scenario.conversionTrm} (TRM actual: ${trmRate}, diferencia: ${diff})`,
+      message: `El escenario '${scenario.name}' de ${proposal.proposalCode} usa TRM ${scenario.conversionTrm.toFixed(2)} (TRM actual: ${trmRate.toFixed(2)}, diferencia: ${diff.toFixed(2)})`,
       date: formatDateDDMMYYYY(proposal.updatedAt),
       read: readIds.has(id),
     });
