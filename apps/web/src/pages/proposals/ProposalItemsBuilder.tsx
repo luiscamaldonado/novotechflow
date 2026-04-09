@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Package, Save, Loader2, ArrowRight,
+    Package, Save, Loader2,
     Plus, Trash2, Lock,
     Calendar, Clock, FileText, ChevronRight, Edit2, Copy,
     Cpu

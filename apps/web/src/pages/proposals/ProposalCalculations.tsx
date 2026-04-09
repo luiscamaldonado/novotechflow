@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
     Calculator, Loader2, Package,
     RotateCcw, Layers, FileSpreadsheet
@@ -20,7 +20,6 @@ import ProposalStepper from '../../components/proposals/ProposalStepper';
 
 export default function ProposalCalculations() {
     const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
 
     const {
         loading, saving, proposal, proposalItems, scenarios,

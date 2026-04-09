@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText, Plus, Trash2, Loader2,
@@ -24,7 +24,6 @@ import ProposalStepper from '../../components/proposals/ProposalStepper';
 
 export default function ProposalDocBuilder() {
     const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
     const { user } = useAuthStore();
     const isAdmin = user?.role === 'ADMIN';
 
