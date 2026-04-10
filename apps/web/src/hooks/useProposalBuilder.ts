@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { ProposalItem, ProposalDetail } from '../lib/types';
+import type { AutocompleteSuggestion } from '../components/AutocompleteInput';
 import { MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../lib/constants';
 
 /** Estado y lógica del builder de propuestas (carga de datos + CRUD de items). */
@@ -143,6 +144,44 @@ export function useProposalBuilder(proposalId: string | undefined) {
         }
     };
 
+    /** Fetch spec-option suggestions from the backend. */
+    const fetchSpecSuggestions = useCallback(
+        async (fieldName: string, query: string): Promise<AutocompleteSuggestion[]> => {
+            try {
+                const res = await api.get('/spec-options/suggest', {
+                    params: { fieldName, q: query },
+                });
+                return (res.data as Array<{ value: string }>).map(opt => ({
+                    label: opt.value,
+                    value: opt.value,
+                }));
+            } catch (error) {
+                console.error('Error fetching spec suggestions', error);
+                return [];
+            }
+        },
+        [],
+    );
+
+    /** Search clients by name for autocomplete. */
+    const searchClients = useCallback(
+        async (query: string): Promise<AutocompleteSuggestion[]> => {
+            try {
+                const res = await api.get('/clients/search', {
+                    params: { q: query },
+                });
+                return (res.data as Array<{ id: string; name: string }>).map(c => ({
+                    label: c.name,
+                    value: c.name,
+                }));
+            } catch (error) {
+                console.error('Error searching clients', error);
+                return [];
+            }
+        },
+        [],
+    );
+
     return {
         loading,
         saving,
@@ -154,5 +193,7 @@ export function useProposalBuilder(proposalId: string | undefined) {
         saveItem,
         deleteItem,
         updateProposal,
+        fetchSpecSuggestions,
+        searchClients,
     };
 }

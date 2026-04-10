@@ -19,8 +19,9 @@ export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
 
     const {
-        loading, saving, catalogs, proposal, setProposal, items,
+        loading, saving, proposal, setProposal, items,
         initialItemForm, saveItem, deleteItem, updateProposal,
+        fetchSpecSuggestions,
     } = useProposalBuilder(id);
 
     // UI state
@@ -364,9 +365,9 @@ export default function ProposalItemsBuilder() {
                                         <SpecFieldsSection
                                             itemType={itemForm.itemType}
                                             technicalSpecs={itemForm.technicalSpecs || {}}
-                                            catalogs={catalogs}
                                             onChange={handleItemChange}
                                             onSelectSuggestion={selectSuggestion}
+                                            fetchSuggestions={fetchSpecSuggestions}
                                         />
 
                                         {/* Tiempo de Entrega */}
