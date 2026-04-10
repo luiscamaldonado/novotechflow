@@ -47,7 +47,7 @@ function parseTwoColumnCsv(lines: string[]): ParseResult {
 
     const rows = dataLines.reduce<CsvRow[]>((acc, line) => {
         const [fieldName, value] = line.split(',').map(s => s.trim());
-        if (fieldName && value) acc.push({ fieldName, value });
+        if (fieldName && value) acc.push({ fieldName, value: value.slice(0, 255) });
         return acc;
     }, []);
 
@@ -70,7 +70,7 @@ function parseSingleColumnCsv(
     const startIndex = VALID_FIELD_NAMES.has(lines[0].toLowerCase()) ? 1 : 0;
 
     const rows = lines.slice(startIndex).reduce<CsvRow[]>((acc, value) => {
-        if (value) acc.push({ fieldName: selectedField, value });
+        if (value) acc.push({ fieldName: selectedField, value: value.slice(0, 255) });
         return acc;
     }, []);
 
