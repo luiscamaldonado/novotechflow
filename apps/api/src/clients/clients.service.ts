@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { CreateClientDto, UpdateClientDto } from './dto/clients.dto';
 
 /**
  * @interface ISearchResponse
@@ -187,4 +188,73 @@ export class ClientsService {
     const intersection = new Set([...pairs1].filter(x => pairs2.has(x)));
     return (2.0 * intersection.size) / (pairs1.size + pairs2.size);
   }
+
+  // ─── MÉTODOS ADMIN ───────────────────────────────────────────
+
+  /** Máximo de resultados para búsquedas admin */
+  private static readonly MAX_ADMIN_RESULTS = 50;
+
+  /**
+   * Lista todos los clientes con búsqueda opcional por nombre.
+   * Incluye clientes inactivos para gestión admin.
+   */
+  async findAllAdmin(query?: string) {
+    return this.prisma.client.findMany({
+      where: query
+        ? { name: { contains: query, mode: 'insensitive' } }
+        : undefined,
+      take: ClientsService.MAX_ADMIN_RESULTS,
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * Crea un nuevo cliente. Lanza ConflictException si el nombre ya existe.
+   */
+  async createClient(dto: CreateClientDto) {
+    const existingClient = await this.prisma.client.findUnique({
+      where: { name: dto.name },
+    });
+
+    if (existingClient) {
+      throw new ConflictException(`Ya existe un cliente con el nombre "${dto.name}".`);
+    }
+
+    return this.prisma.client.create({ data: dto });
+  }
+
+  /**
+   * Actualiza nombre, NIT o estado activo de un cliente.
+   */
+  async updateClient(id: string, dto: UpdateClientDto) {
+    return this.prisma.client.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  /**
+   * Soft-delete: desactiva el cliente en vez de eliminarlo.
+   */
+  async softDeleteClient(id: string) {
+    return this.prisma.client.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  /**
+   * Crea múltiples clientes de una vez, ignorando duplicados.
+   */
+  async bulkCreate(items: CreateClientDto[]) {
+    const result = await this.prisma.client.createMany({
+      data: items,
+      skipDuplicates: true,
+    });
+
+    this.logger.log(`Bulk create clientes: ${result.count} creados (${items.length} enviados)`);
+
+    return { created: result.count, sent: items.length };
+  }
 }
+

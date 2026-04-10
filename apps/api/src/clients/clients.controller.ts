@@ -1,21 +1,35 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Query,
+  Body,
+  Param,
+  UseGuards,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ClientsService, ISearchResponse } from './clients.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../common/guards/admin.guard';
+import {
+  CreateClientDto,
+  UpdateClientDto,
+  BulkCreateClientsDto,
+} from './dto/clients.dto';
 
 /**
  * @class ClientsController
- * Controlador REST para la gestión de búsquedas de clientes.
- * Expone endpoints protegidos por JWT para consultar el maestro de clientes.
- *
- * @route /clients
+ * Controlador REST para la gestión de clientes.
+ * Expone endpoints públicos (búsqueda) y admin (CRUD completo).
  */
-@ApiTags('Clients')
-@ApiBearerAuth()
-@Controller('clients')
-@UseGuards(JwtAuthGuard)
+@Controller()
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
+
+  // ─── ENDPOINT PÚBLICO (cualquier usuario autenticado) ──────────
 
   /**
    * Busca clientes por coincidencia parcial con ranking de relevancia.
@@ -26,8 +40,64 @@ export class ClientsController {
    *
    * @example GET /clients/search?q=SURA
    */
-  @Get('search')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiTags('Clients')
+  @ApiOperation({ summary: 'Buscar clientes con ranking de relevancia' })
+  @ApiQuery({ name: 'q', required: true, example: 'SURA' })
+  @Get('clients/search')
   async search(@Query('q') query: string): Promise<ISearchResponse> {
     return this.clientsService.search(query);
+  }
+
+  // ─── ENDPOINTS ADMIN ───────────────────────────────────────────
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/clients')
+  @ApiOperation({ summary: 'Crear un cliente' })
+  @Post('admin/clients')
+  async create(@Body() dto: CreateClientDto) {
+    return this.clientsService.createClient(dto);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/clients')
+  @ApiOperation({ summary: 'Listar todos los clientes (con búsqueda opcional)' })
+  @ApiQuery({ name: 'q', required: false, example: 'banco' })
+  @Get('admin/clients')
+  async findAll(@Query('q') query?: string) {
+    return this.clientsService.findAllAdmin(query);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/clients')
+  @ApiOperation({ summary: 'Actualizar un cliente' })
+  @Patch('admin/clients/:id')
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateClientDto,
+  ) {
+    return this.clientsService.updateClient(id, dto);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/clients')
+  @ApiOperation({ summary: 'Soft-delete: desactivar un cliente' })
+  @Delete('admin/clients/:id')
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.clientsService.softDeleteClient(id);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/clients')
+  @ApiOperation({ summary: 'Carga masiva de clientes (ignora duplicados)' })
+  @Post('admin/clients/bulk')
+  async bulkCreate(@Body() dto: BulkCreateClientsDto) {
+    return this.clientsService.bulkCreate(dto.items);
   }
 }
