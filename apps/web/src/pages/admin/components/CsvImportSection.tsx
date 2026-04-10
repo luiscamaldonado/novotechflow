@@ -3,7 +3,7 @@ import {
     Loader2, CheckCircle2, AlertTriangle, Upload, XCircle,
 } from 'lucide-react';
 import { FIELD_NAME_LABELS, SPEC_FIELD_NAMES } from '../../../hooks/useSpecOptionsAdmin';
-import { readFileWithEncoding } from '../../../lib/csv-utils';
+import { readFileWithEncoding, cleanCsvValue } from '../../../lib/csv-utils';
 import type { SpecFieldName, BulkImportResult } from '../../../hooks/useSpecOptionsAdmin';
 
 // ── Constants ────────────────────────────────────────────────
@@ -47,7 +47,7 @@ function parseTwoColumnCsv(lines: string[]): ParseResult {
 
     const rows = dataLines.reduce<CsvRow[]>((acc, line) => {
         const [fieldName, value] = line.split(',').map(s => s.trim());
-        if (fieldName && value) acc.push({ fieldName, value: value.slice(0, 255) });
+        if (fieldName && value) acc.push({ fieldName, value: cleanCsvValue(value).slice(0, 255) });
         return acc;
     }, []);
 
@@ -70,7 +70,7 @@ function parseSingleColumnCsv(
     const startIndex = VALID_FIELD_NAMES.has(lines[0].toLowerCase()) ? 1 : 0;
 
     const rows = lines.slice(startIndex).reduce<CsvRow[]>((acc, value) => {
-        if (value) acc.push({ fieldName: selectedField, value: value.slice(0, 255) });
+        if (value) acc.push({ fieldName: selectedField, value: cleanCsvValue(value).slice(0, 255) });
         return acc;
     }, []);
 

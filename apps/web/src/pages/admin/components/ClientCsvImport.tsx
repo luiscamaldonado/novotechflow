@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import {
     Loader2, CheckCircle2, AlertTriangle, Upload,
 } from 'lucide-react';
-import { readFileWithEncoding } from '../../../lib/csv-utils';
+import { readFileWithEncoding, cleanCsvValue } from '../../../lib/csv-utils';
 import type { ClientBulkImportResult } from '../../../hooks/useClientsAdmin';
 
 // ── CSV helpers ──────────────────────────────────────────────
@@ -24,7 +24,7 @@ function parseClientCsv(text: string): ClientCsvRow[] {
     const startIndex = CLIENT_CSV_HEADERS.has(lines[0].toLowerCase()) ? 1 : 0;
 
     return lines.slice(startIndex).reduce<ClientCsvRow[]>((acc, name) => {
-        if (name) acc.push({ name: name.slice(0, 255) });
+        if (name) acc.push({ name: cleanCsvValue(name).slice(0, 255) });
         return acc;
     }, []);
 }

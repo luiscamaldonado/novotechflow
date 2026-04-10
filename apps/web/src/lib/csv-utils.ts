@@ -59,3 +59,24 @@ export function readFileWithEncoding(file: File): Promise<string> {
     reader.readAsArrayBuffer(file);
   });
 }
+
+/**
+ * Cleans a raw CSV cell value by stripping wrapping quotes
+ * (single or double) and unescaping doubled-quote CSV sequences.
+ */
+export function cleanCsvValue(value: string): string {
+  let cleaned = value.trim();
+
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+    cleaned = cleaned.slice(1, -1);
+  }
+
+  cleaned = cleaned.replace(/""/g, '"');
+  cleaned = cleaned.replace(/^"+|"+$/g, '');
+  cleaned = cleaned.replace(/^'+|'+$/g, '');
+
+  return cleaned.trim();
+}
