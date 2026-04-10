@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { api } from '../lib/api';
 
 // ── Types ────────────────────────────────────────────────────
@@ -15,6 +15,22 @@ export interface ClientBulkImportResult {
     created: number;
     duplicates: number;
 }
+
+interface PaginationMeta {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+}
+
+interface PaginatedResponse {
+    data: Client[];
+    meta: PaginationMeta;
+}
+
+// ── Constants ────────────────────────────────────────────────
+
+const DEFAULT_PAGE_SIZE = 50;
 
 // ── Download helper ──────────────────────────────────────────
 
@@ -34,16 +50,30 @@ function downloadCsv(content: string, filename: string): void {
 export function useClientsAdmin() {
     const [clients, setClients] = useState<Client[]>([]);
     const [search, setSearch] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(0);
+    const [total, setTotal] = useState(0);
 
-    const fetchClients = useCallback(async () => {
+    /**
+     * Fetches clients from the server with optional search query and pagination.
+     * Called on-demand: after debounced search (≥2 chars) or "Cargar todos".
+     */
+    const fetchClients = useCallback(async (query?: string, targetPage = 1) => {
         try {
             setLoading(true);
-            const res = await api.get('/admin/clients', {
-                params: { includeInactive: 'true' },
-            });
-            setClients(res.data);
+            const params: Record<string, string | number> = {
+                page: targetPage,
+                pageSize: DEFAULT_PAGE_SIZE,
+            };
+            if (query && query.length >= 2) params.q = query;
+
+            const res = await api.get<PaginatedResponse>('/admin/clients', { params });
+            setClients(res.data.data);
+            setPage(res.data.meta.page);
+            setTotalPages(res.data.meta.totalPages);
+            setTotal(res.data.meta.total);
         } catch (error) {
             console.error('Error loading clients:', error);
         } finally {
@@ -51,21 +81,33 @@ export function useClientsAdmin() {
         }
     }, []);
 
-    useEffect(() => {
-        fetchClients();
-    }, [fetchClients]);
+    /** Clears current results and pagination state. */
+    const clearResults = useCallback(() => {
+        setClients([]);
+        setPage(1);
+        setTotalPages(0);
+        setTotal(0);
+        setSelectedIds(new Set());
+    }, []);
 
-    /** Filtered + sorted list (text search over name, sorted alphabetically). */
-    const filtered = useMemo(() => {
-        let result = clients;
-
-        if (search) {
-            const term = search.toLowerCase();
-            result = result.filter(c => c.name.toLowerCase().includes(term));
+    /** Loads the next page (if available) keeping the current search term. */
+    const nextPage = useCallback(() => {
+        if (page < totalPages) {
+            fetchClients(search.length >= 2 ? search : undefined, page + 1);
         }
+    }, [page, totalPages, search, fetchClients]);
 
-        return result.sort((a, b) => a.name.localeCompare(b.name));
-    }, [clients, search]);
+    /** Loads the previous page (if available) keeping the current search term. */
+    const prevPage = useCallback(() => {
+        if (page > 1) {
+            fetchClients(search.length >= 2 ? search : undefined, page - 1);
+        }
+    }, [page, search, fetchClients]);
+
+    /** Sorted list for display (already filtered server-side). */
+    const filtered = useMemo(() => {
+        return [...clients].sort((a, b) => a.name.localeCompare(b.name));
+    }, [clients]);
 
     // ── Selection actions ──
 
@@ -124,11 +166,12 @@ export function useClientsAdmin() {
         items: Array<{ name: string }>,
     ): Promise<ClientBulkImportResult> => {
         const res = await api.post('/admin/clients/bulk', { items });
-        await fetchClients();
+        /* Re-fetch current view after import to show new data */
+        await fetchClients(search.length >= 2 ? search : undefined, page);
         return res.data as ClientBulkImportResult;
     };
 
-    /** Downloads all clients as a single-column CSV (names only, no header). */
+    /** Downloads all currently loaded clients as a single-column CSV (names only). */
     const exportToCsv = useCallback(() => {
         const today = new Date().toISOString().slice(0, 10);
         const rows = clients
@@ -145,6 +188,7 @@ export function useClientsAdmin() {
         filtered,
         loading,
         fetchClients,
+        clearResults,
         createClient,
         updateClient,
         toggleActive,
@@ -156,6 +200,10 @@ export function useClientsAdmin() {
         selectAll,
         clearSelection,
         bulkDelete,
+        page,
+        totalPages,
+        total,
+        nextPage,
+        prevPage,
     };
 }
-

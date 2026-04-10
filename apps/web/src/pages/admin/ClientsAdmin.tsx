@@ -1,15 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
     Users, Plus, Search, Pencil,
     Trash2, Loader2, ToggleLeft, ToggleRight,
-    PackageOpen, X, Download,
+    PackageOpen, X, Download, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useClientsAdmin } from '../../hooks/useClientsAdmin';
 import type { Client } from '../../hooks/useClientsAdmin';
 import ClientFormModal from './components/ClientFormModal';
 import ClientCsvImport from './components/ClientCsvImport';
+
+// ── Constants ────────────────────────────────────────────────
+
+/** Minimum characters required before triggering server search. */
+const MIN_SEARCH_LENGTH = 2;
+
+/** Debounce delay in ms for the search input. */
+const DEBOUNCE_DELAY_MS = 300;
 
 // ── Component ────────────────────────────────────────────────
 
@@ -19,13 +27,37 @@ export default function ClientsAdmin() {
         filtered, loading,
         createClient, updateClient,
         toggleActive, removeClient, bulkImport,
-        exportToCsv,
+        exportToCsv, fetchClients, clearResults,
         selectedIds, toggleSelect, selectAll,
         clearSelection, bulkDelete,
+        page, totalPages, total,
+        nextPage, prevPage,
     } = useClientsAdmin();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingClient, setEditingClient] = useState<Client | null>(null);
+
+    // ── Debounced search ──
+
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
+        if (search.length >= MIN_SEARCH_LENGTH) {
+            debounceRef.current = setTimeout(() => {
+                fetchClients(search);
+            }, DEBOUNCE_DELAY_MS);
+        } else {
+            clearResults();
+        }
+
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
+
+    /** Whether results are currently being shown (search is active). */
+    const hasActiveSearch = search.length >= MIN_SEARCH_LENGTH;
 
     // ── Modal handlers ──
 
@@ -70,12 +102,6 @@ export default function ClientsAdmin() {
         else selectAll();
     };
 
-    // ── Loading state ──
-
-    if (loading) {
-        return (<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 text-indigo-600 animate-spin" /></div>);
-    }
-
     return (
         <div className="max-w-[1400px] mx-auto space-y-6 px-4 pb-20">
             {/* Header */}
@@ -107,12 +133,14 @@ export default function ClientsAdmin() {
                 <div className="flex items-center flex-wrap gap-4">
                     <div className="relative flex-1 min-w-[250px]">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
-                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre..."
+                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre (mín. 2 caracteres)..."
                             className="w-full pl-11 pr-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-indigo-200 focus:ring-0" />
                     </div>
-                    <span className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest">
-                        {filtered.length} resultado{filtered.length !== 1 ? 's' : ''}
-                    </span>
+                    {hasActiveSearch && (
+                        <span className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest">
+                            {total} resultado{total !== 1 ? 's' : ''}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -141,49 +169,96 @@ export default function ClientsAdmin() {
                 </div>
             )}
 
-            {/* Table */}
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                {filtered.length === 0 ? (
-                    <div className="py-20 text-center">
-                        <PackageOpen className="h-16 w-16 mx-auto text-slate-100 mb-4" />
-                        <p className="text-sm font-bold text-slate-400">No se encontraron clientes.</p>
-                        <p className="text-xs text-slate-300 mt-2">Prueba ajustando los filtros o agrega un nuevo cliente.</p>
-                    </div>
-                ) : (
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="bg-slate-50/80 border-b border-slate-100">
-                                <th className="px-4 py-4 w-10">
-                                    <input
-                                        type="checkbox"
-                                        checked={isAllSelected}
-                                        ref={el => { if (el) el.indeterminate = isSomeSelected && !isAllSelected; }}
-                                        onChange={handleToggleAll}
-                                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            {/* Table / Empty placeholder */}
+            {!hasActiveSearch ? (
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 py-24 text-center">
+                    <Search className="h-16 w-16 mx-auto text-slate-200 mb-4" />
+                    <p className="text-base font-bold text-slate-400">Busca un cliente por nombre para empezar</p>
+                    <p className="text-xs text-slate-300 mt-2">10,000+ clientes en la base de datos</p>
+                </div>
+            ) : loading ? (
+                <div className="flex justify-center items-center h-64">
+                    <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+                </div>
+            ) : (
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                    {filtered.length === 0 ? (
+                        <div className="py-20 text-center">
+                            <PackageOpen className="h-16 w-16 mx-auto text-slate-100 mb-4" />
+                            <p className="text-sm font-bold text-slate-400">No se encontraron clientes.</p>
+                            <p className="text-xs text-slate-300 mt-2">Prueba ajustando la búsqueda o agrega un nuevo cliente.</p>
+                        </div>
+                    ) : (
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="bg-slate-50/80 border-b border-slate-100">
+                                    <th className="px-4 py-4 w-10">
+                                        <input
+                                            type="checkbox"
+                                            checked={isAllSelected}
+                                            ref={el => { if (el) el.indeterminate = isSomeSelected && !isAllSelected; }}
+                                            onChange={handleToggleAll}
+                                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre</th>
+                                    <th className="px-6 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha creación</th>
+                                    <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.map(client => (
+                                    <ClientRow
+                                        key={client.id}
+                                        client={client}
+                                        isSelected={selectedIds.has(client.id)}
+                                        onToggleSelect={toggleSelect}
+                                        onEdit={handleOpenEdit}
+                                        onToggle={handleToggle}
+                                        onDelete={handleDelete}
                                     />
-                                </th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre</th>
-                                <th className="px-6 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha creación</th>
-                                <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(client => (
-                                <ClientRow
-                                    key={client.id}
-                                    client={client}
-                                    isSelected={selectedIds.has(client.id)}
-                                    onToggleSelect={toggleSelect}
-                                    onEdit={handleOpenEdit}
-                                    onToggle={handleToggle}
-                                    onDelete={handleDelete}
-                                />
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            )}
+
+            {/* Pagination controls */}
+            {hasActiveSearch && totalPages > 1 && (
+                <div className="flex items-center justify-center space-x-4">
+                    <button
+                        onClick={prevPage}
+                        disabled={page <= 1}
+                        className={cn(
+                            'flex items-center space-x-1 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-colors',
+                            page <= 1
+                                ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50',
+                        )}
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span>Anterior</span>
+                    </button>
+                    <span className="text-sm font-bold text-slate-500">
+                        Página {page} de {totalPages}
+                    </span>
+                    <button
+                        onClick={nextPage}
+                        disabled={page >= totalPages}
+                        className={cn(
+                            'flex items-center space-x-1 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-colors',
+                            page >= totalPages
+                                ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50',
+                        )}
+                    >
+                        <span>Siguiente</span>
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                </div>
+            )}
 
             {/* Create/Edit Modal */}
             <AnimatePresence>

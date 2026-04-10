@@ -191,21 +191,43 @@ export class ClientsService {
 
   // ─── MÉTODOS ADMIN ───────────────────────────────────────────
 
-  /** Máximo de resultados para búsquedas admin */
-  private static readonly MAX_ADMIN_RESULTS = 50;
+  /** Default page size for paginated admin queries. */
+  private static readonly DEFAULT_PAGE_SIZE = 50;
 
   /**
-   * Lista todos los clientes con búsqueda opcional por nombre.
+   * Lista clientes con paginación y búsqueda opcional por nombre.
    * Incluye clientes inactivos para gestión admin.
+   *
+   * @returns Objeto con `data` (página actual) y `meta` (total, page, pageSize, totalPages).
    */
-  async findAllAdmin(query?: string) {
-    return this.prisma.client.findMany({
-      where: query
-        ? { name: { contains: query, mode: 'insensitive' } }
-        : undefined,
-      take: ClientsService.MAX_ADMIN_RESULTS,
-      orderBy: { name: 'asc' },
-    });
+  async findAllAdmin(query?: string, page = 1, pageSize = ClientsService.DEFAULT_PAGE_SIZE) {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(Math.max(1, pageSize), 200);
+    const skip = (safePage - 1) * safePageSize;
+
+    const where = query
+      ? { name: { contains: query, mode: 'insensitive' as const } }
+      : undefined;
+
+    const [data, total] = await Promise.all([
+      this.prisma.client.findMany({
+        where,
+        skip,
+        take: safePageSize,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.client.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page: safePage,
+        pageSize: safePageSize,
+        totalPages: Math.ceil(total / safePageSize),
+      },
+    };
   }
 
   /**

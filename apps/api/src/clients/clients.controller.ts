@@ -65,11 +65,21 @@ export class ClientsController {
   @UseGuards(AdminGuard)
   @ApiBearerAuth()
   @ApiTags('admin/clients')
-  @ApiOperation({ summary: 'Listar todos los clientes (con búsqueda opcional)' })
+  @ApiOperation({ summary: 'Listar clientes con paginación y búsqueda opcional' })
   @ApiQuery({ name: 'q', required: false, example: 'banco' })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'pageSize', required: false, example: 50 })
   @Get('admin/clients')
-  async findAll(@Query('q') query?: string) {
-    return this.clientsService.findAllAdmin(query);
+  async findAll(
+    @Query('q') query?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.clientsService.findAllAdmin(
+      query,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
   }
 
   @UseGuards(AdminGuard)
