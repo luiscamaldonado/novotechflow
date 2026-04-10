@@ -16,6 +16,19 @@ export interface ClientBulkImportResult {
     duplicates: number;
 }
 
+// ── Download helper ──────────────────────────────────────────
+
+/** Creates a CSV Blob, triggers a browser download via temp anchor, and cleans up. */
+function downloadCsv(content: string, filename: string): void {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+}
+
 // ── Hook ─────────────────────────────────────────────────────
 
 export function useClientsAdmin() {
@@ -115,6 +128,16 @@ export function useClientsAdmin() {
         return res.data as ClientBulkImportResult;
     };
 
+    /** Downloads all clients as a single-column CSV (names only, no header). */
+    const exportToCsv = useCallback(() => {
+        const today = new Date().toISOString().slice(0, 10);
+        const rows = clients
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(c => c.name);
+
+        downloadCsv(rows.join('\n'), `clientes_${today}.csv`);
+    }, [clients]);
+
     return {
         clients,
         search,
@@ -127,6 +150,7 @@ export function useClientsAdmin() {
         toggleActive,
         removeClient,
         bulkImport,
+        exportToCsv,
         selectedIds,
         toggleSelect,
         selectAll,
@@ -134,3 +158,4 @@ export function useClientsAdmin() {
         bulkDelete,
     };
 }
+

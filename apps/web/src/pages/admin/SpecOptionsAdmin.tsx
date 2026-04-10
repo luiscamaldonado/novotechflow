@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import {
     Settings, Plus, Search, Pencil,
     Trash2, Loader2, ToggleLeft, ToggleRight,
-    PackageOpen, X,
+    PackageOpen, X, Download,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
@@ -24,6 +24,7 @@ export default function SpecOptionsAdmin() {
         filtered, loading,
         createOption, updateOption,
         toggleActive, removeOption, bulkImport,
+        exportToCsv,
         selectedIds, toggleSelect, selectAll,
         clearSelection, bulkDelete, deleteByField,
     } = useSpecOptionsAdmin();
@@ -129,7 +130,18 @@ export default function SpecOptionsAdmin() {
                     </p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <CsvImportSection onBulkImport={bulkImport} />
+                    <CsvImportSection onBulkImport={bulkImport} selectedField={selectedField} />
+                    <button
+                        onClick={() => exportToCsv(selectedField || undefined)}
+                        className="flex items-center space-x-2 bg-sky-50 hover:bg-sky-100 text-sky-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                    >
+                        <Download className="h-4 w-4" />
+                        <span>
+                            {selectedField
+                                ? `Exportar ${FIELD_NAME_LABELS[selectedField]}`
+                                : 'Exportar Todas'}
+                        </span>
+                    </button>
                     <button
                         onClick={handleOpenCreate}
                         className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest"

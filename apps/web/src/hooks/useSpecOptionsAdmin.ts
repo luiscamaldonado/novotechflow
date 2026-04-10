@@ -61,6 +61,19 @@ export const FIELD_NAME_LABELS: Record<SpecFieldName, string> = {
     cliente: 'Cliente',
 };
 
+// ── Download helper ──────────────────────────────────────────
+
+/** Creates a CSV Blob, triggers a browser download via temp anchor, and cleans up. */
+function downloadCsv(content: string, filename: string): void {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+}
+
 // ── Hook ─────────────────────────────────────────────────────
 
 export function useSpecOptionsAdmin() {
@@ -173,6 +186,33 @@ export function useSpecOptionsAdmin() {
         return res.data as BulkImportResult;
     };
 
+    /**
+     * Exports options as CSV and triggers a browser download.
+     * - If `fieldName` is provided → single-column CSV (values only, no header).
+     * - If `fieldName` is undefined → two-column CSV with `fieldName,value` header.
+     */
+    const exportToCsv = useCallback((fieldName?: SpecFieldName) => {
+        const today = new Date().toISOString().slice(0, 10);
+
+        if (fieldName) {
+            const rows = options
+                .filter(o => o.fieldName === fieldName)
+                .sort((a, b) => a.value.localeCompare(b.value))
+                .map(o => o.value);
+
+            downloadCsv(rows.join('\n'), `opciones_${fieldName}_${today}.csv`);
+        } else {
+            const rows = options
+                .sort((a, b) => {
+                    const fc = a.fieldName.localeCompare(b.fieldName);
+                    return fc !== 0 ? fc : a.value.localeCompare(b.value);
+                })
+                .map(o => `${o.fieldName},${o.value}`);
+
+            downloadCsv(['fieldName,value', ...rows].join('\n'), `opciones_todas_${today}.csv`);
+        }
+    }, [options]);
+
     return {
         options,
         selectedField,
@@ -187,6 +227,7 @@ export function useSpecOptionsAdmin() {
         toggleActive,
         removeOption,
         bulkImport,
+        exportToCsv,
         selectedIds,
         toggleSelect,
         selectAll,

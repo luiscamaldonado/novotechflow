@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import {
     Users, Plus, Search, Pencil,
     Trash2, Loader2, ToggleLeft, ToggleRight,
-    PackageOpen, X,
+    PackageOpen, X, Download,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useClientsAdmin } from '../../hooks/useClientsAdmin';
@@ -19,6 +19,7 @@ export default function ClientsAdmin() {
         filtered, loading,
         createClient, updateClient,
         toggleActive, removeClient, bulkImport,
+        exportToCsv,
         selectedIds, toggleSelect, selectAll,
         clearSelection, bulkDelete,
     } = useClientsAdmin();
@@ -88,6 +89,13 @@ export default function ClientsAdmin() {
                 </div>
                 <div className="flex items-center space-x-3">
                     <ClientCsvImport onBulkImport={bulkImport} />
+                    <button
+                        onClick={exportToCsv}
+                        className="flex items-center space-x-2 bg-sky-50 hover:bg-sky-100 text-sky-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                    >
+                        <Download className="h-4 w-4" />
+                        <span>Exportar</span>
+                    </button>
                     <button onClick={handleOpenCreate} className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest">
                         <Plus className="h-4 w-4" /><span>Agregar Cliente</span>
                     </button>

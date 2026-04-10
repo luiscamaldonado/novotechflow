@@ -1,48 +1,103 @@
 import { useState, useRef } from 'react';
 import {
-    Loader2, CheckCircle2, AlertTriangle, Upload,
+    Loader2, CheckCircle2, AlertTriangle, Upload, XCircle,
 } from 'lucide-react';
-import { FIELD_NAME_LABELS } from '../../../hooks/useSpecOptionsAdmin';
+import { FIELD_NAME_LABELS, SPEC_FIELD_NAMES } from '../../../hooks/useSpecOptionsAdmin';
 import type { SpecFieldName, BulkImportResult } from '../../../hooks/useSpecOptionsAdmin';
+
+// ── Constants ────────────────────────────────────────────────
+
+const CSV_PREVIEW_LIMIT = 5;
+
+/** Set of valid fieldName keys for header-line detection. */
+const VALID_FIELD_NAMES = new Set<string>(SPEC_FIELD_NAMES);
 
 // ── CSV helpers ──────────────────────────────────────────────
 
 interface CsvRow { fieldName: string; value: string }
 
-function parseCsv(text: string): CsvRow[] {
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) return [];
-
-    return lines.slice(1).reduce<CsvRow[]>((acc, line) => {
-        const [fieldName, value] = line.split(',').map(s => s.trim());
-        if (fieldName && value) {
-            acc.push({ fieldName, value });
-        }
-        return acc;
-    }, []);
+interface ParseResult {
+    rows: CsvRow[];
+    error: string | null;
+    isSingleColumn: boolean;
 }
 
-const CSV_PREVIEW_LIMIT = 5;
+/**
+ * Detects and parses CSV in two formats:
+ * - Two-column: `fieldName,value` (first line = header, skipped)
+ * - Single-column: one value per line (requires `selectedField`)
+ */
+function parseCsv(text: string, selectedField: SpecFieldName | ''): ParseResult {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return { rows: [], error: null, isSingleColumn: false };
+
+    const firstLineHasComma = lines[0].includes(',');
+
+    if (firstLineHasComma) {
+        return parseTwoColumnCsv(lines);
+    }
+
+    return parseSingleColumnCsv(lines, selectedField);
+}
+
+function parseTwoColumnCsv(lines: string[]): ParseResult {
+    /* Skip header row (first line) */
+    const dataLines = lines.slice(1);
+
+    const rows = dataLines.reduce<CsvRow[]>((acc, line) => {
+        const [fieldName, value] = line.split(',').map(s => s.trim());
+        if (fieldName && value) acc.push({ fieldName, value });
+        return acc;
+    }, []);
+
+    return { rows, error: null, isSingleColumn: false };
+}
+
+function parseSingleColumnCsv(
+    lines: string[],
+    selectedField: SpecFieldName | '',
+): ParseResult {
+    if (!selectedField) {
+        return {
+            rows: [],
+            error: 'Selecciona un campo antes de importar un CSV de una sola columna.',
+            isSingleColumn: true,
+        };
+    }
+
+    /* If first line matches a known fieldName, treat it as header and skip it */
+    const startIndex = VALID_FIELD_NAMES.has(lines[0].toLowerCase()) ? 1 : 0;
+
+    const rows = lines.slice(startIndex).reduce<CsvRow[]>((acc, value) => {
+        if (value) acc.push({ fieldName: selectedField, value });
+        return acc;
+    }, []);
+
+    return { rows, error: null, isSingleColumn: true };
+}
 
 // ── Types ────────────────────────────────────────────────────
 
 interface CsvImportSectionProps {
     onBulkImport: (items: CsvRow[]) => Promise<BulkImportResult>;
+    /** Currently selected field in the parent page filter. */
+    selectedField: SpecFieldName | '';
 }
 
 // ── Component ────────────────────────────────────────────────
 
 /**
  * Self-contained CSV import section.
- * Renders a trigger button + conditional preview/result panels.
- * Place inside a vertical `space-y-*` container so the panels
- * appear below other header elements.
+ * Supports both single-column (requires `selectedField`) and
+ * two-column `fieldName,value` CSV formats.
  */
-export default function CsvImportSection({ onBulkImport }: CsvImportSectionProps) {
+export default function CsvImportSection({ onBulkImport, selectedField }: CsvImportSectionProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
     const [isImporting, setIsImporting] = useState(false);
     const [importResult, setImportResult] = useState<BulkImportResult | null>(null);
+    const [parseError, setParseError] = useState<string | null>(null);
+    const [isSingleColumn, setIsSingleColumn] = useState(false);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -51,7 +106,11 @@ export default function CsvImportSection({ onBulkImport }: CsvImportSectionProps
         const reader = new FileReader();
         reader.onload = (ev) => {
             const text = ev.target?.result as string;
-            setCsvRows(parseCsv(text));
+            const result = parseCsv(text, selectedField);
+
+            setCsvRows(result.rows);
+            setParseError(result.error);
+            setIsSingleColumn(result.isSingleColumn);
             setImportResult(null);
         };
         reader.readAsText(file);
@@ -73,8 +132,15 @@ export default function CsvImportSection({ onBulkImport }: CsvImportSectionProps
         }
     };
 
+    const handleDismissError = () => setParseError(null);
+
     const hasPendingPreview = csvRows.length > 0;
     const hasResult = importResult !== null;
+
+    /** Preview label: "4 opciones para Fabricante" or generic count */
+    const previewLabel = isSingleColumn && selectedField
+        ? `${csvRows.length} opciones para ${FIELD_NAME_LABELS[selectedField]}`
+        : `${csvRows.length} registro${csvRows.length !== 1 ? 's' : ''} a importar`;
 
     return (
         <div>
@@ -89,7 +155,20 @@ export default function CsvImportSection({ onBulkImport }: CsvImportSectionProps
                 <span>Importar CSV</span>
             </button>
 
-            {/* Preview panel — renders as a fixed-position overlay to avoid layout disruption */}
+            {/* Parse error toast */}
+            {parseError && (
+                <div className="fixed top-6 right-6 z-50 bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex items-center space-x-4 shadow-2xl max-w-md">
+                    <div className="flex items-center space-x-2">
+                        <XCircle className="h-5 w-5 text-red-500 shrink-0" />
+                        <span className="text-sm font-bold text-red-700">{parseError}</span>
+                    </div>
+                    <button onClick={handleDismissError} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
+                        <span className="text-xs font-black uppercase tracking-widest">✕</span>
+                    </button>
+                </div>
+            )}
+
+            {/* Preview panel */}
             {hasPendingPreview && (
                 <div className="fixed inset-x-0 bottom-0 z-40 p-4">
                     <div className="max-w-[1400px] mx-auto bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 space-y-4 shadow-2xl">
@@ -97,7 +176,7 @@ export default function CsvImportSection({ onBulkImport }: CsvImportSectionProps
                             <div className="flex items-center space-x-2">
                                 <AlertTriangle className="h-5 w-5 text-amber-500" />
                                 <span className="text-sm font-black text-amber-700">
-                                    Vista previa: {csvRows.length} registro{csvRows.length !== 1 ? 's' : ''} a importar
+                                    Vista previa: {previewLabel}
                                 </span>
                             </div>
                             <div className="flex items-center space-x-2">

@@ -8,12 +8,21 @@ import type { ClientBulkImportResult } from '../../../hooks/useClientsAdmin';
 
 interface ClientCsvRow { name: string }
 
-function parseClientCsv(text: string): ClientCsvRow[] {
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) return [];
+/** Known header values that should be skipped if found as the first line. */
+const CLIENT_CSV_HEADERS = new Set(['name', 'nombre', 'cliente']);
 
-    return lines.slice(1).reduce<ClientCsvRow[]>((acc, line) => {
-        const name = line.trim();
+/**
+ * Parses a single-column CSV of client names.
+ * Skips the first line if it matches a known header keyword.
+ * Ignores empty lines and trims whitespace.
+ */
+function parseClientCsv(text: string): ClientCsvRow[] {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return [];
+
+    const startIndex = CLIENT_CSV_HEADERS.has(lines[0].toLowerCase()) ? 1 : 0;
+
+    return lines.slice(startIndex).reduce<ClientCsvRow[]>((acc, name) => {
         if (name) acc.push({ name });
         return acc;
     }, []);
