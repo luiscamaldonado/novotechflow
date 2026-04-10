@@ -12,18 +12,37 @@ import type { AutocompleteSuggestion } from '../AutocompleteInput';
 // ──────────────────────────────────────────────────────────
 
 /**
- * Campos que comparten listas en el backend.
- * - "responsable" (Servicios PCs / Servicios Infra) → busca con "fabricante"
- * - "garantiaBateria" / "garantiaEquipo" (PCS) → busca con "garantia"
+ * Mapeo por categoría: key en SPEC_FIELDS → fieldName real en BD.
+ * Solo se declaran los keys que DIFIEREN del fieldName de la BD.
+ * Los 17 fieldNames válidos en BD son:
+ *   fabricante, formato, modelo, procesador, sistemaOperativo,
+ *   graficos, memoriaRam, almacenamiento, pantalla, network,
+ *   seguridad, garantia, tipo, tipoInfraestructura, tipoServicio,
+ *   tipoSoftware, unidadMedida, cliente.
  */
-const FIELD_NAME_ALIAS: Record<string, string> = {
-    responsable: 'fabricante',
-    garantiaBateria: 'garantia',
-    garantiaEquipo: 'garantia',
+const FIELD_NAME_ALIAS: Record<string, Record<string, string>> = {
+    PCS: {
+        garantiaBateria: 'garantia',
+        garantiaEquipo: 'garantia',
+    },
+    PC_SERVICES: {
+        tipo: 'tipoServicio',
+        responsable: 'fabricante',
+    },
+    SOFTWARE: {
+        tipo: 'tipoSoftware',
+    },
+    INFRASTRUCTURE: {
+        tipo: 'tipoInfraestructura',
+    },
+    INFRA_SERVICES: {
+        tipo: 'tipoServicio',
+        responsable: 'fabricante',
+    },
 };
 
-function resolveFieldName(key: string): string {
-    return FIELD_NAME_ALIAS[key] ?? key;
+function resolveFieldName(itemType: string, key: string): string {
+    return FIELD_NAME_ALIAS[itemType]?.[key] ?? key;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -146,11 +165,11 @@ export default function SpecFieldsSection({
         if (!specFields) return {};
         const fns: Record<string, (q: string) => Promise<AutocompleteSuggestion[]>> = {};
         for (const field of Object.keys(specFields)) {
-            const resolvedName = resolveFieldName(field);
+            const resolvedName = resolveFieldName(itemType, field);
             fns[field] = (query: string) => fetchSuggestions(resolvedName, query);
         }
         return fns;
-    }, [specFields, fetchSuggestions]);
+    }, [specFields, itemType, fetchSuggestions]);
 
     if (!theme || !specFields) return null;
 

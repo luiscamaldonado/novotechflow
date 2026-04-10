@@ -170,7 +170,8 @@ export function useProposalBuilder(proposalId: string | undefined) {
                 const res = await api.get('/clients/search', {
                     params: { q: query },
                 });
-                return (res.data as Array<{ id: string; name: string }>).map(c => ({
+                const { results } = res.data as { results: Array<{ id: string; name: string }> };
+                return results.map(c => ({
                     label: c.name,
                     value: c.name,
                 }));

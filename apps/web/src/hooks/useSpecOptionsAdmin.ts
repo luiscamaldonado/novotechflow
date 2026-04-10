@@ -17,7 +17,7 @@ export interface BulkImportResult {
     duplicates: number;
 }
 
-/** The 17 valid fieldName values for the SpecOption model. */
+/** The 18 valid fieldName values for the SpecOption model. */
 export const SPEC_FIELD_NAMES = [
     'fabricante',
     'formato',
@@ -32,6 +32,7 @@ export const SPEC_FIELD_NAMES = [
     'seguridad',
     'garantia',
     'tipo',
+    'tipoInfraestructura',
     'tipoServicio',
     'tipoSoftware',
     'unidadMedida',
@@ -55,6 +56,7 @@ export const FIELD_NAME_LABELS: Record<SpecFieldName, string> = {
     seguridad: 'Seguridad',
     garantia: 'Garantía',
     tipo: 'Tipo',
+    tipoInfraestructura: 'Tipo de Infraestructura',
     tipoServicio: 'Tipo de Servicio',
     tipoSoftware: 'Tipo de Software',
     unidadMedida: 'Unidad de Medida',
