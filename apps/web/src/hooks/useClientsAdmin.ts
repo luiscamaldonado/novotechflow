@@ -22,6 +22,7 @@ export function useClientsAdmin() {
     const [clients, setClients] = useState<Client[]>([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const fetchClients = useCallback(async () => {
         try {
@@ -53,6 +54,25 @@ export function useClientsAdmin() {
         return result.sort((a, b) => a.name.localeCompare(b.name));
     }, [clients, search]);
 
+    // ── Selection actions ──
+
+    const toggleSelect = useCallback((id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }, []);
+
+    const selectAll = useCallback(() => {
+        setSelectedIds(new Set(filtered.map(c => c.id)));
+    }, [filtered]);
+
+    const clearSelection = useCallback(() => {
+        setSelectedIds(new Set());
+    }, []);
+
     // ── CRUD actions ──
 
     const createClient = async (name: string): Promise<void> => {
@@ -73,6 +93,18 @@ export function useClientsAdmin() {
     const removeClient = async (id: string): Promise<void> => {
         await api.delete(`/admin/clients/${id}`);
         setClients(prev => prev.filter(c => c.id !== id));
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
+    };
+
+    const bulkDelete = async (ids: string[]): Promise<{ deleted: number }> => {
+        const res = await api.post('/admin/clients/bulk-delete', { ids });
+        setClients(prev => prev.filter(c => !ids.includes(c.id)));
+        setSelectedIds(new Set());
+        return res.data as { deleted: number };
     };
 
     const bulkImport = async (
@@ -95,5 +127,10 @@ export function useClientsAdmin() {
         toggleActive,
         removeClient,
         bulkImport,
+        selectedIds,
+        toggleSelect,
+        selectAll,
+        clearSelection,
+        bulkDelete,
     };
 }

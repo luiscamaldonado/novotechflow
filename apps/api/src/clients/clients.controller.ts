@@ -18,6 +18,7 @@ import {
   CreateClientDto,
   UpdateClientDto,
   BulkCreateClientsDto,
+  BulkDeleteClientsDto,
 } from './dto/clients.dto';
 
 /**
@@ -86,10 +87,19 @@ export class ClientsController {
   @UseGuards(AdminGuard)
   @ApiBearerAuth()
   @ApiTags('admin/clients')
-  @ApiOperation({ summary: 'Soft-delete: desactivar un cliente' })
+  @ApiOperation({ summary: 'Borrado masivo de clientes por IDs' })
+  @Post('admin/clients/bulk-delete')
+  async bulkDelete(@Body() dto: BulkDeleteClientsDto) {
+    return this.clientsService.bulkRemove(dto.ids);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/clients')
+  @ApiOperation({ summary: 'Hard-delete: eliminar un cliente' })
   @Delete('admin/clients/:id')
   async remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.clientsService.softDeleteClient(id);
+    return this.clientsService.removeClient(id);
   }
 
   @UseGuards(AdminGuard)

@@ -4,6 +4,8 @@ import {
   IsOptional,
   IsBoolean,
   IsArray,
+  IsUUID,
+  ArrayMinSize,
   ValidateNested,
   ArrayMaxSize,
 } from 'class-validator';
@@ -54,4 +56,15 @@ export class BulkCreateSpecOptionsDto {
   @ValidateNested({ each: true })
   @Type(() => CreateSpecOptionDto)
   items: CreateSpecOptionDto[];
+}
+
+/**
+ * DTO para borrado masivo de opciones por IDs.
+ */
+export class BulkDeleteSpecOptionsDto {
+  @ApiProperty({ example: ['uuid-1', 'uuid-2'], description: 'Array de UUIDs a eliminar' })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMinSize(1)
+  ids: string[];
 }

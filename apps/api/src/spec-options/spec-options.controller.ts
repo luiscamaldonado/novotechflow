@@ -18,6 +18,7 @@ import {
   CreateSpecOptionDto,
   UpdateSpecOptionDto,
   BulkCreateSpecOptionsDto,
+  BulkDeleteSpecOptionsDto,
 } from './dto/spec-options.dto';
 
 /**
@@ -70,7 +71,25 @@ export class SpecOptionsController {
   @UseGuards(AdminGuard)
   @ApiBearerAuth()
   @ApiTags('admin/spec-options')
-  @ApiOperation({ summary: 'Soft-delete: desactivar una opción' })
+  @ApiOperation({ summary: 'Borrado masivo por IDs' })
+  @Post('admin/spec-options/bulk-delete')
+  async bulkDelete(@Body() dto: BulkDeleteSpecOptionsDto) {
+    return this.specOptionsService.bulkRemove(dto.ids);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/spec-options')
+  @ApiOperation({ summary: 'Eliminar todas las opciones de un campo' })
+  @Delete('admin/spec-options/by-field/:fieldName')
+  async removeByField(@Param('fieldName') fieldName: string) {
+    return this.specOptionsService.bulkRemoveByField(fieldName);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @ApiTags('admin/spec-options')
+  @ApiOperation({ summary: 'Hard-delete: eliminar una opción' })
   @Delete('admin/spec-options/:id')
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.specOptionsService.remove(id);

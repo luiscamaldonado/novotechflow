@@ -4,6 +4,8 @@ import {
   IsOptional,
   IsBoolean,
   IsArray,
+  IsUUID,
+  ArrayMinSize,
   ValidateNested,
   ArrayMaxSize,
 } from 'class-validator';
@@ -61,4 +63,15 @@ export class BulkCreateClientsDto {
   @ValidateNested({ each: true })
   @Type(() => CreateClientDto)
   items: CreateClientDto[];
+}
+
+/**
+ * DTO para borrado masivo de clientes por IDs.
+ */
+export class BulkDeleteClientsDto {
+  @ApiProperty({ example: ['uuid-1', 'uuid-2'], description: 'Array de UUIDs a eliminar' })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @ArrayMinSize(1)
+  ids: string[];
 }

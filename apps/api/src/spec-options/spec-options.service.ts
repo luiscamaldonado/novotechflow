@@ -80,13 +80,30 @@ export class SpecOptionsService {
   }
 
   /**
-   * Soft-delete: desactiva la opción en vez de eliminarla.
+   * Hard-delete: elimina la opción de la base de datos.
    */
   async remove(id: string) {
-    return this.prisma.specOption.update({
-      where: { id },
-      data: { isActive: false },
+    return this.prisma.specOption.delete({ where: { id } });
+  }
+
+  /**
+   * Elimina múltiples opciones por sus IDs.
+   */
+  async bulkRemove(ids: string[]): Promise<{ deleted: number }> {
+    const result = await this.prisma.specOption.deleteMany({
+      where: { id: { in: ids } },
     });
+    return { deleted: result.count };
+  }
+
+  /**
+   * Elimina todas las opciones de un campo específico.
+   */
+  async bulkRemoveByField(fieldName: string): Promise<{ deleted: number }> {
+    const result = await this.prisma.specOption.deleteMany({
+      where: { fieldName },
+    });
+    return { deleted: result.count };
   }
 
   /**

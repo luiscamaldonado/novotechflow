@@ -234,13 +234,20 @@ export class ClientsService {
   }
 
   /**
-   * Soft-delete: desactiva el cliente en vez de eliminarlo.
+   * Hard-delete: elimina el cliente de la base de datos.
    */
-  async softDeleteClient(id: string) {
-    return this.prisma.client.update({
-      where: { id },
-      data: { isActive: false },
+  async removeClient(id: string) {
+    return this.prisma.client.delete({ where: { id } });
+  }
+
+  /**
+   * Elimina múltiples clientes por sus IDs.
+   */
+  async bulkRemove(ids: string[]): Promise<{ deleted: number }> {
+    const result = await this.prisma.client.deleteMany({
+      where: { id: { in: ids } },
     });
+    return { deleted: result.count };
   }
 
   /**

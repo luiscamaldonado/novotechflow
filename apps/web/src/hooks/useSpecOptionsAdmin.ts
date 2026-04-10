@@ -68,6 +68,7 @@ export function useSpecOptionsAdmin() {
     const [selectedField, setSelectedField] = useState<SpecFieldName | ''>('');
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const fetchOptions = useCallback(async () => {
         try {
@@ -107,6 +108,25 @@ export function useSpecOptionsAdmin() {
         });
     }, [options, selectedField, search]);
 
+    // ── Selection actions ──
+
+    const toggleSelect = useCallback((id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }, []);
+
+    const selectAll = useCallback(() => {
+        setSelectedIds(new Set(filtered.map(o => o.id)));
+    }, [filtered]);
+
+    const clearSelection = useCallback(() => {
+        setSelectedIds(new Set());
+    }, []);
+
     // ── CRUD actions ──
 
     const createOption = async (fieldName: string, value: string): Promise<void> => {
@@ -126,6 +146,25 @@ export function useSpecOptionsAdmin() {
     const removeOption = async (id: string): Promise<void> => {
         await api.delete(`/admin/spec-options/${id}`);
         setOptions(prev => prev.filter(o => o.id !== id));
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
+    };
+
+    const bulkDelete = async (ids: string[]): Promise<{ deleted: number }> => {
+        const res = await api.post('/admin/spec-options/bulk-delete', { ids });
+        setOptions(prev => prev.filter(o => !ids.includes(o.id)));
+        setSelectedIds(new Set());
+        return res.data as { deleted: number };
+    };
+
+    const deleteByField = async (fieldName: string): Promise<{ deleted: number }> => {
+        const res = await api.delete(`/admin/spec-options/by-field/${fieldName}`);
+        setOptions(prev => prev.filter(o => o.fieldName !== fieldName));
+        setSelectedIds(new Set());
+        return res.data as { deleted: number };
     };
 
     const bulkImport = async (items: Array<{ fieldName: string; value: string }>): Promise<BulkImportResult> => {
@@ -148,5 +187,11 @@ export function useSpecOptionsAdmin() {
         toggleActive,
         removeOption,
         bulkImport,
+        selectedIds,
+        toggleSelect,
+        selectAll,
+        clearSelection,
+        bulkDelete,
+        deleteByField,
     };
 }

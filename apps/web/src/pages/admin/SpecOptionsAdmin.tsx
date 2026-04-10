@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import {
     Settings, Plus, Search, Pencil,
     Trash2, Loader2, ToggleLeft, ToggleRight,
-    PackageOpen,
+    PackageOpen, X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
@@ -24,6 +24,8 @@ export default function SpecOptionsAdmin() {
         filtered, loading,
         createOption, updateOption,
         toggleActive, removeOption, bulkImport,
+        selectedIds, toggleSelect, selectAll,
+        clearSelection, bulkDelete, deleteByField,
     } = useSpecOptionsAdmin();
 
     // Modal state
@@ -50,15 +52,36 @@ export default function SpecOptionsAdmin() {
         }
     };
 
-    // ── Delete handler ──
+    // ── Delete handlers ──
 
     const handleDelete = async (option: SpecOption) => {
         const label = FIELD_NAME_LABELS[option.fieldName as SpecFieldName] || option.fieldName;
-        if (!window.confirm(`¿Eliminar "${option.value}" del campo ${label}?`)) return;
+        if (!window.confirm(`¿Eliminar "${option.value}" del campo ${label}? Esta acción no se puede deshacer.`)) return;
         try {
             await removeOption(option.id);
         } catch (error) {
             console.error('Error deleting option:', error);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        const count = selectedIds.size;
+        if (!window.confirm(`¿Eliminar ${count} opciones? Esta acción no se puede deshacer.`)) return;
+        try {
+            await bulkDelete(Array.from(selectedIds));
+        } catch (error) {
+            console.error('Error in bulk delete:', error);
+        }
+    };
+
+    const handleDeleteByField = async () => {
+        if (!selectedField) return;
+        const label = FIELD_NAME_LABELS[selectedField];
+        if (!window.confirm(`¿Eliminar TODAS las opciones de "${label}"? Esta acción no se puede deshacer.`)) return;
+        try {
+            await deleteByField(selectedField);
+        } catch (error) {
+            console.error('Error deleting field options:', error);
         }
     };
 
@@ -70,6 +93,16 @@ export default function SpecOptionsAdmin() {
         } catch (error) {
             console.error('Error toggling option:', error);
         }
+    };
+
+    // ── Checkbox helpers ──
+
+    const isAllSelected = filtered.length > 0 && filtered.every(o => selectedIds.has(o.id));
+    const isSomeSelected = filtered.some(o => selectedIds.has(o.id));
+
+    const handleToggleAll = () => {
+        if (isAllSelected) clearSelection();
+        else selectAll();
     };
 
     // ── Loading state ──
@@ -121,6 +154,17 @@ export default function SpecOptionsAdmin() {
                         ))}
                     </select>
 
+                    {/* Botón "Eliminar todo el campo" — solo visible cuando hay campo seleccionado */}
+                    {selectedField && (
+                        <button
+                            onClick={handleDeleteByField}
+                            className="flex items-center space-x-2 px-4 py-3 bg-red-50 text-red-600 border-2 border-red-100 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-100 transition-colors"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Eliminar todo el campo</span>
+                        </button>
+                    )}
+
                     <div className="relative flex-1 min-w-[250px]">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
                         <input
@@ -138,6 +182,31 @@ export default function SpecOptionsAdmin() {
                 </div>
             </div>
 
+            {/* Bulk action bar */}
+            {selectedIds.size > 0 && (
+                <div className="flex items-center justify-between bg-indigo-50 border-2 border-indigo-100 rounded-2xl px-6 py-4">
+                    <span className="text-sm font-bold text-indigo-700">
+                        {selectedIds.size} opcion{selectedIds.size !== 1 ? 'es' : ''} seleccionada{selectedIds.size !== 1 ? 's' : ''}
+                    </span>
+                    <div className="flex items-center space-x-3">
+                        <button
+                            onClick={clearSelection}
+                            className="flex items-center space-x-1 px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-colors"
+                        >
+                            <X className="h-3.5 w-3.5" />
+                            <span>Deseleccionar</span>
+                        </button>
+                        <button
+                            onClick={handleBulkDelete}
+                            className="flex items-center space-x-1 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-sm"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Eliminar seleccionados</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Table */}
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 {filtered.length === 0 ? (
@@ -150,6 +219,15 @@ export default function SpecOptionsAdmin() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="bg-slate-50/80 border-b border-slate-100">
+                                <th className="px-4 py-4 w-10">
+                                    <input
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        ref={el => { if (el) el.indeterminate = isSomeSelected && !isAllSelected; }}
+                                        onChange={handleToggleAll}
+                                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                </th>
                                 <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Campo</th>
                                 <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
                                 <th className="px-6 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
@@ -161,6 +239,8 @@ export default function SpecOptionsAdmin() {
                                 <OptionRow
                                     key={option.id}
                                     option={option}
+                                    isSelected={selectedIds.has(option.id)}
+                                    onToggleSelect={toggleSelect}
                                     onEdit={handleOpenEdit}
                                     onToggle={handleToggle}
                                     onDelete={handleDelete}
@@ -187,15 +267,28 @@ export default function SpecOptionsAdmin() {
 // ── Table row ────────────────────────────────────────────────
 
 function OptionRow({
-    option, onEdit, onToggle, onDelete,
+    option, isSelected, onToggleSelect, onEdit, onToggle, onDelete,
 }: {
     option: SpecOption;
+    isSelected: boolean;
+    onToggleSelect: (id: string) => void;
     onEdit: (o: SpecOption) => void;
     onToggle: (o: SpecOption) => void;
     onDelete: (o: SpecOption) => void;
 }) {
     return (
-        <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
+        <tr className={cn(
+            "border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors",
+            isSelected && "bg-indigo-50/40"
+        )}>
+            <td className="px-4 py-4 w-10">
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(option.id)}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+            </td>
             <td className="px-6 py-4">
                 <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600">
                     {FIELD_NAME_LABELS[option.fieldName as SpecFieldName] || option.fieldName}
