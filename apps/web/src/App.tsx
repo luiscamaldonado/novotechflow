@@ -14,6 +14,8 @@ const ProposalItemsBuilder = lazy(() => import('./pages/proposals/ProposalItemsB
 const ProposalCalculations = lazy(() => import('./pages/proposals/ProposalCalculations'));
 const ProposalDocBuilder = lazy(() => import('./pages/proposals/ProposalDocBuilder'));
 const DefaultPagesAdmin = lazy(() => import('./pages/admin/DefaultPagesAdmin'));
+const SpecOptionsAdmin = lazy(() => import('./pages/admin/SpecOptionsAdmin'));
+const ClientsAdmin = lazy(() => import('./pages/admin/ClientsAdmin'));
 
 
 const AdminPanel = () => (
@@ -70,6 +72,8 @@ function App() {
                 <Route element={<AdminRoute />}>
                   <Route path="/admin" element={<AdminPanel />} />
                   <Route path="/admin/templates" element={<DefaultPagesAdmin />} />
+                  <Route path="/admin/spec-options" element={<SpecOptionsAdmin />} />
+                  <Route path="/admin/clients" element={<ClientsAdmin />} />
                   <Route path="/users" element={<Users />} />
                 </Route>
               </Route>

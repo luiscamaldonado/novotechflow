@@ -7,7 +7,8 @@ import {
     LogOut,
     X,
     PlusCircle,
-    BookOpen
+    BookOpen,
+    Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
@@ -27,14 +28,19 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     };
 
     const navItems = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: user?.role === 'ADMIN' ? '/admin' : '/dashboard', roles: ['ADMIN', 'COMMERCIAL'] },
-        { icon: PlusCircle, label: 'Nueva Propuesta', path: '/proposals/new', roles: ['ADMIN', 'COMMERCIAL'] },
-        { icon: Users, label: 'Usuarios', path: '/users', roles: ['ADMIN'] },
-        { icon: BookOpen, label: 'Plantillas de Documento', path: '/admin/templates', roles: ['ADMIN'] },
-        { icon: Settings, label: 'Configuración', path: '/settings', roles: ['ADMIN'] },
+        { icon: LayoutDashboard, label: 'Dashboard', path: user?.role === 'ADMIN' ? '/admin' : '/dashboard' },
+        { icon: PlusCircle, label: 'Nueva Propuesta', path: '/proposals/new' },
     ];
 
-    const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
+    const adminItems = [
+        { icon: Database, label: 'Catálogo de Specs', path: '/admin/spec-options' },
+        { icon: Users, label: 'Clientes', path: '/admin/clients' },
+        { icon: BookOpen, label: 'Plantillas', path: '/admin/templates' },
+        { icon: Users, label: 'Usuarios', path: '/users' },
+        { icon: Settings, label: 'Configuración', path: '/settings' },
+    ];
+
+    const isAdmin = user?.role === 'ADMIN';
 
     return (
         <>
@@ -68,7 +74,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                 </div>
 
                 <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1 scrollbar-thin scrollbar-thumb-novo-secondary scrollbar-track-transparent">
-                    {filteredNavItems.map((item) => (
+                    {navItems.map((item) => (
                         <NavLink
                             key={item.path}
                             to={item.path}
@@ -86,6 +92,35 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             <span className="font-medium text-sm">{item.label}</span>
                         </NavLink>
                     ))}
+
+                    {/* Sección de Administración — solo visible para ADMIN */}
+                    {isAdmin && (
+                        <>
+                            <div className="pt-4 pb-2 px-4">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                                    Administración
+                                </span>
+                            </div>
+                            {adminItems.map((item) => (
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    onClick={() => setIsOpen(false)}
+                                    className={({ isActive }) =>
+                                        cn(
+                                            "flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group",
+                                            isActive
+                                                ? "bg-novo-primary text-white shadow-md shadow-novo-primary/20"
+                                                : "text-gray-300 hover:bg-novo-secondary/50 hover:text-white"
+                                        )
+                                    }
+                                >
+                                    <item.icon className="h-5 w-5" />
+                                    <span className="font-medium text-sm">{item.label}</span>
+                                </NavLink>
+                            ))}
+                        </>
+                    )}
                 </div>
 
                 <div className="p-4 border-t border-novo-secondary/30 bg-novo-dark/50">
