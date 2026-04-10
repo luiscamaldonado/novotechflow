@@ -80,7 +80,7 @@ export function useSpecOptionsAdmin() {
     const [options, setOptions] = useState<SpecOption[]>([]);
     const [selectedField, setSelectedField] = useState<SpecFieldName | ''>('');
     const [search, setSearch] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const fetchOptions = useCallback(async () => {
@@ -97,9 +97,16 @@ export function useSpecOptionsAdmin() {
         }
     }, [selectedField]);
 
+    /* Fetch only when a specific field is selected; clear data when deselected. */
     useEffect(() => {
-        fetchOptions();
-    }, [fetchOptions]);
+        if (selectedField) {
+            fetchOptions();
+        } else {
+            setOptions([]);
+            setSelectedIds(new Set());
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedField]);
 
     /** Filtered + sorted list (fieldName filter + text search over value). */
     const filtered = useMemo(() => {

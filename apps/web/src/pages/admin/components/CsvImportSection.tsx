@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import {
     Loader2, CheckCircle2, AlertTriangle, Upload, XCircle,
 } from 'lucide-react';
+import { cn } from '../../../lib/utils';
 import { FIELD_NAME_LABELS, SPEC_FIELD_NAMES } from '../../../hooks/useSpecOptionsAdmin';
 import { readFileWithEncoding, cleanCsvValue } from '../../../lib/csv-utils';
 import type { SpecFieldName, BulkImportResult } from '../../../hooks/useSpecOptionsAdmin';
@@ -83,6 +84,8 @@ interface CsvImportSectionProps {
     onBulkImport: (items: CsvRow[]) => Promise<BulkImportResult>;
     /** Currently selected field in the parent page filter. */
     selectedField: SpecFieldName | '';
+    /** When true the import button is visually disabled and non-interactive. */
+    disabled?: boolean;
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -92,7 +95,7 @@ interface CsvImportSectionProps {
  * Supports both single-column (requires `selectedField`) and
  * two-column `fieldName,value` CSV formats.
  */
-export default function CsvImportSection({ onBulkImport, selectedField }: CsvImportSectionProps) {
+export default function CsvImportSection({ onBulkImport, selectedField, disabled = false }: CsvImportSectionProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
     const [isImporting, setIsImporting] = useState(false);
@@ -151,7 +154,13 @@ export default function CsvImportSection({ onBulkImport, selectedField }: CsvImp
             {/* Trigger button */}
             <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                disabled={disabled}
+                className={cn(
+                    'flex items-center space-x-2 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest',
+                    disabled
+                        ? 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600',
+                )}
             >
                 <Upload className="h-4 w-4" />
                 <span>Importar CSV</span>

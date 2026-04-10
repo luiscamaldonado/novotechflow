@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import {
     Settings, Plus, Search, Pencil,
     Trash2, Loader2, ToggleLeft, ToggleRight,
-    PackageOpen, X, Download,
+    PackageOpen, X, Download, Database,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
@@ -106,15 +106,7 @@ export default function SpecOptionsAdmin() {
         else selectAll();
     };
 
-    // ── Loading state ──
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-            </div>
-        );
-    }
+    const hasFieldSelected = selectedField !== '';
 
     return (
         <div className="max-w-[1400px] mx-auto space-y-6 px-4 pb-20">
@@ -130,21 +122,33 @@ export default function SpecOptionsAdmin() {
                     </p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <CsvImportSection onBulkImport={bulkImport} selectedField={selectedField} />
+                    <CsvImportSection onBulkImport={bulkImport} selectedField={selectedField} disabled={!hasFieldSelected} />
                     <button
                         onClick={() => exportToCsv(selectedField || undefined)}
-                        className="flex items-center space-x-2 bg-sky-50 hover:bg-sky-100 text-sky-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                        disabled={!hasFieldSelected}
+                        className={cn(
+                            "flex items-center space-x-2 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest",
+                            hasFieldSelected
+                                ? "bg-sky-50 hover:bg-sky-100 text-sky-600"
+                                : "bg-slate-50 text-slate-300 cursor-not-allowed"
+                        )}
                     >
                         <Download className="h-4 w-4" />
                         <span>
-                            {selectedField
+                            {hasFieldSelected
                                 ? `Exportar ${FIELD_NAME_LABELS[selectedField]}`
-                                : 'Exportar Todas'}
+                                : 'Exportar'}
                         </span>
                     </button>
                     <button
                         onClick={handleOpenCreate}
-                        className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest"
+                        disabled={!hasFieldSelected}
+                        className={cn(
+                            "flex items-center space-x-2 px-6 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest",
+                            hasFieldSelected
+                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300"
+                                : "bg-slate-100 text-slate-300 cursor-not-allowed"
+                        )}
                     >
                         <Plus className="h-4 w-4" />
                         <span>Agregar Opción</span>
@@ -160,7 +164,7 @@ export default function SpecOptionsAdmin() {
                         onChange={e => setSelectedField(e.target.value as SpecFieldName | '')}
                         className="px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700 focus:border-indigo-200 focus:ring-0 min-w-[200px]"
                     >
-                        <option value="">Todos los campos</option>
+                        <option value="">Seleccionar campo...</option>
                         {SPEC_FIELD_NAMES.map(fn => (
                             <option key={fn} value={fn}>{FIELD_NAME_LABELS[fn]}</option>
                         ))}
@@ -188,9 +192,11 @@ export default function SpecOptionsAdmin() {
                         />
                     </div>
 
-                    <span className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest">
-                        {filtered.length} resultado{filtered.length !== 1 ? 's' : ''}
-                    </span>
+                    {hasFieldSelected && (
+                        <span className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest">
+                            {filtered.length} resultado{filtered.length !== 1 ? 's' : ''}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -219,49 +225,61 @@ export default function SpecOptionsAdmin() {
                 </div>
             )}
 
-            {/* Table */}
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                {filtered.length === 0 ? (
-                    <div className="py-20 text-center">
-                        <PackageOpen className="h-16 w-16 mx-auto text-slate-100 mb-4" />
-                        <p className="text-sm font-bold text-slate-400">No se encontraron opciones.</p>
-                        <p className="text-xs text-slate-300 mt-2">Prueba ajustando los filtros o agrega una nueva opción.</p>
-                    </div>
-                ) : (
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="bg-slate-50/80 border-b border-slate-100">
-                                <th className="px-4 py-4 w-10">
-                                    <input
-                                        type="checkbox"
-                                        checked={isAllSelected}
-                                        ref={el => { if (el) el.indeterminate = isSomeSelected && !isAllSelected; }}
-                                        onChange={handleToggleAll}
-                                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            {/* Table / Empty placeholder */}
+            {!hasFieldSelected ? (
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 py-24 text-center">
+                    <Database className="h-16 w-16 mx-auto text-slate-200 mb-4" />
+                    <p className="text-base font-bold text-slate-400">Selecciona un campo para ver y gestionar sus opciones</p>
+                    <p className="text-xs text-slate-300 mt-2">Usa el selector de campo de arriba para comenzar.</p>
+                </div>
+            ) : loading ? (
+                <div className="flex justify-center items-center h-64">
+                    <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+                </div>
+            ) : (
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                    {filtered.length === 0 ? (
+                        <div className="py-20 text-center">
+                            <PackageOpen className="h-16 w-16 mx-auto text-slate-100 mb-4" />
+                            <p className="text-sm font-bold text-slate-400">No se encontraron opciones.</p>
+                            <p className="text-xs text-slate-300 mt-2">Prueba ajustando los filtros o agrega una nueva opción.</p>
+                        </div>
+                    ) : (
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="bg-slate-50/80 border-b border-slate-100">
+                                    <th className="px-4 py-4 w-10">
+                                        <input
+                                            type="checkbox"
+                                            checked={isAllSelected}
+                                            ref={el => { if (el) el.indeterminate = isSomeSelected && !isAllSelected; }}
+                                            onChange={handleToggleAll}
+                                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                    </th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Campo</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
+                                    <th className="px-6 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
+                                    <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.map(option => (
+                                    <OptionRow
+                                        key={option.id}
+                                        option={option}
+                                        isSelected={selectedIds.has(option.id)}
+                                        onToggleSelect={toggleSelect}
+                                        onEdit={handleOpenEdit}
+                                        onToggle={handleToggle}
+                                        onDelete={handleDelete}
                                     />
-                                </th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Campo</th>
-                                <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
-                                <th className="px-6 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
-                                <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(option => (
-                                <OptionRow
-                                    key={option.id}
-                                    option={option}
-                                    isSelected={selectedIds.has(option.id)}
-                                    onToggleSelect={toggleSelect}
-                                    onEdit={handleOpenEdit}
-                                    onToggle={handleToggle}
-                                    onDelete={handleDelete}
-                                />
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            )}
 
             {/* Create/Edit Modal */}
             <AnimatePresence>
