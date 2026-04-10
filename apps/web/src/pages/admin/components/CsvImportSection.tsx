@@ -3,6 +3,7 @@ import {
     Loader2, CheckCircle2, AlertTriangle, Upload, XCircle,
 } from 'lucide-react';
 import { FIELD_NAME_LABELS, SPEC_FIELD_NAMES } from '../../../hooks/useSpecOptionsAdmin';
+import { readFileWithEncoding } from '../../../lib/csv-utils';
 import type { SpecFieldName, BulkImportResult } from '../../../hooks/useSpecOptionsAdmin';
 
 // ── Constants ────────────────────────────────────────────────
@@ -99,21 +100,22 @@ export default function CsvImportSection({ onBulkImport, selectedField }: CsvImp
     const [parseError, setParseError] = useState<string | null>(null);
     const [isSingleColumn, setIsSingleColumn] = useState(false);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            const text = ev.target?.result as string;
+        try {
+            const text = await readFileWithEncoding(file);
             const result = parseCsv(text, selectedField);
 
             setCsvRows(result.rows);
             setParseError(result.error);
             setIsSingleColumn(result.isSingleColumn);
             setImportResult(null);
-        };
-        reader.readAsText(file);
+        } catch (error) {
+            console.error('Error reading CSV file:', error);
+            setParseError('Error al leer el archivo CSV.');
+        }
 
         if (fileInputRef.current) fileInputRef.current.value = '';
     };

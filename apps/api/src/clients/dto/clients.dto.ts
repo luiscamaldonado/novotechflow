@@ -51,7 +51,7 @@ export class UpdateClientDto {
 }
 
 /** Máximo de clientes permitidos en un bulk create */
-const MAX_BULK_CLIENTS = 500;
+const MAX_BULK_CLIENTS = 50_000;
 
 /**
  * DTO para carga masiva de clientes (CSV import).

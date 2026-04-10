@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import {
     Loader2, CheckCircle2, AlertTriangle, Upload,
 } from 'lucide-react';
+import { readFileWithEncoding } from '../../../lib/csv-utils';
 import type { ClientBulkImportResult } from '../../../hooks/useClientsAdmin';
 
 // ── CSV helpers ──────────────────────────────────────────────
@@ -49,15 +50,18 @@ export default function ClientCsvImport({ onBulkImport }: ClientCsvImportProps) 
     const [isImporting, setIsImporting] = useState(false);
     const [importResult, setImportResult] = useState<ClientBulkImportResult | null>(null);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            setCsvRows(parseClientCsv(ev.target?.result as string));
+
+        try {
+            const text = await readFileWithEncoding(file);
+            setCsvRows(parseClientCsv(text));
             setImportResult(null);
-        };
-        reader.readAsText(file);
+        } catch (error) {
+            console.error('Error reading CSV file:', error);
+        }
+
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 

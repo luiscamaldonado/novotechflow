@@ -44,7 +44,7 @@ export class UpdateSpecOptionDto {
 }
 
 /** Máximo de opciones permitidas en un bulk create */
-const MAX_BULK_ITEMS = 10_000;
+const MAX_BULK_ITEMS = 50_000;
 
 /**
  * DTO para carga masiva de opciones.
