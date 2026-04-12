@@ -47,3 +47,6 @@ backups/
 
 # Loose data files
 *.csv
+
+# User uploads
+uploads/
