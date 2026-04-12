@@ -22,4 +22,4 @@ COPY --from=builder /app/apps/api/package.json ./
 RUN mkdir -p uploads/signatures uploads/defaults uploads/templates
 EXPOSE 3000
 RUN npm install prisma
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
