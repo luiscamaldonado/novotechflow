@@ -19,7 +19,8 @@ COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/node_modules ./node_modules
 COPY --from=builder /app/apps/api/prisma ./prisma
 COPY --from=builder /app/apps/api/package.json ./
+COPY --from=builder /app/apps/api/tsconfig.json ./
 RUN mkdir -p uploads/signatures uploads/defaults uploads/templates
 EXPOSE 3000
-RUN npm install prisma
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+RUN npm install prisma ts-node typescript
+CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/src/main.js"]
