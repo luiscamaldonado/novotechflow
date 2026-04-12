@@ -23,4 +23,4 @@ COPY --from=builder /app/apps/api/tsconfig.json ./
 RUN mkdir -p uploads/signatures uploads/defaults uploads/templates
 EXPOSE 3000
 RUN npm install prisma ts-node typescript
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
