@@ -50,3 +50,7 @@ backups/
 
 # User uploads
 uploads/
+
+# Database dumps
+*.sql
+*.csv
