@@ -12,6 +12,7 @@ RUN cd apps/api && pnpm build
 
 # Stage 2: Production
 FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl
 WORKDIR /app
 RUN npm install -g pnpm@8.15.5
 COPY --from=builder /app/apps/api/dist ./dist
