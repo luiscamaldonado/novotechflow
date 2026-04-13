@@ -355,7 +355,6 @@ novotechflow/
 │   │       │   └── Login.tsx
 │   │       └── store/                # Zustand stores
 │   │           └── authStore.ts
-│   └── agent/                        # App Tauri (scaffold futuro)
 ├── packages/
 │   ├── ui/                           # Design system (infrautilizado)
 │   ├── eslint-config/

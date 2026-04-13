@@ -14,7 +14,6 @@ NovoTechFlow es una plataforma integral para la gestión y generación de cotiza
 | Frontend | React 18 + Vite + TypeScript |
 | Backend | NestJS 10 + TypeScript |
 | Base de datos | PostgreSQL 15 + Prisma ORM |
-| Desktop agent | Tauri (Rust + WebView) |
 | Containerización | Docker + docker-compose |
 
 ---
@@ -147,7 +146,6 @@ novotechflow/
 │   │   ├── src/             # Componentes, páginas, hooks, stores
 │   │   ├── Dockerfile       # Build multi-stage (Node + Nginx)
 │   │   └── nginx.conf       # Configuración Nginx con SPA fallback
-│   └── agent/               # Desktop agent — Tauri
 ├── packages/
 │   ├── eslint-config/       # Configuración ESLint compartida
 │   ├── typescript-config/   # tsconfig.json compartidos
