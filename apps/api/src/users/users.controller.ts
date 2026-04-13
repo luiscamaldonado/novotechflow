@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Delete, Param, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Delete, Param, UseInterceptors, UploadedFile, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -9,7 +9,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
-import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
+import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -54,11 +54,12 @@ export class UsersController {
             },
         }),
         fileFilter: (_req, file, cb) => {
-            if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp|svg\+xml)$/)) {
-                cb(new Error('Solo se permiten imágenes'), false);
-            } else {
-                cb(null, true);
+            const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowed.includes(file.mimetype)) {
+                cb(new BadRequestException('Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP'), false);
+                return;
             }
+            cb(null, true);
         },
         limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     }))
@@ -66,6 +67,7 @@ export class UsersController {
         @Param('id', ParseUUIDPipe) id: string,
         @UploadedFile() file: Express.Multer.File,
     ) {
+        await validateImageFileSize(file);
         await validateImageMagicBytes(file);
         const signatureUrl = `/uploads/signatures/${file.filename}`;
         return this.usersService.updateSignature(id, signatureUrl);

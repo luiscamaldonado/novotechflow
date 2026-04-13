@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Query, Request, Param, Patch, Delete, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Query, Request, Param, Patch, Delete, UseInterceptors, UploadedFile, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -9,7 +9,7 @@ import { PagesService } from './pages.service';
 import { TrmService } from './trm.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
-import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
+import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
     CreateProposalDto,
@@ -249,15 +249,17 @@ export class ProposalsController {
             },
         }),
         fileFilter: (_req, file, cb) => {
-            if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp|svg\+xml)$/)) {
-                cb(new Error('Solo se permiten imágenes'), false);
-            } else {
-                cb(null, true);
+            const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowed.includes(file.mimetype)) {
+                cb(new BadRequestException('Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP'), false);
+                return;
             }
+            cb(null, true);
         },
-        limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+        limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     }))
     async uploadImage(@UploadedFile() file: Express.Multer.File) {
+        await validateImageFileSize(file);
         await validateImageMagicBytes(file);
         return { url: `/uploads/${file.filename}`, originalName: file.originalname };
     }

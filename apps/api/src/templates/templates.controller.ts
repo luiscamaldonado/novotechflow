@@ -1,6 +1,7 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, UseGuards, Req, UseInterceptors, UploadedFile, ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -11,7 +12,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
-import { validateImageMagicBytes, sanitizeFilename } from '../common/upload-validation';
+import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
 import {
   CreateTemplateDto,
   UpdateTemplateDto,
@@ -122,19 +123,21 @@ export class TemplatesController {
       },
     }),
     fileFilter: (_req, file, cb) => {
-      if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp|svg\+xml)$/)) {
-        cb(new Error('Solo se permiten im\u00e1genes'), false);
-      } else {
-        cb(null, true);
+      const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowed.includes(file.mimetype)) {
+        cb(new BadRequestException('Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP'), false);
+        return;
       }
+      cb(null, true);
     },
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   }))
   async uploadBlockImage(
     @Param('templateId', ParseUUIDPipe) templateId: string,
     @Param('blockId', ParseUUIDPipe) blockId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
+    await validateImageFileSize(file);
     await validateImageMagicBytes(file);
     const imageUrl = `/uploads/templates/${file.filename}`;
     return this.templatesService.updateBlockImage(templateId, blockId, imageUrl);
