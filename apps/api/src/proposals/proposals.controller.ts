@@ -256,7 +256,7 @@ export class ProposalsController {
             }
             cb(null, true);
         },
-        limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+        limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
     }))
     async uploadImage(@UploadedFile() file: Express.Multer.File) {
         await validateImageFileSize(file);

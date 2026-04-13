@@ -28,8 +28,8 @@ export function sanitizeFilename(originalname: string): string {
 
 const ALLOWED_CSV_MIMES = ['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'];
 const ALLOWED_CSV_EXTENSIONS = ['.csv'];
-const CSV_MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
-const IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const CSV_MAX_SIZE_BYTES = 401 * 1024; // 401KB
+const IMAGE_MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 
 /** Dangerous CSV injection prefixes that can execute code in Excel/Sheets */
 const CSV_INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r', '\n', '|', '%'];
@@ -54,7 +54,7 @@ export async function validateCsvFile(file: Express.Multer.File): Promise<void> 
   const buffer = await readFile(file.path);
   if (buffer.length > CSV_MAX_SIZE_BYTES) {
     await safeUnlink(file.path);
-    throw new BadRequestException('El archivo CSV excede el l\u00edmite de 5MB.');
+    throw new BadRequestException('El archivo CSV excede el l\u00edmite de 401KB.');
   }
 
   // 3. Binary detection via magic bytes - reject if file-type detects a known binary format
@@ -106,7 +106,7 @@ export async function validateImageFileSize(file: Express.Multer.File): Promise<
   const stats = await readFile(file.path);
   if (stats.length > IMAGE_MAX_SIZE_BYTES) {
     await safeUnlink(file.path);
-    throw new BadRequestException('La imagen excede el l\u00edmite de 5MB.');
+    throw new BadRequestException('La imagen excede el l\u00edmite de 2MB.');
   }
 }
 

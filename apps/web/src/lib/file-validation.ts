@@ -2,7 +2,8 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp
 const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 const ALLOWED_CSV_TYPES = ['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'];
 const ALLOWED_CSV_EXTENSIONS = ['.csv'];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_CSV_SIZE = 401 * 1024; // 401KB
 
 export type FileValidationResult = {
   valid: boolean;
@@ -24,8 +25,8 @@ export async function validateImageFile(file: File): Promise<FileValidationResul
     return { valid: false, error: `Tipo "${file.type}" no permitido. Solo im\u00e1genes JPEG, PNG, GIF, WebP.` };
   }
   // 3. Size
-  if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: 'La imagen excede el l\u00edmite de 5MB.' };
+  if (file.size > MAX_IMAGE_SIZE) {
+    return { valid: false, error: 'La imagen excede el l\u00edmite de 2MB.' };
   }
   // 4. Magic bytes check
   const header = await readFileHeader(file, 12);
@@ -50,8 +51,8 @@ export async function validateCsvFile(file: File): Promise<FileValidationResult>
     return { valid: false, error: `Tipo de archivo "${file.type}" no permitido para CSV.` };
   }
   // 3. Size
-  if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: 'El archivo CSV excede el l\u00edmite de 5MB.' };
+  if (file.size > MAX_CSV_SIZE) {
+    return { valid: false, error: 'El archivo CSV excede el l\u00edmite de 401KB.' };
   }
   // 4. Binary content check (read first 8KB)
   const header = await readFileHeader(file, 8192);

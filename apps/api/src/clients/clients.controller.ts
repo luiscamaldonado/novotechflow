@@ -36,8 +36,8 @@ import {
 /** MIME types permitted for CSV uploads */
 const ALLOWED_CSV_MIMES = ['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'];
 
-/** Max CSV file size: 5 MB */
-const CSV_MAX_SIZE = 5 * 1024 * 1024;
+/** Max CSV file size: 401 KB */
+const CSV_MAX_SIZE = 401 * 1024;
 
 /**
  * @class ClientsController
