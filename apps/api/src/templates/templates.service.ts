@@ -203,6 +203,8 @@ export class TemplatesService {
 
   /**
    * Seed defaults if no templates exist.
+   * All non-ASCII characters use Unicode escapes to prevent encoding issues
+   * when compiled inside Docker/Alpine (which assumes UTF-8 source files).
    */
   async seedDefaultsIfEmpty(userId: string) {
     const count = await this.prisma.pdfTemplate.count();
@@ -223,7 +225,7 @@ export class TemplatesService {
         ],
       },
       {
-        name: 'Carta de Presentación',
+        name: 'Carta de Presentaci\u00f3n',
         templateType: 'PRESENTATION' as PageType,
         sortOrder: 2,
         content: [
@@ -233,9 +235,9 @@ export class TemplatesService {
             content: {
               type: 'doc',
               content: [
-                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentación' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Estimado cliente, nos complace presentar nuestra propuesta comercial para su consideración. NOVOTECHNO S.A.S es una empresa dedicada a ofrecer soluciones tecnológicas integrales que se adaptan a las necesidades específicas de cada organización.' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Nuestro equipo de profesionales altamente calificados está comprometido en brindar servicios de excelencia, acompañando a nuestros clientes en cada etapa de su transformación digital.' }] },
+                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentaci\u00f3n' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Estimado cliente, nos complace presentar nuestra propuesta comercial para su consideraci\u00f3n. NOVOTECHNO S.A.S es una empresa dedicada a ofrecer soluciones tecnol\u00f3gicas integrales que se adaptan a las necesidades espec\u00edficas de cada organizaci\u00f3n.' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Nuestro equipo de profesionales altamente calificados est\u00e1 comprometido en brindar servicios de excelencia, acompa\u00f1ando a nuestros clientes en cada etapa de su transformaci\u00f3n digital.' }] },
               ],
             },
             sortOrder: 1,
@@ -243,7 +245,7 @@ export class TemplatesService {
         ],
       },
       {
-        name: 'Información General (1/2)',
+        name: 'Informaci\u00f3n General (1/2)',
         templateType: 'COMPANY_INFO' as PageType,
         sortOrder: 3,
         content: [
@@ -253,8 +255,8 @@ export class TemplatesService {
             content: {
               type: 'doc',
               content: [
-                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Quiénes Somos' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'NOVOTECHNO S.A.S es una empresa colombiana especialista en soluciones de tecnología empresarial. Con amplia experiencia en el mercado, nos hemos consolidado como un aliado estratégico para empresas que buscan optimizar sus procesos a través de la innovación tecnológica.' }] },
+                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Qui\u00e9nes Somos' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'NOVOTECHNO S.A.S es una empresa colombiana especialista en soluciones de tecnolog\u00eda empresarial. Con amplia experiencia en el mercado, nos hemos consolidado como un aliado estrat\u00e9gico para empresas que buscan optimizar sus procesos a trav\u00e9s de la innovaci\u00f3n tecnol\u00f3gica.' }] },
               ],
             },
             sortOrder: 1,
@@ -262,7 +264,7 @@ export class TemplatesService {
         ],
       },
       {
-        name: 'Información General (2/2)',
+        name: 'Informaci\u00f3n General (2/2)',
         templateType: 'COMPANY_INFO' as PageType,
         sortOrder: 4,
         content: [
@@ -273,7 +275,7 @@ export class TemplatesService {
               type: 'doc',
               content: [
                 { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Nuestros Servicios' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Ofrecemos un portafolio integral de servicios tecnológicos que incluyen: suministro de equipos de cómputo, infraestructura de red, servicios de soporte técnico, licenciamiento de software y soluciones de seguridad informática.' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Ofrecemos un portafolio integral de servicios tecnol\u00f3gicos que incluyen: suministro de equipos de c\u00f3mputo, infraestructura de red, servicios de soporte t\u00e9cnico, licenciamiento de software y soluciones de seguridad inform\u00e1tica.' }] },
               ],
             },
             sortOrder: 1,
@@ -281,13 +283,13 @@ export class TemplatesService {
         ],
       },
       {
-        name: 'Índice',
+        name: '\u00cdndice',
         templateType: 'INDEX' as PageType,
         sortOrder: 5,
         content: [],
       },
       {
-        name: 'Términos y Condiciones',
+        name: 'T\u00e9rminos y Condiciones',
         templateType: 'TERMS' as PageType,
         sortOrder: 1000,
         content: [
@@ -297,8 +299,8 @@ export class TemplatesService {
             content: {
               type: 'doc',
               content: [
-                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Términos y Condiciones' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Los precios y condiciones de esta oferta son válidos por el período indicado en la misma. Todos los precios están expresados en pesos colombianos (COP) e incluyen IVA donde aplique.' }] },
+                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'T\u00e9rminos y Condiciones' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Los precios y condiciones de esta oferta son v\u00e1lidos por el per\u00edodo indicado en la misma. Todos los precios est\u00e1n expresados en pesos colombianos (COP) e incluyen IVA donde aplique.' }] },
               ],
             },
             sortOrder: 1,

@@ -31,10 +31,10 @@ interface Template {
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
-    PRESENTATION: 'Carta de Presentación',
+    PRESENTATION: 'Carta de Presentaci\u00f3n',
     COMPANY_INFO: 'Info. General',
-    INDEX: 'Índice',
-    TERMS: 'Términos y Condiciones',
+    INDEX: '\u00cdndice',
+    TERMS: 'T\u00e9rminos y Condiciones',
     CUSTOM: 'Personalizada',
 };
 
@@ -104,7 +104,7 @@ export default function DefaultPagesAdmin() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('¿Eliminar esta plantilla? Esta acción no se puede deshacer.')) return;
+        if (!window.confirm('\u00bfEliminar esta plantilla? Esta acci\u00f3n no se puede deshacer.')) return;
         try {
             await api.delete(`/templates/${id}`);
             setTemplates(prev => prev.filter(t => t.id !== id));
@@ -248,7 +248,7 @@ export default function DefaultPagesAdmin() {
                         Plantillas de Documento
                     </h2>
                     <p className="text-slate-500 text-sm font-medium mt-1">
-                        Configure las páginas por defecto que se usarán en todas las propuestas comerciales.
+                        Configure las p\u00e1ginas por defecto que se usar\u00e1n en todas las propuestas comerciales.
                     </p>
                 </div>
 
@@ -421,7 +421,7 @@ export default function DefaultPagesAdmin() {
                                 <div className="py-8 text-center">
                                     <AlertTriangle className="h-8 w-8 mx-auto text-amber-300 mb-3" />
                                     <p className="text-xs font-bold text-slate-400">
-                                        No hay plantillas configuradas. Se usarán los valores por defecto.
+                                        No hay plantillas configuradas. Se usar\u00e1n los valores por defecto.
                                     </p>
                                 </div>
                             )}
@@ -429,9 +429,9 @@ export default function DefaultPagesAdmin() {
                     </div>
 
                     <div className="bg-indigo-50/80 border-2 border-indigo-200 rounded-2xl p-4">
-                        <p className="text-xs font-bold text-indigo-700">💡 Cómo funciona</p>
+                        <p className="text-xs font-bold text-indigo-700">{"\ud83d\udca1"} C\u00f3mo funciona</p>
                         <p className="text-[10px] text-indigo-600 mt-1 leading-relaxed">
-                            Las plantillas que configure aquí se copiarán automáticamente como páginas predeterminadas cuando cualquier usuario comercial cree una nueva propuesta.
+                            Las plantillas que configure aqu\u00ed se copiar\u00e1n autom\u00e1ticamente como p\u00e1ginas predeterminadas cuando cualquier usuario comercial cree una nueva propuesta.
                         </p>
                     </div>
                 </div>
@@ -556,14 +556,14 @@ function TemplateEditor({
                 {template.templateType === 'INDEX' && blocks.length === 0 ? (
                     <div className="py-16 text-center">
                         <ListOrdered className="h-16 w-16 mx-auto text-violet-200 mb-4" />
-                        <p className="text-sm font-bold text-slate-400">El índice se genera automáticamente.</p>
+                        <p className="text-sm font-bold text-slate-400">El \u00edndice se genera autom\u00e1ticamente.</p>
                         <p className="text-xs text-slate-300 mt-2">No requiere contenido manual.</p>
                     </div>
                 ) : blocks.length === 0 ? (
                     <div className="py-16 text-center">
                         <FileText className="h-16 w-16 mx-auto text-slate-100 mb-4" />
                         <p className="text-sm font-bold text-slate-400">
-                            Esta plantilla no tiene contenido. Use los botones de arriba para agregar texto o imágenes.
+                            Esta plantilla no tiene contenido. Use los botones de arriba para agregar texto o im\u00e1genes.
                         </p>
                     </div>
                 ) : (
@@ -658,7 +658,7 @@ function TemplateBlockEditor({
                                     onUpdate({ ...block.content as object, caption: captionBuffer });
                                 }
                             }}
-                            placeholder="Descripción de la imagen..."
+                            placeholder="Descripci\u00f3n de la imagen..."
                             className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:border-indigo-200 focus:ring-0"
                         />
                     </div>

@@ -72,17 +72,17 @@ function applyBorder(cell: ExcelJS.Cell): void {
 
 const COLUMNS: { header: string; width: number; key: string }[] = [
     { header: 'Usuario',             width: 20, key: 'user' },
-    { header: 'Código',              width: 16, key: 'code' },
+    { header: 'C\u00f3digo',              width: 16, key: 'code' },
     { header: 'Cliente',             width: 28, key: 'client' },
     { header: 'Asunto',              width: 34, key: 'subject' },
     { header: 'Estado',              width: 18, key: 'status' },
-    { header: 'Adquisición',         width: 14, key: 'acquisition' },
+    { header: 'Adquisici\u00f3n',         width: 14, key: 'acquisition' },
     { header: 'Fecha Cierre',        width: 14, key: 'closeDate' },
-    { header: 'Fecha Facturación',   width: 16, key: 'billingDate' },
+    { header: 'Fecha Facturaci\u00f3n',   width: 16, key: 'billingDate' },
     { header: 'Moneda',              width: 10, key: 'currency' },
     { header: 'Subtotal Min.',       width: 20, key: 'subtotal' },
     { header: 'USD Est.',            width: 20, key: 'usdEst' },
-    { header: 'Última Actualización', width: 18, key: 'updatedAt' },
+    { header: '\u00daltima Actualizaci\u00f3n', width: 18, key: 'updatedAt' },
     { header: 'Tipo',                width: 14, key: 'type' },
 ];
 
@@ -159,7 +159,7 @@ export async function exportDashboardToExcel(opts: DashboardExportOptions): Prom
             row.minSubtotal ?? 0,
             usdEst ?? 0,
             formatDateDDMMYYYY(row.updatedAt),
-            row.isProjection ? 'Proyección' : 'Propuesta',
+            row.isProjection ? 'Proyecci\u00f3n' : 'Propuesta',
         ]);
 
         const isAlternate = idx % 2 === 1;

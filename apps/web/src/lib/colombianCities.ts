@@ -1,34 +1,37 @@
 /**
  * Lista de ciudades capitales de departamentos de Colombia.
- * Ordenadas alfabéticamente.
+ * Ordenadas alfabeticamente.
+ *
+ * Non-ASCII characters use Unicode escapes to prevent
+ * UTF-16 LE encoding corruption in Docker/Alpine builds.
  */
 export const COLOMBIAN_CAPITAL_CITIES: string[] = [
     'Arauca',
     'Armenia',
     'Barranquilla',
-    'Bogotá D.C.',
+    'Bogot\u00e1 D.C.',
     'Bucaramanga',
     'Cali',
-    'Cartagena',          // Nota: Capital de Bolívar (no departamento propio, pero capital departamental)
-    'Cúcuta',
+    'Cartagena',
+    'C\u00facuta',
     'Florencia',
-    'Ibagué',
-    'Inírida',
+    'Ibagu\u00e9',
+    'In\u00edrida',
     'Leticia',
     'Manizales',
-    'Medellín',
-    'Mitú',
+    'Medell\u00edn',
+    'Mit\u00fa',
     'Mocoa',
-    'Montería',
+    'Monter\u00eda',
     'Neiva',
     'Pasto',
     'Pereira',
-    'Popayán',
-    'Puerto Carreño',
-    'Quibdó',
+    'Popay\u00e1n',
+    'Puerto Carre\u00f1o',
+    'Quibd\u00f3',
     'Riohacha',
-    'San Andrés',
-    'San José del Guaviare',
+    'San Andr\u00e9s',
+    'San Jos\u00e9 del Guaviare',
     'Santa Marta',
     'Sincelejo',
     'Tunja',

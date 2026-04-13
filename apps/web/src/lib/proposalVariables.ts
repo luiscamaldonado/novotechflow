@@ -1,6 +1,10 @@
 /**
- * Contexto de variables de propuesta para reemplazo de marcadores µ
- * en el contenido de las páginas del documento.
+ * Contexto de variables de propuesta para reemplazo de marcadores
+ * en el contenido de las paginas del documento.
+ *
+ * Encoding note: all non-ASCII characters in runtime strings use
+ * Unicode escapes (\uXXXX) to prevent UTF-16 LE corruption when
+ * compiled inside Docker/Alpine (which assumes UTF-8).
  */
 export interface ProposalVariables {
     ciudad: string;
@@ -9,25 +13,31 @@ export interface ProposalVariables {
     cotizacion: string;
     asunto: string;
     validez: string;
-    /** Líneas de garantía generadas según marcas de los ítems */
+    /** Lineas de garantia generadas segun marcas de los items */
     garantiaLines: string[];
 }
 
-/**
- * Mapa de marcadores µ simples (reemplazo de texto 1:1).
- * µGarantia NO está aquí porque requiere reemplazo estructural.
- */
-const SIMPLE_MARKER_MAP: Record<string, keyof ProposalVariables> = {
-    'µCiudad': 'ciudad',
-    'µFechaEmision': 'fechaEmision',
-    'µCLIENTE': 'cliente',
-    'µCOT': 'cotizacion',
-    'µAsunto': 'asunto',
-    'µValidez': 'validez',
-};
+/** Unicode escape for the micro sign used as marker prefix */
+const MU = '\u00b5'; // µ
 
 /**
- * Reemplaza los marcadores µ simples en una cadena de texto.
+ * Mapa de marcadores simples (reemplazo de texto 1:1).
+ * El marcador de Garantia NO esta aqui porque requiere reemplazo estructural.
+ */
+const SIMPLE_MARKER_MAP: Record<string, keyof ProposalVariables> = {
+    [`${MU}Ciudad`]: 'ciudad',
+    [`${MU}FechaEmision`]: 'fechaEmision',
+    [`${MU}CLIENTE`]: 'cliente',
+    [`${MU}COT`]: 'cotizacion',
+    [`${MU}Asunto`]: 'asunto',
+    [`${MU}Validez`]: 'validez',
+};
+
+/** Marker string for warranty replacement */
+const GARANTIA_MARKER = `${MU}Garantia`;
+
+/**
+ * Reemplaza los marcadores simples en una cadena de texto.
  */
 export function replaceMarkers(text: string, vars: ProposalVariables): string {
     let result = text;
@@ -56,7 +66,7 @@ function nodeContainsText(node: Record<string, unknown>, text: string): boolean 
 }
 
 /**
- * Construye un nodo bulletList de TipTap a partir de líneas de texto.
+ * Construye un nodo bulletList de TipTap a partir de lineas de texto.
  */
 function buildTiptapBulletList(lines: string[]): Record<string, unknown> {
     return {
@@ -73,10 +83,10 @@ function buildTiptapBulletList(lines: string[]): Record<string, unknown> {
 
 /**
  * Recorre recursivamente un documento TipTap JSON y reemplaza
- * los marcadores µ en todos los nodos de texto.
+ * los marcadores en todos los nodos de texto.
  *
- * Manejo especial de µGarantia: el párrafo que lo contenga se
- * reemplaza por un bulletList con las líneas de garantía dinámicas.
+ * Manejo especial de Garantia: el parrafo que lo contenga se
+ * reemplaza por un bulletList con las lineas de garantia dinamicas.
  *
  * Retorna un nuevo objeto (no muta el original).
  */
@@ -93,15 +103,14 @@ export function replaceMarkersInTiptapJson(
         result.text = replaceMarkers(result.text, vars);
     }
 
-    // Recorrer contenido hijo con manejo especial de µGarantia
+    // Recorrer contenido hijo con manejo especial de Garantia
     if (Array.isArray(result.content)) {
         const newContent: Record<string, unknown>[] = [];
 
         for (const child of result.content as Record<string, unknown>[]) {
-            // Si este nodo contiene µGarantia, reemplazar con bulletList
             if (
                 vars.garantiaLines.length > 0 &&
-                nodeContainsText(child, 'µGarantia')
+                nodeContainsText(child, GARANTIA_MARKER)
             ) {
                 newContent.push(buildTiptapBulletList(vars.garantiaLines));
             } else {
@@ -118,20 +127,22 @@ export function replaceMarkersInTiptapJson(
 // ── HTML helpers ────────────────────────────────────────────────
 
 /**
- * Reemplaza marcadores µ en una cadena HTML renderizada.
- * Maneja µGarantia convirtiéndolo a una lista HTML <ul>.
+ * Reemplaza marcadores en una cadena HTML renderizada.
+ * Maneja Garantia convirtiendolo a una lista HTML <ul>.
  */
 export function replaceMarkersInHtml(html: string, vars: ProposalVariables): string {
     let result = replaceMarkers(html, vars);
 
-    // Reemplazo estructural de µGarantia
-    if (vars.garantiaLines.length > 0 && result.includes('µGarantia')) {
+    // Reemplazo estructural del marcador de garantia
+    if (vars.garantiaLines.length > 0 && result.includes(GARANTIA_MARKER)) {
         const listItems = vars.garantiaLines.map(l => `<li>${l}</li>`).join('');
         const listHtml = `<ul>${listItems}</ul>`;
-        // Reemplazar el párrafo entero que contiene µGarantia
-        result = result.replace(/<p[^>]*>[^<]*µGarantia[^<]*<\/p>/g, listHtml);
+        // Reemplazar el parrafo entero que contiene el marcador
+        const escapedMarker = GARANTIA_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const paragraphRegex = new RegExp(`<p[^>]*>[^<]*${escapedMarker}[^<]*<\\/p>`, 'g');
+        result = result.replace(paragraphRegex, listHtml);
         // Fallback: si no estaba dentro de <p>
-        result = result.replaceAll('µGarantia', listHtml);
+        result = result.replaceAll(GARANTIA_MARKER, listHtml);
     }
 
     return result;
@@ -140,8 +151,8 @@ export function replaceMarkersInHtml(html: string, vars: ProposalVariables): str
 // ── Date helpers ────────────────────────────────────────────────
 
 /**
- * Formatea una fecha ISO (YYYY-MM-DD) a formato legible en español colombiano.
- * Ejemplo: "2026-03-29" → "29 de marzo de 2026"
+ * Formatea una fecha ISO (YYYY-MM-DD) a formato legible en espanol colombiano.
+ * Ejemplo: "2026-03-29" -> "29 de marzo de 2026"
  */
 export function formatDateSpanish(isoDate: string): string {
     if (!isoDate) return '';
@@ -159,17 +170,19 @@ export function formatDateSpanish(isoDate: string): string {
 
 // ── Brand-based warranty logic ──────────────────────────────────
 
-const LENOVO_LINE = 'Para recibir atención de garantías y soporte técnico de soluciones de la marca Lenovo comuníquese con la línea de atención 01-800-917-0541';
-const DELL_LINE = 'Para recibir atención de garantías y soporte técnico de soluciones de la marca Dell comuníquese con la línea de atención 01-800-915-5704';
-const GENERAL_LINE = 'Para recibir atención de garantías y soporte técnico de soluciones de otras marcas ofrecidas, soluciones de Novotechno y sus compañías asociadas comuníquese con su ejecutivo comercial a las líneas: Medellín 604 4440731 o Bogotá 601 7552549.';
+/* eslint-disable max-len */
+const LENOVO_LINE = 'Para recibir atenci\u00f3n de garant\u00edas y soporte t\u00e9cnico de soluciones de la marca Lenovo comun\u00edquese con la l\u00ednea de atenci\u00f3n 01-800-917-0541';
+const DELL_LINE = 'Para recibir atenci\u00f3n de garant\u00edas y soporte t\u00e9cnico de soluciones de la marca Dell comun\u00edquese con la l\u00ednea de atenci\u00f3n 01-800-915-5704';
+const GENERAL_LINE = 'Para recibir atenci\u00f3n de garant\u00edas y soporte t\u00e9cnico de soluciones de otras marcas ofrecidas, soluciones de Novotechno y sus compa\u00f1\u00edas asociadas comun\u00edquese con su ejecutivo comercial a las l\u00edneas: Medell\u00edn 604 4440731 o Bogot\u00e1 601 7552549.';
+/* eslint-enable max-len */
 
 /**
- * Genera las líneas de garantía según las marcas presentes en los ítems.
+ * Genera las lineas de garantia segun las marcas presentes en los items.
  *
- * - Si hay ítems Lenovo → línea Lenovo + línea general
- * - Si hay ítems Dell → línea Dell + línea general
- * - Si hay ambos → Lenovo + Dell + general
- * - Si no hay ninguno → solo línea general
+ * - Si hay items Lenovo -> linea Lenovo + linea general
+ * - Si hay items Dell -> linea Dell + linea general
+ * - Si hay ambos -> Lenovo + Dell + general
+ * - Si no hay ninguno -> solo linea general
  */
 export function buildGarantiaLines(
     items: Array<{ brand?: string; technicalSpecs?: { fabricante?: string } }>,

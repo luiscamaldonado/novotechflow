@@ -243,7 +243,7 @@ export class ProposalsService {
    */
   async removeProposalItem(itemId: string, user: AuthenticatedUser) {
     const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
-    if (!item) throw new NotFoundException('Ítem no encontrado.');
+    if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
     await this.verifyProposalOwnership(item.proposalId, user);
     return this.prisma.proposalItem.delete({
       where: { id: itemId }
@@ -255,7 +255,7 @@ export class ProposalsService {
    */
   async updateProposalItem(itemId: string, data: UpdateProposalItemDto, user: AuthenticatedUser) {
     const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
-    if (!item) throw new NotFoundException('Ítem no encontrado.');
+    if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
     await this.verifyProposalOwnership(item.proposalId, user);
     return this.prisma.proposalItem.update({
       where: { id: itemId },

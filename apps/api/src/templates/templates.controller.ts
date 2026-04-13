@@ -123,7 +123,7 @@ export class TemplatesController {
     }),
     fileFilter: (_req, file, cb) => {
       if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp|svg\+xml)$/)) {
-        cb(new Error('Solo se permiten imágenes'), false);
+        cb(new Error('Solo se permiten im\u00e1genes'), false);
       } else {
         cb(null, true);
       }

@@ -11,7 +11,7 @@ export async function validateImageMagicBytes(file: Express.Multer.File): Promis
   const type = await fileTypeFromBuffer(buffer);
   if (!type || !ALLOWED_IMAGE_MIMES.includes(type.mime)) {
     await unlink(file.path);
-    throw new BadRequestException('Tipo de archivo no permitido. Solo se aceptan imágenes JPEG, PNG, GIF o WebP.');
+    throw new BadRequestException('Tipo de archivo no permitido. Solo se aceptan im\u00e1genes JPEG, PNG, GIF o WebP.');
   }
 }
 
@@ -19,7 +19,7 @@ export function sanitizeFilename(originalname: string): string {
   const sanitized = originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
   const ext = extname(sanitized).toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    throw new BadRequestException(`Extensión ${ext} no permitida.`);
+    throw new BadRequestException(`Extensi\u00f3n ${ext} no permitida.`);
   }
   return sanitized;
 }

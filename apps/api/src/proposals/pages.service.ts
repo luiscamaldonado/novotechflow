@@ -27,7 +27,7 @@ export class PagesService {
    */
   private async verifyPageOwnership(pageId: string, user: AuthenticatedUser) {
     const page = await this.prisma.proposalPage.findUnique({ where: { id: pageId } });
-    if (!page) throw new NotFoundException('Página no encontrada.');
+    if (!page) throw new NotFoundException('P\u00e1gina no encontrada.');
     await this.proposalsService.verifyProposalOwnership(page.proposalId, user);
     return page;
   }
@@ -84,11 +84,11 @@ export class PagesService {
       // Fallback: minimal hardcoded defaults
       pageDefs = [
         { pageType: 'COVER', title: 'Portada', sortOrder: 1, blocks: [{ blockType: 'IMAGE', content: { url: '/uploads/defaults/portada.png', caption: '', fullPage: true } }] },
-        { pageType: 'PRESENTATION', title: 'Carta de Presentación', sortOrder: 2, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentación' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Contenido de la carta de presentación.' }] }] } }] },
-        { pageType: 'COMPANY_INFO', title: 'Información General (1/2)', sortOrder: 3, blocks: [] },
-        { pageType: 'COMPANY_INFO', title: 'Información General (2/2)', sortOrder: 4, blocks: [] },
-        { pageType: 'INDEX', title: 'Índice', sortOrder: 5, blocks: [] },
-        { pageType: 'TERMS', title: 'Términos y Condiciones', sortOrder: 1000, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Términos y Condiciones' }] }] } }] },
+        { pageType: 'PRESENTATION', title: 'Carta de Presentaci\u00f3n', sortOrder: 2, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentaci\u00f3n' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Contenido de la carta de presentaci\u00f3n.' }] }] } }] },
+        { pageType: 'COMPANY_INFO', title: 'Informaci\u00f3n General (1/2)', sortOrder: 3, blocks: [] },
+        { pageType: 'COMPANY_INFO', title: 'Informaci\u00f3n General (2/2)', sortOrder: 4, blocks: [] },
+        { pageType: 'INDEX', title: '\u00cdndice', sortOrder: 5, blocks: [] },
+        { pageType: 'TERMS', title: 'T\u00e9rminos y Condiciones', sortOrder: 1000, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'T\u00e9rminos y Condiciones' }] }] } }] },
       ];
     }
 
@@ -189,7 +189,7 @@ export class PagesService {
    */
   async deletePage(pageId: string, user: AuthenticatedUser) {
     const page = await this.verifyPageOwnership(pageId, user);
-    if (page.isLocked) throw new Error('No se puede eliminar una página predeterminada.');
+    if (page.isLocked) throw new Error('No se puede eliminar una p\u00e1gina predeterminada.');
 
     return this.prisma.proposalPage.delete({ where: { id: pageId } });
   }

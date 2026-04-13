@@ -51,11 +51,11 @@ export async function exportToExcel(opts: ExportOptions) {
         // ── Column widths ──
         ws.columns = [
             { width: 8 },   // A  - ITEM
-            { width: 22 },  // B  - CATEGORÍA
+            { width: 22 },  // B  - CATEGORIA
             { width: 35 },  // C  - NOMBRE
             { width: 18 },  // D  - TIPO
             { width: 18 },  // E  - FABRICANTE
-            { width: 40 },  // F  - DESCRIPCIÓN
+            { width: 40 },  // F  - DESCRIPCION
             { width: 14 },  // G  - Moneda Costo
             { width: 10 },  // H  - CANTIDAD
             { width: 18 },  // I  - COSTO UNITARIO
@@ -63,7 +63,7 @@ export async function exportToExcel(opts: ExportOptions) {
             { width: 18 },  // K  - SUBTOTAL COSTO
             { width: 20 },  // L  - TOTAL COSTO + IVA
             { width: 16 },  // M  - MARGEN UNITARIO
-            { width: 16 },  // N  - TRM Conversión
+            { width: 16 },  // N  - TRM Conversion
             { width: 14 },  // O  - Moneda Venta
             { width: 18 },  // P  - VENTA UNITARIA
             { width: 18 },  // Q  - SUBTOTAL VENTA
@@ -84,9 +84,9 @@ export async function exportToExcel(opts: ExportOptions) {
         const headerRows = [
             [scenario.name.toUpperCase(), ''],
             ['USUARIO', userName],
-            ['COTIZACIÓN', proposalCode],
+            ['COTIZACI\u00d3N', proposalCode],
             ['CLIENTE', clientName],
-            ['ADQUISICIÓN', acqLabel],
+            ['ADQUISICI\u00d3N', acqLabel],
             ['MONEDA', scenario.currency || 'COP'],
         ];
 
@@ -116,10 +116,10 @@ export async function exportToExcel(opts: ExportOptions) {
 
         // ── Table header ──
         const TABLE_HEADERS = [
-            'ITEM', 'CATEGORÍA', 'NOMBRE', 'TIPO', 'FABRICANTE',
-            'DESCRIPCIÓN', 'Moneda Costo', 'CANT.', 'COSTO UNIT.', 'IVA',
+            'ITEM', 'CATEGOR\u00cdA', 'NOMBRE', 'TIPO', 'FABRICANTE',
+            'DESCRIPCI\u00d3N', 'Moneda Costo', 'CANT.', 'COSTO UNIT.', 'IVA',
             'SUBTOTAL COSTO', 'TOTAL COSTO + IVA',
-            'MARGEN UNIT.', 'TRM Conversión', 'Moneda Venta',
+            'MARGEN UNIT.', 'TRM Conversi\u00f3n', 'Moneda Venta',
             'VENTA UNIT.', 'SUBTOTAL VENTA', 'TOTAL VENTA + IVA',
         ];
 
@@ -211,7 +211,7 @@ export async function exportToExcel(opts: ExportOptions) {
                         cell.alignment = { vertical: 'middle', horizontal: 'right' };
                         cell.numFmt = '"$"#,##0.00';
                     }
-                    // TRM Conversión column: right alignment + thousands format
+                    // TRM Conversion column: right alignment + thousands format
                     if (colNumber === 14) {
                         cell.alignment = { vertical: 'middle', horizontal: 'right' };
                         if (typeof cell.value === 'number') {
@@ -294,7 +294,7 @@ export async function exportToExcel(opts: ExportOptions) {
     }
 
     // ── Generate and download ──
-    const fileName = `${proposalCode}_${clientName.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, '').replace(/\s+/g, '_')}.xlsx`;
+    const fileName = `${proposalCode}_${clientName.replace(/[^a-zA-Z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00c1\u00c9\u00cd\u00d3\u00da\u00d1 ]/g, '').replace(/\s+/g, '_')}.xlsx`;
     const buffer = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fileName);
 }

@@ -86,7 +86,7 @@ function buildCloseDateNotifications(
       clientName: proposal.clientName,
       type: 'CLOSE_DATE_EXPIRED',
       severity: 'URGENT',
-      message: `La fecha de cierre de ${label} venció hace ${Math.abs(diff)} días`,
+      message: `La fecha de cierre de ${label} venci\u00f3 hace ${Math.abs(diff)} d\u00edas`,
       date: formatDateDDMMYYYY(proposal.closeDate),
       read: readIds.has(id),
     }];
@@ -101,7 +101,7 @@ function buildCloseDateNotifications(
       clientName: proposal.clientName,
       type: 'CLOSE_DATE_WARNING',
       severity: 'WARNING',
-      message: `La propuesta ${label} vence en ${diff} días (cierre: ${formatDateDDMMYYYY(proposal.closeDate)})`,
+      message: `La propuesta ${label} vence en ${diff} d\u00edas (cierre: ${formatDateDDMMYYYY(proposal.closeDate)})`,
       date: formatDateDDMMYYYY(proposal.closeDate),
       read: readIds.has(id),
     }];
@@ -130,7 +130,7 @@ function buildValidityDateNotifications(
       clientName: proposal.clientName,
       type: 'VALIDITY_EXPIRED',
       severity: 'URGENT',
-      message: `La vigencia de ${label} venció el ${formatDateDDMMYYYY(proposal.validityDate)}`,
+      message: `La vigencia de ${label} venci\u00f3 el ${formatDateDDMMYYYY(proposal.validityDate)}`,
       date: formatDateDDMMYYYY(proposal.validityDate),
       read: readIds.has(id),
     }];
@@ -145,7 +145,7 @@ function buildValidityDateNotifications(
       clientName: proposal.clientName,
       type: 'VALIDITY_WARNING',
       severity: 'WARNING',
-      message: `La vigencia de ${label} vence en ${diff} días`,
+      message: `La vigencia de ${label} vence en ${diff} d\u00edas`,
       date: formatDateDDMMYYYY(proposal.validityDate),
       read: readIds.has(id),
     }];

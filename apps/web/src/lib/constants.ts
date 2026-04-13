@@ -46,19 +46,19 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, { label: st
         modelo: { label: 'Modelo', cat: 'MODELO' },
         procesador: { label: 'Procesador', cat: 'PROCESADOR' },
         sistemaOperativo: { label: 'Sistema Operativo', cat: 'SISTEMA_OPERATIVO' },
-        graficos: { label: 'Gráficos', cat: 'GRAFICOS' },
+        graficos: { label: 'Gr\u00e1ficos', cat: 'GRAFICOS' },
         memoriaRam: { label: 'Memoria RAM', cat: 'MEMORIA_RAM' },
         almacenamiento: { label: 'Almacenamiento', cat: 'ALMACENAMIENTO' },
         pantalla: { label: 'Pantalla', cat: 'PANTALLA' },
         network: { label: 'Network', cat: 'NETWORK' },
         seguridad: { label: 'Seguridad', cat: 'SEGURIDAD' },
-        garantiaBateria: { label: 'Garantía Batería', cat: 'GARANTIA_BATERIA' },
-        garantiaEquipo: { label: 'Garantía Equipo', cat: 'GARANTIA_EQUIPO' },
+        garantiaBateria: { label: 'Garant\u00eda Bater\u00eda', cat: 'GARANTIA_BATERIA' },
+        garantiaEquipo: { label: 'Garant\u00eda Equipo', cat: 'GARANTIA_EQUIPO' },
     },
     ACCESSORIES: {
         tipo: { label: 'Tipo', cat: 'ACC_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
-        garantia: { label: 'Garantía', cat: 'ACC_GARANTIA' },
+        garantia: { label: 'Garant\u00eda', cat: 'ACC_GARANTIA' },
     },
     PC_SERVICES: {
         tipo: { label: 'Tipo de Servicio', cat: 'SVC_TIPO' },
@@ -73,7 +73,7 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, { label: st
     INFRASTRUCTURE: {
         tipo: { label: 'Tipo de Infraestructura', cat: 'INFRA_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
-        garantia: { label: 'Garantía', cat: 'INFRA_GARANTIA' },
+        garantia: { label: 'Garant\u00eda', cat: 'INFRA_GARANTIA' },
     },
     INFRA_SERVICES: {
         tipo: { label: 'Tipo de Servicio', cat: 'INFRA_SVC_TIPO' },
@@ -87,13 +87,13 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, { label: st
 /** Page type display labels */
 export const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
-    PRESENTATION: 'Carta de Presentación',
+    PRESENTATION: 'Carta de Presentaci\u00f3n',
     COMPANY_INFO: 'Info. General',
-    INDEX: 'Índice',
-    TECH_SPEC: 'Propuesta Técnica',
-    ECONOMIC: 'Propuesta Económica',
-    TERMS: 'Términos y Condiciones',
-    CUSTOM: 'Página Personalizada',
+    INDEX: '\u00cdndice',
+    TECH_SPEC: 'Propuesta T\u00e9cnica',
+    ECONOMIC: 'Propuesta Econ\u00f3mica',
+    TERMS: 'T\u00e9rminos y Condiciones',
+    CUSTOM: 'P\u00e1gina Personalizada',
 };
 
 /** Page type icons & colors */
@@ -117,7 +117,7 @@ export const VIRTUAL_ECONOMIC_ID = '__virtual_economic__';
 
 /** Status badge configuration for Dashboard rows. */
 export const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: string; border: string }> = {
-    ELABORACION:        { label: 'Elaboración',    bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200' },
+    ELABORACION:        { label: 'Elaboraci\u00f3n',    bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200' },
     PROPUESTA:          { label: 'Propuesta',      bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200' },
     GANADA:             { label: 'Ganada',          bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
     PERDIDA:            { label: 'Perdida',         bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200' },

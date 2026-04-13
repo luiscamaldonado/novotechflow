@@ -206,7 +206,7 @@ export class ScenariosService {
    */
   async updateScenarioItem(id: string, data: UpdateScenarioItemDto, user: AuthenticatedUser) {
     const scenarioItem = await this.prisma.scenarioItem.findUnique({ where: { id } });
-    if (!scenarioItem) throw new NotFoundException('Ítem de escenario no encontrado.');
+    if (!scenarioItem) throw new NotFoundException('\u00cdtem de escenario no encontrado.');
     await this.verifyScenarioOwnership(scenarioItem.scenarioId, user);
     return this.prisma.scenarioItem.update({
       where: { id },
@@ -223,7 +223,7 @@ export class ScenariosService {
    */
   async removeScenarioItem(id: string, user: AuthenticatedUser) {
     const scenarioItem = await this.prisma.scenarioItem.findUnique({ where: { id } });
-    if (!scenarioItem) throw new NotFoundException('Ítem de escenario no encontrado.');
+    if (!scenarioItem) throw new NotFoundException('\u00cdtem de escenario no encontrado.');
     await this.verifyScenarioOwnership(scenarioItem.scenarioId, user);
     // Cascade: delete children first, then the item itself
     await this.prisma.scenarioItem.deleteMany({ where: { parentId: id } });
