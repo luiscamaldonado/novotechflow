@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
 import {
-    Loader2, CheckCircle2, AlertTriangle, Upload,
+    Loader2, CheckCircle2, AlertTriangle, Upload, XCircle,
 } from 'lucide-react';
 import { readFileWithEncoding, cleanCsvValue } from '../../../lib/csv-utils';
+import { validateCsvFile, ACCEPT_CSV } from '../../../lib/file-validation';
 import type { ClientBulkImportResult } from '../../../hooks/useClientsAdmin';
 
 // ── CSV helpers ──────────────────────────────────────────────
@@ -49,17 +50,27 @@ export default function ClientCsvImport({ onBulkImport }: ClientCsvImportProps) 
     const [csvRows, setCsvRows] = useState<ClientCsvRow[]>([]);
     const [isImporting, setIsImporting] = useState(false);
     const [importResult, setImportResult] = useState<ClientBulkImportResult | null>(null);
+    const [parseError, setParseError] = useState<string | null>(null);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const validation = await validateCsvFile(file);
+        if (!validation.valid) {
+            setParseError(validation.error ?? 'Archivo no v\u00e1lido.');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
         try {
             const text = await readFileWithEncoding(file);
             setCsvRows(parseClientCsv(text));
+            setParseError(null);
             setImportResult(null);
         } catch (error) {
             console.error('Error reading CSV file:', error);
+            setParseError('Error al leer el archivo CSV.');
         }
 
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -81,7 +92,7 @@ export default function ClientCsvImport({ onBulkImport }: ClientCsvImportProps) 
 
     return (
         <div>
-            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" accept={ACCEPT_CSV} className="hidden" onChange={handleFileChange} />
 
             {/* Trigger button */}
             <button
@@ -91,6 +102,19 @@ export default function ClientCsvImport({ onBulkImport }: ClientCsvImportProps) 
                 <Upload className="h-4 w-4" />
                 <span>Importar CSV</span>
             </button>
+
+            {/* Parse/validation error toast */}
+            {parseError && (
+                <div className="fixed top-6 right-6 z-50 bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex items-center space-x-4 shadow-2xl max-w-md">
+                    <div className="flex items-center space-x-2">
+                        <XCircle className="h-5 w-5 text-red-500 shrink-0" />
+                        <span className="text-sm font-bold text-red-700">{parseError}</span>
+                    </div>
+                    <button onClick={() => setParseError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
+                        <span className="text-xs font-black uppercase tracking-widest">✕</span>
+                    </button>
+                </div>
+            )}
 
             {/* Preview panel */}
             {csvRows.length > 0 && (

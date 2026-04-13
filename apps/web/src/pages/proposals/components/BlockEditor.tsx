@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Trash2, ImagePlus } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { validateImageFile, ACCEPT_IMAGES } from '../../../lib/file-validation';
 import { type PageBlock } from '../../../hooks/useProposalPages';
 import { type ProposalVariables } from '../../../lib/proposalVariables';
 import RichTextEditor from '../../../components/proposals/RichTextEditor';
@@ -26,6 +27,14 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
     const handleInlineUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        const validation = await validateImageFile(file);
+        if (!validation.valid) {
+            alert(validation.error);
+            if (blockFileRef.current) blockFileRef.current.value = '';
+            return;
+        }
+
         const url = await uploadImage(file);
         if (url) {
             onUpdate(block.id, { ...block.content as object, url });
@@ -53,7 +62,7 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
                 <div className="flex items-center space-x-1">
                     {isImage && (
                         <>
-                            <input ref={blockFileRef} type="file" accept="image/*" className="hidden" onChange={handleInlineUpload} />
+                            <input ref={blockFileRef} type="file" accept={ACCEPT_IMAGES} className="hidden" onChange={handleInlineUpload} />
                             <button
                                 onClick={() => blockFileRef.current?.click()}
                                 className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors"
@@ -92,7 +101,7 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
                             >
                                 <ImagePlus className="h-12 w-12 mx-auto text-slate-300 mb-3" />
                                 <p className="text-sm font-bold text-slate-400">Click para subir una imagen</p>
-                                <p className="text-[10px] text-slate-300 font-bold mt-1">JPG, PNG, GIF, WebP · Máximo 10MB</p>
+                                <p className="text-[10px] text-slate-300 font-bold mt-1">JPG, PNG, GIF, WebP · M\u00e1ximo 5MB</p>
                             </button>
                         )}
                         {/* Caption */}

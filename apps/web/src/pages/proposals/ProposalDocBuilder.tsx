@@ -13,6 +13,7 @@ import { useProposalScenarios } from '../../hooks/useProposalScenarios';
 import { useAuthStore } from '../../store/authStore';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
 import { api } from '../../lib/api';
+import { validateImageFile, ACCEPT_IMAGES } from '../../lib/file-validation';
 import type { ProposalDetail } from '../../lib/types';
 import { type ProposalVariables, formatDateSpanish, buildGarantiaLines } from '../../lib/proposalVariables';
 import { PAGE_TYPE_LABELS, VIRTUAL_TECH_SPEC_ID, VIRTUAL_ECONOMIC_ID } from '../../lib/constants';
@@ -124,6 +125,14 @@ export default function ProposalDocBuilder() {
         const file = e.target.files?.[0];
         if (!file || !uploadingBlockId) return;
 
+        const validation = await validateImageFile(file);
+        if (!validation.valid) {
+            alert(validation.error);
+            setUploadingBlockId(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
         const url = await uploadImage(file);
         if (url) {
             await updateBlock(uploadingBlockId, { url, caption: '' });
@@ -160,7 +169,7 @@ export default function ProposalDocBuilder() {
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept={ACCEPT_IMAGES}
                 className="hidden"
                 onChange={handleFileChange}
             />

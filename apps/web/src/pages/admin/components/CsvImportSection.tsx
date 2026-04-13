@@ -5,6 +5,7 @@ import {
 import { cn } from '../../../lib/utils';
 import { FIELD_NAME_LABELS, SPEC_FIELD_NAMES } from '../../../hooks/useSpecOptionsAdmin';
 import { readFileWithEncoding, cleanCsvValue } from '../../../lib/csv-utils';
+import { validateCsvFile, ACCEPT_CSV } from '../../../lib/file-validation';
 import type { SpecFieldName, BulkImportResult } from '../../../hooks/useSpecOptionsAdmin';
 
 // ── Constants ────────────────────────────────────────────────
@@ -107,6 +108,13 @@ export default function CsvImportSection({ onBulkImport, selectedField, disabled
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const validation = await validateCsvFile(file);
+        if (!validation.valid) {
+            setParseError(validation.error ?? 'Archivo no v\u00e1lido.');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
         try {
             const text = await readFileWithEncoding(file);
             const result = parseCsv(text, selectedField);
@@ -149,7 +157,7 @@ export default function CsvImportSection({ onBulkImport, selectedField, disabled
 
     return (
         <div>
-            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" accept={ACCEPT_CSV} className="hidden" onChange={handleFileChange} />
 
             {/* Trigger button */}
             <button

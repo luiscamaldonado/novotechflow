@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../lib/api';
+import { validateImageFile, ACCEPT_IMAGES } from '../lib/file-validation';
 
 interface UserData {
     id: string;
@@ -103,6 +104,14 @@ export default function Users() {
         const file = e.target.files?.[0];
         if (!file || !uploadingSignature) return;
 
+        const validation = await validateImageFile(file);
+        if (!validation.valid) {
+            alert(validation.error);
+            setUploadingSignature(null);
+            if (signatureInputRef.current) signatureInputRef.current.value = '';
+            return;
+        }
+
         try {
             const formData = new FormData();
             formData.append('file', file);
@@ -112,7 +121,7 @@ export default function Users() {
             loadUsers();
         } catch (err) {
             console.error('Error uploading signature:', err);
-            alert('Error al subir la firma. Verifica que el archivo sea una imagen válida.');
+            alert('Error al subir la firma. Verifica que el archivo sea una imagen v\u00e1lida.');
         } finally {
             setUploadingSignature(null);
             if (signatureInputRef.current) signatureInputRef.current.value = '';
@@ -136,7 +145,7 @@ export default function Users() {
             <input
                 ref={signatureInputRef}
                 type="file"
-                accept="image/*"
+                accept={ACCEPT_IMAGES}
                 className="hidden"
                 onChange={handleSignatureFileChange}
             />

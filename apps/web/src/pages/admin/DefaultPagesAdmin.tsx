@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
+import { validateImageFile, ACCEPT_IMAGES } from '../../lib/file-validation';
 import RichTextEditor from '../../components/proposals/RichTextEditor';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
 
@@ -62,6 +63,7 @@ export default function DefaultPagesAdmin() {
     const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
     const [savedMsg, setSavedMsg] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
+    const [validationError, setValidationError] = useState<string | null>(null);
 
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
@@ -180,6 +182,15 @@ export default function DefaultPagesAdmin() {
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !uploadingBlockId || !activeId) return;
+
+        const validation = await validateImageFile(file);
+        if (!validation.valid) {
+            setValidationError(validation.error ?? 'Archivo no v\u00e1lido.');
+            setUploadingBlockId(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
         try {
             const form = new FormData();
             form.append('file', file);
@@ -238,7 +249,27 @@ export default function DefaultPagesAdmin() {
 
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+            <input ref={fileInputRef} type="file" accept={ACCEPT_IMAGES} className="hidden" onChange={handleImageUpload} />
+
+            {/* Validation error toast */}
+            <AnimatePresence>
+                {validationError && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        className="fixed top-6 right-6 z-50 bg-red-50 border-2 border-red-200 rounded-2xl p-4 flex items-center space-x-4 shadow-2xl max-w-md"
+                    >
+                        <div className="flex items-center space-x-2">
+                            <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+                            <span className="text-sm font-bold text-red-700">{validationError}</span>
+                        </div>
+                        <button onClick={() => setValidationError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">
+                            <span className="text-xs font-black uppercase tracking-widest">✕</span>
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Header */}
             <div className="flex items-center justify-between">
