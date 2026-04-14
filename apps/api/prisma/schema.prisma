@@ -62,7 +62,7 @@ model User {
   passwordHash String   @map("password_hash") @db.VarChar(255)
   role         Role
   nomenclature String   @unique @db.VarChar(10)
-  signatureUrl String?  @map("signature_url") @db.VarChar(500)
+  signatureUrl String?  @map("signature_url") @db.Text
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
