@@ -4,12 +4,29 @@ import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import type { AuthUser } from '../lib/types';
+import VerificationCode from './VerificationCode';
+
+interface VerificationData {
+    userId: string;
+    email: string;
+}
 
 export default function Login() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
     const { login } = useAuthStore();
     const navigate = useNavigate();
+
+    const navigateByRole = (role: string) => {
+        navigate(role === 'ADMIN' ? '/admin' : '/dashboard');
+    };
+
+    const handleVerified = (data: { access_token: string; user: AuthUser }) => {
+        login(data.access_token, data.user);
+        navigateByRole(data.user.role);
+    };
 
     const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -22,15 +39,19 @@ export default function Login() {
 
         try {
             const response = await api.post('/auth/login', { email, password });
-            login(response.data.access_token, response.data.user);
 
-            if (response.data.user.role === 'ADMIN') {
-                navigate('/admin');
-            } else {
-                navigate('/dashboard');
+            if (response.data.requiresVerification) {
+                setVerificationData({
+                    userId: response.data.userId,
+                    email: response.data.email,
+                });
+                return;
             }
+
+            login(response.data.access_token, response.data.user);
+            navigateByRole(response.data.user.role);
         } catch {
-            setError('Credenciales inválidas. Por favor intenta de nuevo.');
+            setError('Credenciales inv\u00e1lidas. Por favor intenta de nuevo.');
         } finally {
             setLoading(false);
         }
@@ -39,7 +60,45 @@ export default function Login() {
     return (
         <div className="flex min-h-screen">
 
-            {/* Left Side: Branding — hidden on mobile */}
+            {/* Verification mode */}
+            {verificationData ? (
+                <>
+                    {/* Left Side: Branding — hidden on mobile */}
+                    <div
+                        className="hidden md:flex w-2/5 min-h-screen flex-col justify-between relative overflow-hidden p-10"
+                        style={{ background: 'linear-gradient(to bottom, #0F0A2A, #1A1145)' }}
+                    >
+                        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[120px]" />
+                        <div className="absolute bottom-[-15%] right-[-10%] w-[45%] h-[45%] bg-indigo-600/10 rounded-full blur-[120px]" />
+                        <div className="absolute top-[50%] right-[-20%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px]" />
+                        <div className="relative z-10">
+                            <img src="/novotechflow.png" alt="NovoTechFlow" className="h-12 object-contain" />
+                        </div>
+                        <div className="relative z-10 flex-1 flex flex-col items-start justify-center">
+                            <h1 className="text-4xl font-black tracking-tight text-white leading-tight">
+                                Verificaci{'\u00f3'}n
+                                <br />
+                                <span className="text-indigo-400">en dos pasos</span>
+                            </h1>
+                            <p className="mt-4 text-sm text-white/50 max-w-xs">
+                                Protegemos tu cuenta con un c{'\u00f3'}digo de verificaci{'\u00f3'}n enviado a tu correo
+                            </p>
+                        </div>
+                        <div className="relative z-10">
+                            <span className="text-xs text-white/30">{'\u00a9'} 2026 Novotechno de Colombia</span>
+                        </div>
+                    </div>
+
+                    <VerificationCode
+                        userId={verificationData.userId}
+                        email={verificationData.email}
+                        onVerified={handleVerified}
+                        onCancel={() => setVerificationData(null)}
+                    />
+                </>
+            ) : (
+                <>
+
             <div
                 className="hidden md:flex w-2/5 min-h-screen flex-col justify-between relative overflow-hidden p-10"
                 style={{ background: 'linear-gradient(to bottom, #0F0A2A, #1A1145)' }}
@@ -154,6 +213,8 @@ export default function Login() {
                     </p>
                 </motion.div>
             </div>
+                </>
+            )}
         </div>
     );
 }
