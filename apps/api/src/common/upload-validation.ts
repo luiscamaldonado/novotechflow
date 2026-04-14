@@ -32,8 +32,21 @@ const ALLOWED_CSV_EXTENSIONS = ['.csv'];
 const CSV_MAX_SIZE_BYTES = 401 * 1024; // 401KB
 const IMAGE_MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 
-/** Dangerous CSV injection prefixes that can execute code in Excel/Sheets */
-const CSV_INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r', '\n', '|', '%'];
+/**
+ * List of patterns that indicate CSV injection attempts.
+ * These should NEVER appear in legitimate CSV data for this application.
+ */
+const CSV_INJECTION_PATTERNS: RegExp[] = [
+  /^=/,          // Formula: =CMD, =HYPERLINK, =SUM, etc.
+  /^\+[A-Za-z]/, // Formula: +CMD, +SYSTEM (but allow +57 phone numbers)
+  /^@/,          // Formula: @SUM, @IF
+  /^\|/,         // Pipe execution
+  /^!/,          // Shell execution
+  /^%/,          // Macro execution
+  /\t/,          // Tab injection
+  /\r/,          // Carriage return injection (mid-cell)
+  /\n/,          // Newline injection (mid-cell)
+];
 
 /**
  * Validates that a file is a real CSV by checking:
@@ -119,23 +132,24 @@ export async function validateCsvFile(file: Express.Multer.File): Promise<void> 
 }
 
 /**
- * Sanitizes CSV cell values to prevent CSV injection attacks.
- * Prefixes dangerous characters with a single quote to neutralize formulas.
+ * Validates that a CSV cell value does not contain injection patterns.
+ * Throws BadRequestException if a dangerous pattern is detected.
+ * This REJECTS the entire import rather than silently sanitizing,
+ * because legitimate CSV data for this application never contains formulas.
  */
-export function sanitizeCsvCellValue(value: string): string {
-  if (!value || typeof value !== 'string') return value;
+export function validateCsvCellValue(value: string): void {
+  if (!value || typeof value !== 'string') return;
   const trimmed = value.trim();
-  if (trimmed.length === 0) return trimmed;
+  if (trimmed.length === 0) return;
 
-  // Allow negative numbers (e.g. "-500") — only sanitize '-' when followed by non-digit
-  if (trimmed.startsWith('-') && trimmed.length > 1 && /^\d/.test(trimmed[1])) {
-    return trimmed;
+  for (const pattern of CSV_INJECTION_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      throw new BadRequestException(
+        `Valor rechazado por seguridad: "${trimmed.substring(0, 30)}..." contiene caracteres no permitidos. ` +
+        'Los archivos CSV solo deben contener texto plano (letras, n\u00fameros, puntos, guiones).',
+      );
+    }
   }
-
-  if (CSV_INJECTION_PREFIXES.some(prefix => trimmed.startsWith(prefix))) {
-    return "'" + trimmed;
-  }
-  return trimmed;
 }
 
 /**

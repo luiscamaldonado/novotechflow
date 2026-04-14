@@ -23,7 +23,7 @@ import { AdminGuard } from '../common/guards/admin.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   validateCsvFile,
-  sanitizeCsvCellValue,
+  validateCsvCellValue,
   sanitizeFilenameCsv,
 } from '../common/upload-validation';
 import {
@@ -205,8 +205,10 @@ export class SpecOptionsController {
     if (fieldNameIndex !== -1 && valueIndex !== -1) {
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        const fieldName = sanitizeCsvCellValue(cols[fieldNameIndex] || '');
-        const value = sanitizeCsvCellValue(cols[valueIndex] || '');
+        const fieldName = String(cols[fieldNameIndex] || '').trim();
+        const value = String(cols[valueIndex] || '').trim();
+        validateCsvCellValue(fieldName);
+        validateCsvCellValue(value);
         if (fieldName && value) {
           items.push({ fieldName, value });
         }
@@ -214,9 +216,11 @@ export class SpecOptionsController {
     }
     // Single-column: header IS the fieldName, each row is a value
     else if (headers.length === 1) {
-      const fieldName = sanitizeCsvCellValue(headers[0]);
+      const fieldName = headers[0].trim();
+      validateCsvCellValue(fieldName);
       for (let i = 1; i < lines.length; i++) {
-        const value = sanitizeCsvCellValue(lines[i].trim().replace(/^"|"$/g, ''));
+        const value = lines[i].trim().replace(/^"|"$/g, '');
+        validateCsvCellValue(value);
         if (value) {
           items.push({ fieldName, value });
         }

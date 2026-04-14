@@ -1,6 +1,6 @@
 import { Injectable, Logger, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { sanitizeCsvCellValue } from '../common/upload-validation';
+import { validateCsvCellValue } from '../common/upload-validation';
 import type { CreateClientDto, UpdateClientDto } from './dto/clients.dto';
 
 /**
@@ -275,16 +275,19 @@ export class ClientsService {
 
   /**
    * Crea múltiples clientes de una vez, ignorando duplicados.
-   * Sanitiza cada valor contra CSV injection antes de insertar.
+   * Valida cada valor contra CSV injection antes de insertar (rechaza si detecta inyección).
    */
   async bulkCreate(items: CreateClientDto[]) {
-    const sanitizedItems = items.map(item => ({
-      name: sanitizeCsvCellValue(item.name),
-      ...(item.nit ? { nit: sanitizeCsvCellValue(item.nit) } : {}),
-    }));
+    const validatedItems = items.map(item => {
+      const name = String(item.name || '').trim();
+      const nit = item.nit ? String(item.nit).trim() : undefined;
+      validateCsvCellValue(name);
+      if (nit) validateCsvCellValue(nit);
+      return { name, ...(nit ? { nit } : {}) };
+    });
 
     const result = await this.prisma.client.createMany({
-      data: sanitizedItems,
+      data: validatedItems,
       skipDuplicates: true,
     });
 

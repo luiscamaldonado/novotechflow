@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { sanitizeCsvCellValue } from '../common/upload-validation';
+import { validateCsvCellValue } from '../common/upload-validation';
 import type { CreateSpecOptionDto, UpdateSpecOptionDto } from './dto/spec-options.dto';
 
 /** Máximo de sugerencias devueltas por el endpoint suggest */
@@ -109,16 +109,19 @@ export class SpecOptionsService {
 
   /**
    * Crea múltiples opciones de una vez, ignorando duplicados.
-   * Sanitiza cada valor contra CSV injection antes de insertar.
+   * Valida cada valor contra CSV injection antes de insertar (rechaza si detecta inyección).
    */
   async bulkCreate(items: CreateSpecOptionDto[]) {
-    const sanitizedItems = items.map(item => ({
-      fieldName: sanitizeCsvCellValue(item.fieldName),
-      value: sanitizeCsvCellValue(item.value),
-    }));
+    const validatedItems = items.map(item => {
+      const fieldName = String(item.fieldName || '').trim();
+      const value = String(item.value || '').trim();
+      validateCsvCellValue(fieldName);
+      validateCsvCellValue(value);
+      return { fieldName, value };
+    });
 
     const result = await this.prisma.specOption.createMany({
-      data: sanitizedItems,
+      data: validatedItems,
       skipDuplicates: true,
     });
 

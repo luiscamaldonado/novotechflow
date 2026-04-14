@@ -23,7 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import {
   validateCsvFile,
-  sanitizeCsvCellValue,
+  validateCsvCellValue,
   sanitizeFilenameCsv,
 } from '../common/upload-validation';
 import {
@@ -204,8 +204,10 @@ export class ClientsController {
     if (nameIndex !== -1) {
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        const name = sanitizeCsvCellValue(cols[nameIndex] || '');
-        const nit = nitIndex !== -1 ? sanitizeCsvCellValue(cols[nitIndex] || '') : undefined;
+        const name = String(cols[nameIndex] || '').trim();
+        const nit = nitIndex !== -1 ? String(cols[nitIndex] || '').trim() : undefined;
+        validateCsvCellValue(name);
+        if (nit) validateCsvCellValue(nit);
         if (name) {
           items.push({ name, ...(nit ? { nit } : {}) });
         }
@@ -214,7 +216,8 @@ export class ClientsController {
     // Single-column: each row is a client name
     else if (headers.length === 1) {
       for (let i = 1; i < lines.length; i++) {
-        const name = sanitizeCsvCellValue(lines[i].trim().replace(/^"|"$/g, ''));
+        const name = lines[i].trim().replace(/^"|"$/g, '');
+        validateCsvCellValue(name);
         if (name) {
           items.push({ name });
         }
