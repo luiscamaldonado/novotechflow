@@ -72,6 +72,7 @@ model User {
   syncedFiles        SyncedFile[]
   EmailLog           EmailLog[]
   billingProjections BillingProjection[]
+  verificationCodes  VerificationCode[]
 
   @@map("users")
 }
@@ -340,4 +341,20 @@ model SpecOption {
   @@unique([fieldName, value])
   @@index([fieldName])
   @@map("spec_options")
+}
+
+model VerificationCode {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  code      String   @db.VarChar(255) // Hashed code (6 digits)
+  expiresAt DateTime @map("expires_at")
+  attempts  Int      @default(0) // Max 3 attempts per code
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("verification_codes")
 }
