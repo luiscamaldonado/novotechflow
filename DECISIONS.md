@@ -169,3 +169,98 @@ $content = Get-Content <RUTA> -Raw
 - Usar `pnpm exec tsc` en vez de `npx tsc` para evitar instalar `tsc@2.0.4` (paquete incorrecto).
 - `findstr` no soporta pipes `|` como separador de alternativas. Usar `Select-String` de PowerShell o buscar uno por uno.
 - Errores `EPERM` en migraciones de Prisma son un artifact de DLL lock en Windows. No indican fallo real.
+**Fix aplicado (abril 2026):** Se reemplazaron caracteres no-ASCII en strings de JS
+por Unicode escapes (`\u00b5` para µ, `\u00f3` para ó, etc.) en 16 archivos.
+Solución encoding-agnóstica. Se agregó `.gitattributes` (fuerza UTF-8+LF) y
+`ENV LANG=C.UTF-8` en ambos Dockerfiles. En texto JSX se usan caracteres reales
+(los archivos ya son UTF-8). Se limpió la tabla `pdf_templates` en Railway para
+re-seedear con datos correctos.
+
+---
+
+## ADR-011: Validación de uploads — defensa en profundidad (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de ciberseguridad)
+**Estado:** Vigente
+
+**Problema:** Los endpoints de upload de archivos (CSV e imágenes) solo validaban
+el MIME type del header HTTP, que es trivial de falsificar. Un atacante podía subir
+un ejecutable renombrado a .csv o .png.
+
+**Decisión:** Implementar validación en 3 capas:
+- **Capa 1 (Frontend):** `accept` en inputs + magic bytes client-side + validación
+  de estructura CSV (delimitadores) en `lib/file-validation.ts`
+- **Capa 2 (Multer):** `fileFilter` + `limits.fileSize` en cada endpoint
+- **Capa 3 (Backend):** Magic bytes manuales en `common/upload-validation.ts` +
+  validación estructural CSV + rechazo de CSV injection
+
+**Decisión sobre file-type:** Se eliminó la dependencia `file-type@19` porque es
+ESM-only e incompatible con NestJS CommonJS en producción (Railway). Se implementó
+`detectMimeFromMagicBytes()` inline que detecta 8 formatos binarios (JPEG, PNG, GIF,
+WebP, PDF, ZIP, EXE, ELF) sin dependencias externas.
+
+**Decisión sobre CSV injection:** Se rechaza en lugar de sanitizar. La función
+`validateCsvCellValue()` lanza `BadRequestException` si detecta patrones peligrosos
+(`=`, `@`, `+CMD`, `|`, `!`, `%`). Los CSV de este proyecto solo contienen texto
+plano — fórmulas son siempre maliciosas.
+
+**Límites de tamaño:** CSV: 401KB, Imágenes: 2MB. Los archivos maliciosos más
+peligrosos pesan desde 20 bytes — el límite es defensa contra DoS, no contra malware.
+
+**Bug importante:** El flujo real del frontend es: PapaParse parsea localmente →
+envía a `/bulk` como JSON. La validación de `/import-csv` no se ejecutaba. Fix:
+aplicar `validateCsvCellValue` en `bulkCreate()` de los services, no solo en los
+controllers de import.
+
+---
+
+## ADR-012: Cierre de sesión por inactividad (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de ciberseguridad)
+**Estado:** Vigente
+
+**Decisión:** Auto-logout a los 5 minutos de inactividad con modal de advertencia
+a los 4 minutos (cuenta regresiva de 60 segundos).
+
+**Implementación:** Hook `useInactivityTimeout` en `hooks/useInactivityTimeout.ts`
+monitorea 7 eventos de actividad (mousedown, mousemove, keydown, scroll, touchstart,
+click, wheel). Throttled a 1 segundo para evitar churn. Modal en
+`components/InactivityWarningModal.tsx`. Integrado en `AppLayout.tsx`.
+
+**Solo activo cuando hay token** — si el usuario no está logueado, los timers no corren.
+
+---
+
+## ADR-013: Autenticación de doble factor — 2FA por email (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de ciberseguridad)
+**Estado:** Vigente
+
+**Decisión:** Implementar 2FA como paso obligatorio en el login. El JWT solo se
+emite después de verificar un código de 6 dígitos enviado por email.
+
+**Flujo:**
+1. `POST /auth/login` → valida credenciales → envía código → retorna
+   `{ requiresVerification: true, userId, email }`
+2. `POST /auth/verify-code` → valida código → retorna `{ access_token, user }`
+3. `POST /auth/resend-code` → reenvía código (máx 3 en 15 min)
+
+**Seguridad del código:**
+- Hasheado con SHA-256 antes de almacenar (nunca en texto plano)
+- Expira en 5 minutos
+- Máximo 3 intentos por código (después se invalida)
+- Máximo 3 códigos en 15 minutos (anti-spam)
+- Código anterior se invalida al generar uno nuevo
+- Rate limiting: 5 req/min en verify-code, 3 req/min en resend-code
+
+**Servicio de email:** Resend (resend.com). Tier gratuito: 100 emails/día.
+Con `onboarding@resend.dev` solo envía al correo del owner de la cuenta Resend.
+Para enviar a cualquier correo → verificar dominio `novotechno.com` en Resend
+(registros DNS).
+
+**Decisión futura:** Migrar de email OTP a Windows Authenticator (TOTP) cuando
+la empresa lo requiera. El modelo `VerificationCode` se puede reutilizar o
+reemplazar con un campo `totpSecret` en el modelo `User`.
+
+**Tabla:** `verification_codes` con índices en `user_id` y `expires_at`.
+`onDelete: Cascade` desde `User`.
