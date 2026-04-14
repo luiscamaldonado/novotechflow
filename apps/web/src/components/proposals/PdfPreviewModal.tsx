@@ -80,6 +80,12 @@ interface VisualPage {
 
 export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [] }: PdfPreviewModalProps) {
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+
+    /** Resuelve la URL de una imagen: data URIs se usan directamente, rutas relativas se prefijan con apiBase */
+    const resolveImageUrl = (url: string): string => {
+        if (url.startsWith('data:')) return url;
+        return `${apiBase}${url}`;
+    };
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
@@ -225,9 +231,9 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     if (url) {
                         const isSignature = url.includes('/signatures/');
                         if (isSignature) {
-                            fullHtml += `<div style="margin-top:48px;"><img src="${apiBase}${url}" alt="${caption || 'Firma'}" style="object-fit:contain;" /></div>`;
+                            fullHtml += `<div style="margin-top:48px;"><img src="${resolveImageUrl(url)}" alt="${caption || 'Firma'}" style="object-fit:contain;" /></div>`;
                         } else {
-                            fullHtml += `<figure class="my-6"><img src="${apiBase}${url}" alt="${caption || ''}" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; border:1px solid #f1f5f9;" />`;
+                            fullHtml += `<figure class="my-6"><img src="${resolveImageUrl(url)}" alt="${caption || ''}" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; border:1px solid #f1f5f9;" />`;
                             if (caption) {
                                 fullHtml += `<figcaption style="text-align:center; font-size:12px; color:#64748b; font-style:italic; margin-top:12px;">${caption}</figcaption>`;
                             }
@@ -436,7 +442,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                                 style={{ minHeight: `${PAGE_HEIGHT}px`, maxHeight: `${PAGE_HEIGHT}px`, overflow: 'hidden' }}
                             >
                                 {vPage.isCover ? (
-                                    <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title ?? ''} apiBase={apiBase} />
+                                    <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title ?? ''} apiBase={apiBase} resolveImageUrl={resolveImageUrl} />
                                 ) : vPage.isIndex ? (
                                     <IndexPageContent visualPages={visualPages} />
                                 ) : vPage.isTechSpec && vPage.techSpecItem ? (
@@ -505,7 +511,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 }
 
 /** Cover page: full-page image */
-function CoverPageContent({ blocks, title, apiBase }: { blocks: PageBlock[]; title: string; apiBase: string }) {
+function CoverPageContent({ blocks, title, resolveImageUrl }: { blocks: PageBlock[]; title: string; apiBase: string; resolveImageUrl: (url: string) => string }) {
     const imageBlock = blocks.find(b => b.blockType === 'IMAGE');
     const imageUrl = (imageBlock?.content as Record<string, string>)?.url;
 
@@ -513,7 +519,7 @@ function CoverPageContent({ blocks, title, apiBase }: { blocks: PageBlock[]; tit
         return (
             <div className="w-full h-full flex items-center justify-center" style={{ minHeight: `${PAGE_HEIGHT}px` }}>
                 <img
-                    src={`${apiBase}${imageUrl}`}
+                    src={resolveImageUrl(imageUrl)}
                     alt="Portada"
                     className="w-full h-full object-cover"
                     style={{ minHeight: `${PAGE_HEIGHT}px` }}
