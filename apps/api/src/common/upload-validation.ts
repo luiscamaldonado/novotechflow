@@ -6,12 +6,13 @@ const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp
 const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 
 export async function validateImageMagicBytes(file: Express.Multer.File): Promise<void> {
-  const { fileTypeFromBuffer } = await import('file-type');
   const buffer = await readFile(file.path);
-  const type = await fileTypeFromBuffer(buffer);
-  if (!type || !ALLOWED_IMAGE_MIMES.includes(type.mime)) {
+  const mime = detectMimeFromMagicBytes(buffer);
+  if (!mime || !ALLOWED_IMAGE_MIMES.includes(mime)) {
     await safeUnlink(file.path);
-    throw new BadRequestException('Tipo de archivo no permitido. Solo se aceptan im\u00e1genes JPEG, PNG, GIF o WebP.');
+    throw new BadRequestException(
+      'Tipo de archivo no permitido. Solo se aceptan im\u00e1genes JPEG, PNG, GIF o WebP.',
+    );
   }
 }
 
@@ -57,15 +58,12 @@ export async function validateCsvFile(file: Express.Multer.File): Promise<void> 
     throw new BadRequestException('El archivo CSV excede el l\u00edmite de 401KB.');
   }
 
-  // 3. Binary detection via magic bytes - reject if file-type detects a known binary format
-  const { fileTypeFromBuffer } = await import('file-type');
-  const detectedType = await fileTypeFromBuffer(buffer);
-  // CSV/text files return undefined from fileTypeFromBuffer (no magic bytes for text).
-  // If it detects a type, it means it's a binary file disguised as CSV.
-  if (detectedType) {
+  // 3. Binary detection via magic bytes - reject if detected as a known binary format
+  const detectedMime = detectMimeFromMagicBytes(buffer as Buffer);
+  if (detectedMime) {
     await safeUnlink(file.path);
     throw new BadRequestException(
-      `Archivo rechazado: se detect\u00f3 formato ${detectedType.mime} disfrazado como CSV. Solo se permiten archivos CSV reales.`,
+      `Archivo rechazado: se detect\u00f3 formato ${detectedMime} disfrazado como CSV. Solo se permiten archivos CSV reales.`,
     );
   }
 
@@ -149,6 +147,52 @@ export async function validateImageFileSize(file: Express.Multer.File): Promise<
     await safeUnlink(file.path);
     throw new BadRequestException('La imagen excede el l\u00edmite de 2MB.');
   }
+}
+
+/**
+ * Detects file type by reading magic bytes from the buffer header.
+ * Returns the MIME type if recognized, or null if unknown/text.
+ * This replaces the 'file-type' npm package which is ESM-only
+ * and incompatible with NestJS CommonJS compilation.
+ */
+function detectMimeFromMagicBytes(buffer: Buffer): string | null {
+  if (buffer.length < 12) return null;
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return 'image/jpeg';
+  }
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return 'image/png';
+  }
+  // GIF: 47 49 46 38
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
+    return 'image/gif';
+  }
+  // WebP: 52 49 46 46 .... 57 45 42 50 (RIFF....WEBP)
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+    return 'image/webp';
+  }
+  // PDF: 25 50 44 46 (%PDF)
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return 'application/pdf';
+  }
+  // ZIP/DOCX/XLSX: 50 4B 03 04
+  if (buffer[0] === 0x50 && buffer[1] === 0x4B && buffer[2] === 0x03 && buffer[3] === 0x04) {
+    return 'application/zip';
+  }
+  // EXE/DLL (MZ): 4D 5A
+  if (buffer[0] === 0x4D && buffer[1] === 0x5A) {
+    return 'application/x-msdownload';
+  }
+  // ELF binary: 7F 45 4C 46
+  if (buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46) {
+    return 'application/x-elf';
+  }
+
+  return null; // Unknown or text-based format
 }
 
 /**
