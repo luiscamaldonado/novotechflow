@@ -48,9 +48,11 @@ backups/
 # Loose data files
 *.csv
 
-# User uploads
-uploads/
 
 # Database dumps
 *.sql
 *.csv
+
+# User uploads (track defaults only)
+uploads/*
+!uploads/defaults/

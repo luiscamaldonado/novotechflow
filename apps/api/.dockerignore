@@ -1,4 +1,4 @@
 node_modules
 dist
 .env
-uploads/
+# uploads/ - defaults are needed in build
