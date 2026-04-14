@@ -44,6 +44,21 @@ function parseCsv(text: string, selectedField: SpecFieldName | ''): ParseResult 
 }
 
 function parseTwoColumnCsv(lines: string[]): ParseResult {
+    /* Validate that the header row contains the required columns */
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const hasFieldName = headers.some(h => h === 'fieldname' || h === 'field_name');
+    const hasValue = headers.some(h => h === 'value');
+
+    if (!hasFieldName || !hasValue) {
+        return {
+            rows: [],
+            error:
+                'El archivo CSV no tiene las columnas requeridas. ' +
+                'Se esperan las columnas: "fieldName" (o "field_name") y "value".',
+            isSingleColumn: false,
+        };
+    }
+
     /* Skip header row (first line) */
     const dataLines = lines.slice(1);
 
@@ -52,6 +67,16 @@ function parseTwoColumnCsv(lines: string[]): ParseResult {
         if (fieldName && value) acc.push({ fieldName, value: cleanCsvValue(value).slice(0, 255) });
         return acc;
     }, []);
+
+    if (rows.length === 0) {
+        return {
+            rows: [],
+            error:
+                'No se encontraron filas v\u00e1lidas en el archivo. ' +
+                'Verifica que el archivo sea un CSV con las columnas "fieldName" y "value".',
+            isSingleColumn: false,
+        };
+    }
 
     return { rows, error: null, isSingleColumn: false };
 }
@@ -75,6 +100,16 @@ function parseSingleColumnCsv(
         if (value) acc.push({ fieldName: selectedField, value: cleanCsvValue(value).slice(0, 255) });
         return acc;
     }, []);
+
+    if (rows.length === 0) {
+        return {
+            rows: [],
+            error:
+                'No se encontraron filas v\u00e1lidas en el archivo. ' +
+                'Verifica que el archivo tenga al menos un valor.',
+            isSingleColumn: true,
+        };
+    }
 
     return { rows, error: null, isSingleColumn: true };
 }

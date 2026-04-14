@@ -13,21 +13,52 @@ interface ClientCsvRow { name: string }
 /** Known header values that should be skipped if found as the first line. */
 const CLIENT_CSV_HEADERS = new Set(['name', 'nombre', 'cliente']);
 
+interface ClientParseResult {
+    rows: ClientCsvRow[];
+    error: string | null;
+}
+
 /**
  * Parses a single-column CSV of client names.
  * Skips the first line if it matches a known header keyword.
  * Ignores empty lines and trims whitespace.
+ *
+ * For multi-column CSVs, validates that a "name" column exists.
  */
-function parseClientCsv(text: string): ClientCsvRow[] {
+function parseClientCsv(text: string): ClientParseResult {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (lines.length === 0) return [];
+    if (lines.length === 0) return { rows: [], error: null };
+
+    /* Multi-column format: validate that "name" column exists in the header */
+    const firstLineHasComma = lines[0].includes(',');
+    if (firstLineHasComma) {
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const hasName = headers.some(h => h === 'name' || h === 'nombre' || h === 'cliente');
+        if (!hasName) {
+            return {
+                rows: [],
+                error: 'El archivo CSV no tiene la columna requerida "name".',
+            };
+        }
+    }
 
     const startIndex = CLIENT_CSV_HEADERS.has(lines[0].toLowerCase()) ? 1 : 0;
 
-    return lines.slice(startIndex).reduce<ClientCsvRow[]>((acc, name) => {
+    const rows = lines.slice(startIndex).reduce<ClientCsvRow[]>((acc, line) => {
+        /* For multi-column CSVs, take only the first column */
+        const name = firstLineHasComma ? line.split(',')[0].trim() : line;
         if (name) acc.push({ name: cleanCsvValue(name).slice(0, 255) });
         return acc;
     }, []);
+
+    if (rows.length === 0) {
+        return {
+            rows: [],
+            error: 'No se encontraron filas v\u00e1lidas. Verifica que el CSV tenga la columna "name" con datos.',
+        };
+    }
+
+    return { rows, error: null };
 }
 
 const CSV_PREVIEW_LIMIT = 5;
@@ -65,8 +96,15 @@ export default function ClientCsvImport({ onBulkImport }: ClientCsvImportProps) 
 
         try {
             const text = await readFileWithEncoding(file);
-            setCsvRows(parseClientCsv(text));
-            setParseError(null);
+            const result = parseClientCsv(text);
+
+            if (result.error) {
+                setParseError(result.error);
+                setCsvRows([]);
+            } else {
+                setCsvRows(result.rows);
+                setParseError(null);
+            }
             setImportResult(null);
         } catch (error) {
             console.error('Error reading CSV file:', error);
