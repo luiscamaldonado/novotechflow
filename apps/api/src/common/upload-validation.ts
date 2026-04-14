@@ -75,12 +75,48 @@ export async function validateCsvFile(file: Express.Multer.File): Promise<void> 
     throw new BadRequestException('El archivo contiene datos binarios y no es un CSV v\u00e1lido.');
   }
 
-  // 5. Basic CSV structure validation
+  // 5. CSV structure validation - must have consistent delimiter-based columns
   const content = buffer.toString('utf-8');
   const lines = content.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length < 2) {
     await safeUnlink(file.path);
     throw new BadRequestException('El archivo CSV debe tener al menos un encabezado y una fila de datos.');
+  }
+
+  // Detect delimiter: try comma, semicolon, tab
+  const headerLine = lines[0];
+  let delimiter = ',';
+  const commaCount = (headerLine.match(/,/g) || []).length;
+  const semicolonCount = (headerLine.match(/;/g) || []).length;
+  const tabCount = (headerLine.match(/\t/g) || []).length;
+
+  if (semicolonCount > commaCount && semicolonCount > tabCount) {
+    delimiter = ';';
+  } else if (tabCount > commaCount && tabCount > semicolonCount) {
+    delimiter = '\t';
+  }
+
+  // Header must have at least 1 delimiter (meaning at least 2 columns)
+  const headerColumns = headerLine.split(delimiter).length;
+  if (headerColumns < 2) {
+    await safeUnlink(file.path);
+    throw new BadRequestException(
+      'El archivo no tiene estructura CSV v\u00e1lida. Debe tener al menos 2 columnas separadas por coma, punto y coma, o tabulador.',
+    );
+  }
+
+  // Check that at least 50% of data rows have a similar column count (tolerance of \u00b11)
+  const dataLines = lines.slice(1);
+  const validRows = dataLines.filter(line => {
+    const cols = line.split(delimiter).length;
+    return Math.abs(cols - headerColumns) <= 1;
+  });
+
+  if (validRows.length < dataLines.length * 0.5) {
+    await safeUnlink(file.path);
+    throw new BadRequestException(
+      'El archivo no tiene estructura CSV consistente. Las filas no tienen un n\u00famero uniforme de columnas.',
+    );
   }
 }
 
