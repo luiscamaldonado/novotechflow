@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
+import { readFile, unlink } from 'fs/promises';
 import { ProposalsService } from './proposals.service';
 import { ScenariosService } from './scenarios.service';
 import { PagesService } from './pages.service';
@@ -261,6 +262,9 @@ export class ProposalsController {
     async uploadImage(@UploadedFile() file: Express.Multer.File) {
         await validateImageFileSize(file);
         await validateImageMagicBytes(file);
-        return { url: `/uploads/${file.filename}`, originalName: file.originalname };
+        const buffer = await readFile(file.path);
+        const dataUri = `data:${file.mimetype};base64,${buffer.toString('base64')}`;
+        await unlink(file.path);
+        return { url: dataUri, originalName: file.originalname };
     }
 }

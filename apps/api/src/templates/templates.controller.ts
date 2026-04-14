@@ -7,6 +7,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
+import { readFile, unlink } from 'fs/promises';
 import { TemplatesService } from './templates.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -139,7 +140,9 @@ export class TemplatesController {
   ) {
     await validateImageFileSize(file);
     await validateImageMagicBytes(file);
-    const imageUrl = `/uploads/templates/${file.filename}`;
-    return this.templatesService.updateBlockImage(templateId, blockId, imageUrl);
+    const buffer = await readFile(file.path);
+    const dataUri = `data:${file.mimetype};base64,${buffer.toString('base64')}`;
+    await unlink(file.path);
+    return this.templatesService.updateBlockImage(templateId, blockId, dataUri);
   }
 }
