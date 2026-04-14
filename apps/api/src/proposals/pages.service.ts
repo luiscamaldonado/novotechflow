@@ -98,7 +98,7 @@ export class PagesService {
       if (presentationIdx !== -1) {
         pageDefs[presentationIdx].blocks.push({
           blockType: 'IMAGE',
-          content: { url: proposal.user.signatureUrl, caption: proposal.user.name || 'Firma Comercial' },
+          content: { url: proposal.user.signatureUrl, caption: '' },
         });
       }
     }
