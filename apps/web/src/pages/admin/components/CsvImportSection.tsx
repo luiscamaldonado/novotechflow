@@ -138,8 +138,11 @@ export default function CsvImportSection({ onBulkImport, selectedField, disabled
             const result = await onBulkImport(csvRows);
             setImportResult(result);
             setCsvRows([]);
-        } catch (error) {
-            console.error('Error importing CSV:', error);
+        } catch (error: unknown) {
+            const axiosError = error as { response?: { data?: { message?: string } } };
+            const message = axiosError.response?.data?.message || 'Error al importar el archivo CSV.';
+            setParseError(message);
+            setCsvRows([]);
         } finally {
             setIsImporting(false);
         }

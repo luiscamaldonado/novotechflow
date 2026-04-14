@@ -128,7 +128,12 @@ export function sanitizeCsvCellValue(value: string): string {
   if (!value || typeof value !== 'string') return value;
   const trimmed = value.trim();
   if (trimmed.length === 0) return trimmed;
-  // If the cell starts with a dangerous character, prefix with single quote
+
+  // Allow negative numbers (e.g. "-500") — only sanitize '-' when followed by non-digit
+  if (trimmed.startsWith('-') && trimmed.length > 1 && /^\d/.test(trimmed[1])) {
+    return trimmed;
+  }
+
   if (CSV_INJECTION_PREFIXES.some(prefix => trimmed.startsWith(prefix))) {
     return "'" + trimmed;
   }
