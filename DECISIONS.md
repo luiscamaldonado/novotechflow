@@ -264,3 +264,114 @@ reemplazar con un campo `totpSecret` en el modelo `User`.
 
 **Tabla:** `verification_codes` con índices en `user_id` y `expires_at`.
 `onDelete: Cascade` desde `User`.
+
+---
+
+## ADR-014: Persistencia de uploads en Railway — base64 en PostgreSQL (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de deploy Railway)
+**Estado:** Vigente
+
+**Problema:** Railway usa filesystem efímero — todos los archivos creados en runtime
+se pierden con cada redeploy. Las firmas de comerciales (`uploads/signatures/`),
+imágenes de bloques del documento (`uploads/`) e imágenes de plantillas
+(`uploads/templates/`) desaparecían después de cada push a GitHub.
+
+**Problema adicional:** Tres errores de configuración impedían que incluso los
+archivos por defecto llegaran a producción:
+1. `.gitignore` tenía `uploads/` → los defaults nunca se subían a GitHub
+2. `.dockerignore` tenía `uploads/` → Docker los ignoraba en el build
+3. El Dockerfile hacía `RUN mkdir -p uploads/...` sin copiar archivos → directorios vacíos
+4. `.gitignore` tenía `*.sql` → las migraciones de Prisma no llegaban a Railway
+
+**Decisión — archivos estáticos (portada):**
+- `.gitignore` cambiado de `uploads/` a `uploads/*` + `!uploads/defaults/`
+- `.dockerignore` ya no excluye `uploads/`
+- Dockerfile agrega `COPY --from=builder /app/apps/api/uploads/defaults ./uploads/defaults`
+- La portada por defecto (`portada.png`) se trackea en Git y se incluye en la imagen Docker
+
+**Decisión — archivos dinámicos (firmas, imágenes de documento, imágenes de plantillas):**
+- Se almacenan como data URIs base64 directamente en PostgreSQL
+- Firmas: campo `signatureUrl` cambiado de `@db.VarChar(500)` a `@db.Text` en el modelo User
+- Imágenes de bloques de propuesta y plantillas: almacenadas en campos `Json` (JSONB), que no tienen límite de tamaño
+
+**Patrón de implementación (igual en los 3 endpoints):**
+```typescript
+// Multer guarda temp file → validar magic bytes → leer buffer → base64 → borrar temp
+await validateImageFileSize(file);
+await validateImageMagicBytes(file);
+const buffer = await readFile(file.path);
+const dataUri = `data:${file.mimetype};base64,${buffer.toString('base64')}`;
+await unlink(file.path);
+```
+El `diskStorage` de Multer se mantiene como almacenamiento temporal porque
+`validateImageMagicBytes` necesita leer el archivo del disco.
+
+**Endpoints modificados:**
+- `POST /users/:id/signature` → `users.controller.ts`
+- `POST /proposals/pages/upload-image` → `proposals.controller.ts`
+- `POST /templates/:templateId/blocks/:blockId/image` → `templates.controller.ts`
+
+**Consideraciones de tamaño:**
+- Firmas: ~18KB → ~24KB en base64 (trivial)
+- Imágenes de documento: hasta 2MB (límite Multer) → ~2.7MB en base64
+- JSONB en PostgreSQL no tiene límite práctico de tamaño para estos volúmenes
+- A la escala de NOVOTECHNO (decenas de propuestas), el impacto en la BD es mínimo
+
+**Decisión futura:** Si el volumen de imágenes crece significativamente (miles de
+propuestas con múltiples imágenes pesadas), migrar a almacenamiento externo
+(Supabase Storage, Cloudinary, o S3). Por ahora PostgreSQL es suficiente y evita
+dependencias externas.
+
+---
+
+## ADR-015: resolveImageUrl — compatibilidad data URI y rutas relativas (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de deploy Railway)
+**Estado:** Vigente
+
+**Problema:** `PdfPreviewModal.tsx` construía todas las URLs de imagen concatenando
+`apiBase` + `url`. Con el cambio a base64, las URLs ahora pueden ser data URIs
+(`data:image/jpeg;base64,...`) o rutas relativas (`/uploads/defaults/portada.png`).
+La concatenación producía URLs inválidas: `https://api.railway.app/data:image/jpeg;base64,...`.
+
+**Decisión:** Crear helper `resolveImageUrl()` en `PdfPreviewModal.tsx`:
+```typescript
+const resolveImageUrl = (url: string): string => {
+    if (url.startsWith('data:')) return url;
+    return `${apiBase}${url}`;
+};
+```
+
+**Aplicado en 3 puntos:**
+1. Bloques IMAGE tipo firma (dentro de `buildVisualPages`)
+2. Bloques IMAGE genéricos (dentro de `buildVisualPages`)
+3. Componente `CoverPageContent` (recibe `resolveImageUrl` como prop)
+
+**Principio:** Cualquier componente que renderice imágenes de la BD debe usar
+este patrón. Las imágenes antiguas (pre-migración) siguen siendo rutas relativas
+y siguen funcionando. Las nuevas son data URIs y también funcionan.
+
+---
+
+## ADR-016: .gitignore — no bloquear migraciones Prisma (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de deploy Railway)
+**Estado:** Vigente
+
+**Problema:** El `.gitignore` tenía `*.sql` para excluir database dumps sueltos.
+Esto también excluía los archivos `migration.sql` dentro de
+`apps/api/prisma/migrations/`, impidiendo que llegaran a Railway.
+
+**Caso real:** La migración `change_signature_url_to_text` (que cambia
+`signatureUrl` de `VarChar(500)` a `Text`) se aplicó localmente pero nunca se
+subió a GitHub. Railway reportaba "No pending migrations to apply" mientras la
+columna seguía siendo `VarChar(500)`. Al intentar guardar un base64 de ~24,000
+caracteres, Prisma lanzaba `The provided value for the column is too long`.
+
+**Decisión:** Reemplazar `*.sql` por `*.dump.sql` en `.gitignore`. Las migraciones
+de Prisma (`migration.sql`) ahora se trackean correctamente.
+
+**Regla:** Nunca agregar patrones genéricos al `.gitignore` que puedan atrapar
+archivos de infraestructura (migraciones, configs, schemas). Preferir patrones
+específicos como `*.dump.sql`, `*.backup.sql`.
