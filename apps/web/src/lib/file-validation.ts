@@ -59,6 +59,31 @@ export async function validateCsvFile(file: File): Promise<FileValidationResult>
   if (containsNullBytes(header)) {
     return { valid: false, error: 'El archivo contiene datos binarios y no es un CSV v\u00e1lido.' };
   }
+
+  // 5. CSV structure validation — must have delimiters and consistent columns
+  const text = new TextDecoder().decode(header);
+  const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+
+  if (lines.length < 2) {
+    return { valid: false, error: 'El archivo CSV debe tener al menos un encabezado y una fila de datos.' };
+  }
+
+  // Detect delimiter in header line
+  const headerLine = lines[0];
+  const commaCount = (headerLine.match(/,/g) || []).length;
+  const semicolonCount = (headerLine.match(/;/g) || []).length;
+  const tabCount = (headerLine.match(/\t/g) || []).length;
+
+  const maxDelimiter = Math.max(commaCount, semicolonCount, tabCount);
+
+  // A valid CSV must have at least 1 delimiter in the header (meaning 2+ columns)
+  if (maxDelimiter === 0) {
+    return {
+      valid: false,
+      error: 'El archivo no tiene estructura CSV v\u00e1lida. Debe tener columnas separadas por coma, punto y coma o tabulador.',
+    };
+  }
+
   return { valid: true };
 }
 
