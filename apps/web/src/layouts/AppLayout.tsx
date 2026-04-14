@@ -3,10 +3,13 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { useInactivityTimeout } from '../hooks/useInactivityTimeout';
+import { InactivityWarningModal } from '../components/InactivityWarningModal';
 
 export default function AppLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const { user } = useAuthStore();
+    const { showWarning, secondsLeft, dismissWarning } = useInactivityTimeout();
 
     return (
         <div className="min-h-screen bg-novo-light flex">
@@ -43,6 +46,13 @@ export default function AppLayout() {
                     <Outlet />
                 </main>
             </div>
+
+            {showWarning && (
+                <InactivityWarningModal
+                    secondsLeft={secondsLeft}
+                    onDismiss={dismissWarning}
+                />
+            )}
         </div>
     );
 }
