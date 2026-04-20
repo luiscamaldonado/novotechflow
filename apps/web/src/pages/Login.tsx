@@ -148,7 +148,7 @@ export default function Login() {
                         Ingresa tus credenciales para continuar.
                     </p>
 
-                    <form onSubmit={handleLogin} className="space-y-5">
+                    <form method="POST" onSubmit={handleLogin} className="space-y-5">
                         {error && (
                             <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-3 text-sm">
                                 {error}
