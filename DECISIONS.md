@@ -375,3 +375,89 @@ de Prisma (`migration.sql`) ahora se trackean correctamente.
 **Regla:** Nunca agregar patrones genéricos al `.gitignore` que puedan atrapar
 archivos de infraestructura (migraciones, configs, schemas). Preferir patrones
 específicos como `*.dump.sql`, `*.backup.sql`.
+
+---
+
+## ADR-017: Cabeceras de hardening HTTP en apps/web vía nginx (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de remediación Invicti)
+
+**Estado:** Vigente
+
+**Problema:** El escáner Invicti reportó dos hallazgos sobre el dominio
+`web-production-55504.up.railway.app`:
+
+1. "Password Transmitted over Query String" (MEDIUM) — el formulario de
+   login en `apps/web/src/pages/Login.tsx` no tenía `method="POST"`
+   explícito y en ciertos flujos de navegación enviaba el password en
+   el query string.
+2. "HSTS Policy Not Enabled" (MEDIUM, CVSS 7.7) — el `nginx.conf` que
+   sirve `apps/web` no emitía ninguna cabecera de seguridad.
+
+El segundo hallazgo tenía un agravante: `apps/web` y `apps/api` son
+servicios Railway separados con dominios distintos. El `helmet()` que
+ya protege `apps/api` no aplica al dominio del front.
+
+**Falso comienzo (lección registrada):** En una primera iteración se
+intentó añadir un servidor Express propio (`apps/web/server.mjs`) con
+Helmet y un `railway.json` que fijaba `startCommand: "node server.mjs"`.
+El enfoque era incorrecto para esta arquitectura:
+
+- `apps/web/Dockerfile` es un multi-stage explícito cuyo runner es
+  `nginx:alpine`. Railway prioriza el Dockerfile sobre cualquier
+  `railway.json`.
+- El runner final no tiene Node instalado, por lo que `node server.mjs`
+  habría fallado de todas formas.
+- `server.mjs` nunca llegaba a la imagen final: el `COPY --from=builder`
+  del runner solo trae `/app/apps/web/dist`.
+
+Además, la regeneración local del `pnpm-lock.yaml` con pnpm 9.0.0 (para
+añadir las deps de Express) rompió los builds de Railway porque los
+Dockerfiles tenían pineado `pnpm@8.15.5`, que no puede leer el formato
+del lockfile nuevo. Error: `ERR_PNPM_LOCKFILE_BREAKING_CHANGE`.
+
+**Decisión:** Tres commits atómicos:
+
+1. **Bump de pnpm en Dockerfiles** — `apps/api/Dockerfile` (builder +
+   runner) y `apps/web/Dockerfile` (builder) pasan de `pnpm@8.15.5` a
+   `pnpm@9.0.0`, alineados con el `packageManager` declarado en el
+   `package.json` raíz.
+2. **Revert del intento Express** — eliminar `apps/web/server.mjs`,
+   `apps/web/railway.json`, el script `"start": "node server.mjs"` y
+   las dependencias `express`, `helmet`, `compression` de
+   `apps/web/package.json`. Regenerar `pnpm-lock.yaml`.
+3. **Headers en nginx** — añadir a `apps/web/nginx.conf`, a nivel
+   `server`, las cuatro cabeceras de hardening con el modificador
+   `always` para que se emitan también en respuestas 4xx/5xx:
+
+```nginx
+   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+   add_header X-Frame-Options "DENY" always;
+   add_header X-Content-Type-Options "nosniff" always;
+   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+```
+
+El hallazgo del password en query string se atacó en paralelo con
+`method="POST"` explícito en `apps/web/src/pages/Login.tsx`.
+
+**Verificación en producción:**
+
+- `curl -I https://web-production-55504.up.railway.app/` → 200 OK con
+  las cuatro cabeceras presentes.
+- `curl -I -X PATCH https://web-production-55504.up.railway.app/` → 405
+  Method Not Allowed **con las cuatro cabeceras presentes**, lo que
+  confirma que el modificador `always` funciona en respuestas de error.
+
+**CSP — diferido:** `Content-Security-Policy` queda sin emitir. El
+bundle de Vite requiere una política con nonces o hashes para no
+romperse bajo CSP estricta. Se registra como TODO para un ADR futuro
+que defina la política compatible con el bundler.
+
+**Regla:** Antes de proponer hardening HTTP en el front, leer
+`apps/web/Dockerfile` para identificar qué sirve los estáticos en
+producción (nginx, Node, caddy). El fix siempre vive en la capa de
+serving real, no en el framework de frontend. Paralelamente: todo
+cambio a dependencias de un workspace debe ir acompañado de una
+verificación de que los Dockerfiles pueden leer el `pnpm-lock.yaml`
+resultante (coincidencia entre `packageManager` del root y la versión
+pineada en los Dockerfiles).
