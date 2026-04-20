@@ -461,3 +461,59 @@ cambio a dependencias de un workspace debe ir acompañado de una
 verificación de que los Dockerfiles pueden leer el `pnpm-lock.yaml`
 resultante (coincidencia entre `packageManager` del root y la versión
 pineada en los Dockerfiles).
+## ADR-018: Consecutivo inicial de cotizaciones por usuario (abril 2026)
+
+**Fecha:** Abril 2026 (Sesión de feature edición de usuarios)
+
+**Estado:** Vigente
+
+**Problema:** Al crear los 5 comerciales reales en NovoTechFlow, cada uno ya tenía
+un historial de cotizaciones previo fuera del sistema (ej. Denis Ortiz iba en
+COT-DO0046 en su Excel histórico). El método `generateProposalCode` calcula el
+próximo número haciendo `MAX(proposalCode)` filtrado por usuario, lo que para un
+comercial nuevo sin propuestas locales arrancaba siempre en 0001. Esto rompía la
+continuidad del consecutivo desde el punto de vista comercial: la primera
+cotización emitida desde el sistema iba a ser COT-DO0001, no COT-DO0047.
+
+**Alternativas consideradas:**
+1. Persistir el contador real en la DB y mantenerlo con cada inserción
+   (`proposalCounter` incremental). Descartado: agrega un punto de fallo (race
+   conditions, drift) cuando hoy el cálculo derivado funciona bien.
+2. Importar al sistema todas las cotizaciones históricas como registros reales.
+   Descartado: requiere migrar PDFs, datos de cliente, escenarios — esfuerzo
+   desproporcionado para un solo objetivo.
+3. Permitir que el admin edite el consecutivo en cualquier momento. Descartado:
+   abre la puerta a saltos arbitrarios en la numeración, rompe trazabilidad.
+
+**Decisión:** Agregar al modelo User un campo `proposalCounterStart Int @default(0)`
+que actúa como **piso** para el contador derivado. La lógica en
+`generateProposalCode` aplica:
+
+```ts
+nextNumber = Math.max(nextNumber, user.proposalCounterStart + 1);
+```
+
+El campo es **inmutable post-creación** (solo aparece en el formulario de
+creación de usuario, no en el de edición). Esto preserva trazabilidad: una vez
+fijado al alta, el offset no puede cambiar.
+
+**Comportamiento:**
+- Usuario nuevo, counterStart=0, sin propuestas → COT-XX0001-1 (igual que antes)
+- Usuario nuevo, counterStart=46, sin propuestas → COT-XX0047-1 (continúa desde histórico)
+- Cuando las propuestas reales superan al counterStart, el campo deja de tener
+  efecto automáticamente (el MAX real toma precedencia).
+
+**Regla:** No agregar lógica de "consecutivo" o "numeración secuencial por
+usuario" fuera de `generateProposalCode`. Si en el futuro hay otros consecutivos
+(facturas, órdenes, etc.), aplicar el mismo patrón derivado + offset opcional —
+nunca persistir contadores incrementales en la DB.
+
+**Decisiones de diseño relacionadas:**
+- Reset de password admin: directo desde edición, sin pedir la actual (acción
+  puramente administrativa).
+- Cambio de nomenclatura post-creación: solo afecta cotizaciones futuras; las
+  históricas conservan su código original (no se renumera retroactivamente).
+- Self-protection en `updateUser`: un admin no puede quitarse a sí mismo el rol
+  ADMIN ni desactivarse.
+
+---

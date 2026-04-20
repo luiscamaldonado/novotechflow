@@ -160,6 +160,15 @@ export class ProposalsService {
         nextNumber = parseInt(match[1], 10) + 1;
       }
     }
+
+    // Aplicar el offset inicial del usuario (si tiene historial previo fuera del sistema)
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { proposalCounterStart: true },
+    });
+    if (user && user.proposalCounterStart > 0) {
+      nextNumber = Math.max(nextNumber, user.proposalCounterStart + 1);
+    }
     
     const sequential = nextNumber.toString().padStart(4, '0');
     

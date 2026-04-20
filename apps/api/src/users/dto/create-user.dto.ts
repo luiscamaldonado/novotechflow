@@ -1,4 +1,14 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsEnum } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsEnum,
+  IsOptional,
+  IsInt,
+  Min,
+} from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
 export class CreateUserDto {
@@ -16,4 +26,13 @@ export class CreateUserDto {
 
   @IsEnum(Role)
   role: Role;
+
+  @ApiPropertyOptional({
+    description: 'Número desde el cual empezará el consecutivo de cotizaciones (default 0)',
+    default: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  proposalCounterStart?: number;
 }

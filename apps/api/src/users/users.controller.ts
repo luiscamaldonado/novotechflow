@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Delete, Param, UseInterceptors, UploadedFile, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, UseGuards, Delete, Param, Req, UseInterceptors, UploadedFile, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -10,7 +10,12 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
+
+interface AuthenticatedRequest {
+    user: { id: string; role: Role; nomenclature: string; email: string };
+}
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -34,7 +39,18 @@ export class UsersController {
             role: createUserDto.role,
             nomenclature: createUserDto.nomenclature,
             passwordHash: createUserDto.password,
+            proposalCounterStart: createUserDto.proposalCounterStart ?? 0,
         });
+    }
+
+    @Patch(':id')
+    @Roles(Role.ADMIN)
+    async update(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() updateUserDto: UpdateUserDto,
+        @Req() req: AuthenticatedRequest,
+    ) {
+        return this.usersService.updateUser(id, req.user.id, updateUserDto);
     }
 
     @Delete(':id')
