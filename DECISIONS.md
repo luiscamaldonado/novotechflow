@@ -517,3 +517,70 @@ nunca persistir contadores incrementales en la DB.
   ADMIN ni desactivarse.
 
 ---
+
+## ADR-019: `/dashboard` como destino único por defecto y `/admin` reservado para panel administrativo futuro (mayo 2026)
+
+**Fecha:** Mayo 2026 (Sesión de corrección de navegación)
+
+**Estado:** Vigente
+
+**Problema:** Un usuario con rol `ADMIN`, al hacer click en el ítem "Dashboard"
+del sidebar o al loguearse, era redirigido a `/admin` en vez de a `/dashboard`.
+La ruta `/admin` apunta al componente `AdminPanel`, que está vacío / en
+construcción. El usuario percibía esto como "el dashboard se borró después de
+crear una propuesta".
+
+La causa raíz era una lógica condicional
+`user?.role === 'ADMIN' ? '/admin' : '/dashboard'` duplicada en dos lugares: el
+ítem "Dashboard" del `Sidebar.tsx` y la función `navigateByRole` de `Login.tsx`.
+Esa lógica asumía que el admin debía caer en una ruta distinta a la del
+comercial, pero `Dashboard.tsx` ya tiene lógica condicional por rol que muestra
+"Resumen Global de Actividad" + columna de asesor para ADMIN, y "Mis Propuestas"
+para COMERCIAL. Es decir: la ruta `/dashboard` ya estaba preparada para servir a
+ambos roles correctamente, y la ruta `/admin` no debía ser destino de ningún
+redirect automático todavía.
+
+**Alternativas consideradas:**
+
+1. Construir el contenido faltante de `AdminPanel` y mantener el redirect a
+   `/admin`: descartada porque el "Resumen Global de Actividad" en `/dashboard`
+   ya cumple ese rol para el admin. Duplicar funcionalidad llevaría a
+   inconsistencias.
+2. Sub-rutas `/dashboard/admin` y `/dashboard/commercial`: descartada por
+   sobre-ingeniería. La diferenciación dentro del componente con `user?.role` es
+   suficiente y ya está implementada.
+
+**Decisión:**
+
+1. `/dashboard` es el único destino por defecto tras login y para el ítem
+   "Dashboard" del sidebar, independiente del rol. La diferenciación
+   admin/comercial se resuelve dentro del componente `Dashboard.tsx` mediante
+   `user?.role === 'ADMIN'`.
+2. `/admin` queda reservado en `App.tsx` como ruta válida pero sin entrada en el
+   sidebar ni redirect automático hacia ella. Se activará cuando se construya el
+   panel administrativo real.
+3. Prohibido reintroducir lógica `navigateByRole` o equivalentes que decidan ruta
+   por rol fuera del propio componente de destino. Si en el futuro un panel admin
+   necesita un destino propio, se agrega como ítem separado en el sidebar (ej.
+   "Panel Admin" con icono distinto, visible solo si `isAdmin`), nunca como
+   reemplazo del ítem "Dashboard".
+
+**Consecuencias:**
+
+- Positivas: elimina la sorpresa del admin cayendo en una página vacía.
+  Centraliza la lógica de vista por rol en un solo lugar (`Dashboard.tsx`). Deja
+  la ruta `/admin` libre para futuro uso sin acoplarse al routing del dashboard.
+- Negativas: ninguna identificada.
+- Migración: ninguna. Cambio de frontend puro, sin schema ni datos afectados.
+
+**Archivos modificados:**
+
+- `apps/web/src/layouts/Sidebar.tsx` (línea 31): ítem "Dashboard" apunta siempre
+  a `/dashboard`.
+- `apps/web/src/pages/Login.tsx` (líneas 22-29 y 52): eliminada función
+  `navigateByRole`, reemplazada por `navigate('/dashboard')` directo.
+
+**Commit:** `32445de` — fix(web): admin sidebar y login redirect apuntan a
+/dashboard
+
+---
