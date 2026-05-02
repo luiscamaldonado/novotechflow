@@ -19,13 +19,9 @@ export default function Login() {
     const { login } = useAuthStore();
     const navigate = useNavigate();
 
-    const navigateByRole = (role: string) => {
-        navigate(role === 'ADMIN' ? '/admin' : '/dashboard');
-    };
-
     const handleVerified = (data: { access_token: string; user: AuthUser }) => {
         login(data.access_token, data.user);
-        navigateByRole(data.user.role);
+        navigate('/dashboard');
     };
 
     const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -49,7 +45,7 @@ export default function Login() {
             }
 
             login(response.data.access_token, response.data.user);
-            navigateByRole(response.data.user.role);
+            navigate('/dashboard');
         } catch {
             setError('Credenciales inv\u00e1lidas. Por favor intenta de nuevo.');
         } finally {

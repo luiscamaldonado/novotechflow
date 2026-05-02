@@ -28,7 +28,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     };
 
     const navItems = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: user?.role === 'ADMIN' ? '/admin' : '/dashboard' },
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
         { icon: PlusCircle, label: 'Nueva Propuesta', path: '/proposals/new' },
     ];
 
