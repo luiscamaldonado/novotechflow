@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, FileText, CalendarDays, Clock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Building2, FileText, CalendarDays, Clock, ArrowRight, Loader2, AlertCircle, DollarSign } from 'lucide-react';
 import { api } from '../../lib/api';
 import { ClientAutocomplete } from '../../components/ClientAutocomplete';
 
@@ -17,6 +17,7 @@ interface ProposalFormData {
     issueDate: string;
     validityDays: string;
     validityDate: string;
+    manualAmount: string;
 }
 
 /** Registro de historial para cruce de cuentas. */
@@ -90,6 +91,7 @@ export default function NewProposal() {
         issueDate: todayDateStr,
         validityDays: DEFAULT_VALIDITY_DAYS.toString(),
         validityDate: getFutureDate(todayDateStr, DEFAULT_VALIDITY_DAYS),
+        manualAmount: '',
     });
 
     // ── Cruce de cuentas dinámico (debounced) ────────────
@@ -181,6 +183,7 @@ export default function NewProposal() {
                 issueDate: formData.issueDate,
                 validityDays: parseInt(formData.validityDays, 10),
                 validityDate: formData.validityDate,
+                manualAmount: formData.manualAmount ? parseFloat(formData.manualAmount) : undefined,
             });
 
             navigate(`/proposals/${response.data.id}/builder`);
@@ -281,6 +284,32 @@ export default function NewProposal() {
                                             className="block w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-novo-primary/20 focus:border-novo-primary transition-all text-sm appearance-none"
                                         />
                                     </div>
+                                </div>
+
+                                {/* Monto estimado inicial */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700 ml-1">Monto estimado inicial</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                            <DollarSign className="h-5 w-5 text-gray-400 group-focus-within:text-novo-primary transition-colors" />
+                                        </div>
+                                        <input
+                                            type="number"
+                                            name="manualAmount"
+                                            value={formData.manualAmount}
+                                            onChange={handleFieldChange}
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="0.00"
+                                            className="block w-full pl-11 pr-14 py-3 bg-gray-50/50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-novo-primary/20 focus:border-novo-primary transition-all text-sm"
+                                        />
+                                        <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-gray-400 text-sm">
+                                            USD
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 ml-1">
+                                        Visible en el dashboard hasta agregar ítems con valor a los escenarios.
+                                    </p>
                                 </div>
                             </div>
 

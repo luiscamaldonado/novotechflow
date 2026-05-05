@@ -41,6 +41,7 @@ export interface ProposalSummary {
     status: ProposalStatus;
     closeDate?: string | null;
     billingDate?: string | null;
+    manualAmount?: string | null;
     acquisitionType?: AcquisitionType | null;
     updatedAt: string;
     user?: { name: string; nomenclature: string };

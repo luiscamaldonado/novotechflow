@@ -417,7 +417,13 @@ export default function Dashboard() {
                                             </td>
                                             <td className="px-4 py-4 text-right">
                                                 {row.minSubtotal !== null ? (
-                                                    <span className="font-mono font-black text-xs text-emerald-700">
+                                                    <span className="font-mono font-black text-xs text-emerald-700 inline-flex items-center gap-1">
+                                                        {row.isManual && (
+                                                            <span
+                                                                className="text-gray-400 font-normal"
+                                                                title="Monto estimado inicial. Sin ítems cargados aún."
+                                                            >~</span>
+                                                        )}
                                                         {formatSubtotalWithCurrency(row.minSubtotal, row.minSubtotalCurrency)}
                                                     </span>
                                                 ) : (

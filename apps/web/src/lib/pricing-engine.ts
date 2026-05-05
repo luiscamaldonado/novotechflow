@@ -3,6 +3,8 @@
 // Pure functions, zero React/state dependencies
 // ──────────────────────────────────────────────────────────
 
+import type { ProposalSummary } from './types';
+
 // ── Constants ────────────────────────────────────────────
 export const IVA_RATE = 0.19;
 export const MAX_MARGIN = 100;
@@ -311,4 +313,53 @@ export function calculateScenarioTotals(
     const total = beforeVat + vat + nonTaxed;
 
     return { beforeVat, nonTaxed, subtotal, vat, total, globalMarginPct };
+}
+
+// ── Dashboard amount resolution ─────────────────────────
+
+type CurrencyCode = 'COP' | 'USD';
+
+export interface MinSubtotalResult {
+    subtotal: number | null;
+    currency: CurrencyCode | null;
+}
+
+/** Find the scenario with the minimum subtotal and return its value + currency. */
+export function computeMinSubtotal(proposal: ProposalSummary): MinSubtotalResult {
+    if (!proposal.scenarios || proposal.scenarios.length === 0) {
+        return { subtotal: null, currency: null };
+    }
+
+    let minSubtotal: number | null = null;
+    let minCurrency: CurrencyCode | null = null;
+
+    for (const scenario of proposal.scenarios) {
+        const totals = calculateScenarioTotals(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
+        const sub = totals.subtotal;
+
+        if (minSubtotal === null || sub < minSubtotal) {
+            minSubtotal = sub;
+            minCurrency = (scenario.currency === 'USD' ? 'USD' : 'COP') as CurrencyCode;
+        }
+    }
+
+    return { subtotal: minSubtotal, currency: minCurrency };
+}
+
+/**
+ * Resolve the amount to display in the dashboard for a given proposal.
+ * Priority: scenarios with subtotal > 0 → manual amount (USD) → null.
+ */
+export function getDashboardAmount(
+    proposal: ProposalSummary,
+): MinSubtotalResult & { isManual: boolean } {
+    const fromScenarios = computeMinSubtotal(proposal);
+    if (fromScenarios.subtotal !== null && fromScenarios.subtotal > 0) {
+        return { ...fromScenarios, isManual: false };
+    }
+    const manual = proposal.manualAmount ? Number(proposal.manualAmount) : NaN;
+    if (!isNaN(manual) && manual > 0) {
+        return { subtotal: manual, currency: 'USD', isManual: true };
+    }
+    return { subtotal: null, currency: null, isManual: false };
 }

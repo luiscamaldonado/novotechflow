@@ -1,19 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
 import { TRM_API_URL } from '../lib/constants';
-import { calculateScenarioTotals } from '../lib/pricing-engine';
+import { getDashboardAmount, type MinSubtotalResult } from '../lib/pricing-engine';
 import { getTrmMonthlyAverage } from '../lib/trm-service';
 import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType, ItemType } from '../lib/types';
 import type { DateRange } from '../pages/dashboard/DashboardFilters';
 
-// ── Types ────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type CurrencyCode = 'COP' | 'USD';
-
-interface MinSubtotalResult {
-    subtotal: number | null;
-    currency: CurrencyCode | null;
-}
 
 export interface PipelineByStatus {
     status: ProposalStatus;
@@ -30,6 +25,7 @@ export interface DashboardRow {
     subject: string;
     minSubtotal: number | null;
     minSubtotalCurrency: CurrencyCode | null;
+    isManual?: boolean;
     status: ProposalStatus;
     closeDate?: string | null;
     billingDate?: string | null;
@@ -56,35 +52,13 @@ const PIPELINE_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA
 /** Statuses that count towards the active forecast (not yet won/lost). */
 const FORECAST_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA'];
 
-// ── Pure helpers ─────────────────────────────────────────────
-
-/** Find the scenario with the minimum subtotal and return its value + currency. */
-function computeMinSubtotal(proposal: ProposalSummary): MinSubtotalResult {
-    if (!proposal.scenarios || proposal.scenarios.length === 0) {
-        return { subtotal: null, currency: null };
-    }
-
-    let minSubtotal: number | null = null;
-    let minCurrency: CurrencyCode | null = null;
-
-    for (const scenario of proposal.scenarios) {
-        const totals = calculateScenarioTotals(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
-        const sub = totals.subtotal;
-
-        if (minSubtotal === null || sub < minSubtotal) {
-            minSubtotal = sub;
-            minCurrency = (scenario.currency === 'USD' ? 'USD' : 'COP') as CurrencyCode;
-        }
-    }
-
-    return { subtotal: minSubtotal, currency: minCurrency };
-}
+// â”€â”€ Pure helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Convert a subtotal to USD.
- * - If already in USD → return as-is.
- * - If COP and trmRate > 0 → divide.
- * - Otherwise → null.
+ * - If already in USD â†’ return as-is.
+ * - If COP and trmRate > 0 â†’ divide.
+ * - Otherwise â†’ null.
  */
 export function getSubtotalUsd(
     subtotal: number | null,
@@ -97,14 +71,14 @@ export function getSubtotalUsd(
     return null;
 }
 
-/** Parse ISO date → { month (0-indexed), year } without timezone shift. */
+/** Parse ISO date â†’ { month (0-indexed), year } without timezone shift. */
 function parseDate(dateStr: string): { month: number; year: number } {
     const [datePart] = dateStr.split('T');
     const [y, m] = datePart.split('-').map(Number);
     return { month: m - 1, year: y };
 }
 
-/** Parse ISO date → { quarter (1-4), year } for pipeline grouping. */
+/** Parse ISO date â†’ { quarter (1-4), year } for pipeline grouping. */
 function getQuarter(dateStr: string): { quarter: number; year: number } {
     const { month, year } = parseDate(dateStr);
     return { quarter: Math.floor(month / 3) + 1, year };
@@ -176,7 +150,7 @@ function computeBillingCards(
     return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente, pendFactMesActual, pendFactMesSiguiente };
 }
 
-// ── Hook ─────────────────────────────────────────────────────
+// â”€â”€ Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function useDashboard() {
     const [proposals, setProposals] = useState<ProposalSummary[]>([]);
@@ -276,15 +250,15 @@ export function useDashboard() {
         }
     };
 
-    // ── Computed values ──
+    // â”€â”€ Computed values â”€â”€
     const proposalsWithSubtotals = useMemo(() => {
         return proposals.map(p => {
-            const { subtotal, currency } = computeMinSubtotal(p);
-            return { ...p, subtotal, currency };
+            const { subtotal, currency, isManual } = getDashboardAmount(p);
+            return { ...p, subtotal, currency, isManual };
         });
     }, [proposals]);
 
-    // ── Unified rows (proposals + projections) ──
+    // â”€â”€ Unified rows (proposals + projections) â”€â”€
     const allRows: DashboardRow[] = useMemo(() => {
         const proposalRows: DashboardRow[] = proposalsWithSubtotals.map(p => ({
             id: p.id,
@@ -293,6 +267,7 @@ export function useDashboard() {
             subject: p.subject,
             minSubtotal: p.subtotal,
             minSubtotalCurrency: p.currency,
+            isManual: p.isManual,
             status: p.status,
             closeDate: p.closeDate,
             billingDate: p.billingDate,
@@ -420,7 +395,7 @@ export function useDashboard() {
         subtotalUsdMin, subtotalUsdMax, acquisitionFilter, userFilter, trmRate,
     ]);
 
-    // ── Billing summary cards per acquisition type (from filtered rows, in USD) ──
+    // â”€â”€ Billing summary cards per acquisition type (from filtered rows, in USD) â”€â”€
     const billingCardsVenta: BillingCards = useMemo(
         () => computeBillingCards(filtered, 'VENTA', trmRate),
         [filtered, trmRate],
@@ -431,7 +406,7 @@ export function useDashboard() {
         [filtered, trmRate],
     );
 
-    // ── Pipeline cards per status + forecast (from filtered rows, in USD) ──
+    // â”€â”€ Pipeline cards per status + forecast (from filtered rows, in USD) â”€â”€
     const { pipelineCards, forecastCurrentQuarter, forecastNextQuarter } = useMemo(() => {
         const { currentQ, currentQYear, nextQ, nextQYear } = resolveCurrentAndNextQuarter();
 
@@ -462,7 +437,7 @@ export function useDashboard() {
         };
     }, [filtered, trmRate]);
 
-    // ── Actions ──
+    // â”€â”€ Actions â”€â”€
     const handleStatusChange = async (id: string, newStatus: ProposalStatus) => {
         try {
             await api.patch(`/proposals/${id}`, { status: newStatus });
@@ -495,7 +470,7 @@ export function useDashboard() {
     };
 
     const handleDelete = async (id: string, code: string) => {
-        if (!window.confirm(`⚠️ ¿Estás seguro de que deseas eliminar permanentemente la propuesta ${code}?\n\nEsta acción no se puede deshacer. Se eliminarán todos los ítems, escenarios y datos asociados.`)) return;
+        if (!window.confirm(`âš ï¸ Â¿EstÃ¡s seguro de que deseas eliminar permanentemente la propuesta ${code}?\n\nEsta acciÃ³n no se puede deshacer. Se eliminarÃ¡n todos los Ã­tems, escenarios y datos asociados.`)) return;
 
         try {
             await api.delete(`/proposals/${id}`);
