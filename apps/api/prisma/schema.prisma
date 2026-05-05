@@ -95,6 +95,7 @@ model Proposal {
   closeDate      DateTime?      @map("close_date") @db.Date
   billingDate    DateTime?      @map("billing_date") @db.Date
   acquisitionType AcquisitionType? @map("acquisition_type")
+  manualAmount    Decimal?         @map("manual_amount") @db.Decimal(15, 2)
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
