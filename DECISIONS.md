@@ -677,3 +677,114 @@ CONSTRAINT con ON DELETE CASCADE sobre scenario_items_item_id_fkey.
   Esto es el comportamiento esperado: un scenario_item sin proposal_item
   referenciado no tiene sentido de negocio.
 - No se requiere lógica adicional en proposals.service.ts.
+## ADR-022: `manualAmount` como monto inicial de propuesta para proyección en dashboard (mayo 2026)
+
+**Fecha:** Mayo 2026 (Sesión de feature de monto inicial estimado)
+
+**Estado:** Vigente
+
+**Problema:** Al crear una propuesta nueva, el escenario está vacío y por lo
+tanto la suma de ítems es cero. Esto significaba que en el dashboard la
+propuesta aparecía con subtotal `null` (raya) hasta que el comercial entrara a
+construir el detalle de los ítems. Para propuestas que se migran desde sistemas
+externos o que el comercial registra rápido y construye después, el dashboard
+no reflejaba ningún valor proyectable, dejando huecos en las billing cards,
+forecast por trimestre y filtros de monto USD.
+
+El comercial necesitaba poder declarar un monto estimado inicial al crear la
+propuesta — útil sobre todo durante la migración desde la herramienta anterior
+y para cotizaciones tempranas en estado `ELABORACION` —, sin que ese monto
+contaminara los cálculos reales de la propuesta (PDF, Excel export, totales del
+constructor) cuando ya existieran ítems con valor.
+
+**Alternativas consideradas:**
+
+1. **Modal separado "Nueva Proyección de Facturación rápida"**: descartada por
+   sobre-ingeniería. Implicaba un modelo nuevo (`BillingProjection`-like),
+   migración de Prisma, dos flujos paralelos de creación, y trazabilidad
+   adicional con consecutivo legacy. La solución vive en el modelo `Proposal`
+   existente sin abrir flujos paralelos.
+2. **`manualAmount` con switch irreversible**: una vez el comercial agrega
+   cualquier ítem, el dashboard ignora `manualAmount` para siempre. Descartada
+   porque borrar todos los ítems devolvería al usuario a un dashboard en cero
+   sin recurso, dañando la UX en escenarios de exploración o reset.
+3. **`manualAmount` con moneda configurable (`COP` | `USD`)**: descartada por
+   alcance. Sumaba columna nueva al schema, validación cruzada en el service y
+   un selector en el formulario que el usuario consideró innecesario.
+   Convergimos en USD fijo, coherente con la moneda con la que el dashboard
+   alimenta las billing cards.
+4. **Lógica del fallback fuera de `pricing-engine.ts`** (en el hook): descartada
+   por sección J de `CONVENTIONS.md`. Cualquier cálculo financiero — incluido
+   el de "qué monto mostrar para una propuesta" — vive en el engine.
+
+**Decisión:**
+
+1. Nuevo campo `Proposal.manualAmount: Decimal? @db.Decimal(15, 2)`, opcional,
+   nullable, sin default. Patrón consistente con los demás campos monetarios
+   opcionales del modelo (`unitPriceOverride`, etc.). La moneda se asume USD por
+   convención del dashboard; no existe campo `manualAmountCurrency`.
+2. El backend acepta y persiste el campo vía `CreateProposalDto` y
+   `UpdateProposalDto` con `@IsOptional() @IsNumber() @Min(0)`. El service no
+   aplica lógica de cálculo: solo persiste lo recibido. La regla
+   `forbidNonWhitelisted: true` (ADR-006) obliga a declarar el campo en los
+   DTOs para que el frontend pueda enviarlo.
+3. Función nueva `getDashboardAmount(proposal)` en
+   `apps/web/src/lib/pricing-engine.ts`. Lógica: si el escenario con menor
+   subtotal calculado por `computeMinSubtotal` da `> 0`, retorna ese valor con
+   su moneda real. En caso contrario, si existe `manualAmount > 0`, retorna ese
+   valor con `currency: 'USD'`. Si no hay nada, retorna `null`. Devuelve además
+   un flag `isManual: boolean` para distinguir el origen del valor.
+4. Como parte de esta decisión, se movió `computeMinSubtotal` (que vivía como
+   función local en `useDashboard.ts`) hacia `pricing-engine.ts` y se exportó
+   junto con su tipo `MinSubtotalResult`. Esto cumple la regla absoluta de la
+   sección J: ningún cálculo financiero vive fuera del engine.
+5. El indicador visual en la tabla del dashboard es un caracter `~` discreto en
+   gris claro a la izquierda del valor, con `title` HTML nativo:
+   *"Monto estimado inicial. Sin ítems cargados aún."* No se introduce un
+   componente de badge ni una dependencia de UI nueva.
+6. **Alcance excluido explícitamente**:
+   - El `manualAmount` no se propaga a PDF, Excel export del constructor, ni
+     totales del escenario. Es un valor exclusivo del dashboard.
+   - `exportDashboard.ts` consume `manualAmount` automáticamente vía
+     `getSubtotalUsd` porque el flag `currency: 'USD'` ya lo deja pasar sin
+     conversión TRM. No requirió cambio.
+   - La UI de edición del campo después de la creación queda diferida
+     (no se implementó en este feature). El backend lo soporta vía
+     `PATCH /proposals/:id` desde ya.
+
+**Consecuencias:**
+
+- Positivas: el dashboard refleja propuestas tempranas o migradas desde el
+  primer momento. La función `getDashboardAmount` es la fuente única de verdad
+  para "qué monto mostrar por propuesta en el dashboard"; cualquier consumidor
+  futuro debe pasar por ahí. La transición desde `manualAmount` a suma de
+  escenarios es automática: en cuanto un escenario produce subtotal `> 0`, el
+  dashboard cambia al cálculo real sin intervención del usuario.
+- Negativas: como el switch a "suma de escenarios" es por valor `> 0`, un
+  comercial que cargue ítems con costo cero (placeholders, drafts) seguirá
+  viendo el `manualAmount`. Aceptado como protección frente a dashboards que se
+  irían a cero accidentalmente.
+- Migración: agrega columna nullable `manual_amount numeric(15,2)`. Cero
+  impacto en filas existentes; todas quedan con `NULL` y siguen calculando
+  desde escenarios como hoy.
+
+**Archivos modificados:**
+
+- `apps/api/prisma/schema.prisma`: nuevo campo `manualAmount` en modelo
+  `Proposal`.
+- `apps/api/prisma/migrations/20260505212618_add_proposal_manual_amount/migration.sql`:
+  agrega columna `manual_amount`.
+- `apps/api/src/proposals/dto/proposals.dto.ts`: campo `manualAmount?: number`
+  en `CreateProposalDto` y `UpdateProposalDto`.
+- `apps/api/src/proposals/proposals.service.ts`: persistencia del campo en
+  `createProposal` y `updateProposal`.
+- `apps/web/src/lib/types.ts`: campo `manualAmount?: string | null` en
+  `ProposalSummary`.
+- `apps/web/src/lib/pricing-engine.ts`: tipo `MinSubtotalResult` y función
+  `computeMinSubtotal` movidos desde el hook; nueva función
+  `getDashboardAmount`.
+- `apps/web/src/hooks/useDashboard.ts`: importa del engine en lugar de
+  función local; agrega `isManual` al pipeline de filas del dashboard.
+- `apps/web/src/pages/proposals/NewProposal.tsx`: campo nuevo "Monto estimado
+  inicial" con sufijo USD en el formulario de creación.
+- `apps/web/src/pages/Dashboard.tsx`: indicador `~` cuando `row.isManual`.
