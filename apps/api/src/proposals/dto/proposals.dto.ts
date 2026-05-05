@@ -24,6 +24,11 @@ export class CreateProposalDto {
 
     @IsDateString()
     validityDate: string;
+
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    manualAmount?: number;
 }
 
 /**
@@ -66,6 +71,11 @@ export class UpdateProposalDto {
     @IsOptional()
     @IsEnum(AcquisitionType)
     acquisitionType?: AcquisitionType;
+
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    manualAmount?: number;
 }
 
 /**

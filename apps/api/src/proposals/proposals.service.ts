@@ -89,6 +89,7 @@ export class ProposalsService {
           validityDays: typeof data.validityDays === 'string' ? parseInt(data.validityDays, 10) : data.validityDays,
           validityDate: new Date(data.validityDate),
           status: ProposalStatus.ELABORACION,
+          manualAmount: data.manualAmount,
         },
       });
     } catch (error) {
@@ -209,6 +210,7 @@ export class ProposalsService {
         billingDate: data.billingDate ? new Date(data.billingDate) : data.billingDate === null ? null : undefined,
         acquisitionType: data.acquisitionType ?? undefined,
         issueCity: data.issueCity ?? undefined,
+        manualAmount: data.manualAmount ?? undefined,
       },
     });
   }
