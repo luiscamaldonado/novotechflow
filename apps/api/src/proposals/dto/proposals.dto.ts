@@ -39,6 +39,11 @@ export class UpdateProposalDto {
     issueDate?: string;
 
     @IsOptional()
+    @IsString()
+    @MaxLength(100)
+    issueCity?: string;
+
+    @IsOptional()
     @IsInt()
     validityDays?: number;
 

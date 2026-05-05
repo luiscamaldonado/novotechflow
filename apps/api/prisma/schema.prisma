@@ -86,6 +86,7 @@ model Proposal {
   clientName     String         @map("client_name") @db.VarChar(200)
   subject        String         @db.Text
   issueDate      DateTime       @map("issue_date") @db.Date
+  issueCity      String?        @map("issue_city") @db.VarChar(100)
   validityDays   Int?           @map("validity_days")
   validityDate   DateTime?      @map("validity_date") @db.Date
   status         ProposalStatus @default(ELABORACION)

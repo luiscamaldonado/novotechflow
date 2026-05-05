@@ -56,6 +56,8 @@ export default function ProposalDocBuilder() {
     // ── Proposal metadata for µ marker replacements ──────────
     const [proposal, setProposal] = useState<ProposalDetail | null>(null);
     const [selectedCity, setSelectedCity] = useState<string>('Bogotá D.C.');
+    const [savedCity, setSavedCity] = useState<string>('Bogotá D.C.');
+    const [savingCity, setSavingCity] = useState<boolean>(false);
 
     useEffect(() => {
         if (!id) return;
@@ -64,6 +66,9 @@ export default function ProposalDocBuilder() {
             if (data.issueDate) data.issueDate = data.issueDate.split('T')[0];
             if (data.validityDate) data.validityDate = data.validityDate.split('T')[0];
             setProposal(data);
+            const initialCity = data.issueCity || 'Bogotá D.C.';
+            setSelectedCity(initialCity);
+            setSavedCity(initialCity);
         }).catch(err => console.error('Error loading proposal metadata', err));
     }, [id]);
 
@@ -155,6 +160,21 @@ export default function ProposalDocBuilder() {
         return true;
     };
 
+    const handleSaveCity = async () => {
+        if (!id || selectedCity === savedCity) return;
+        setSavingCity(true);
+        try {
+            await api.patch(`/proposals/${id}`, { issueCity: selectedCity });
+            setSavedCity(selectedCity);
+            setProposal(prev => prev ? { ...prev, issueCity: selectedCity } : prev);
+        } catch (error) {
+            console.error(error);
+            alert('Error al guardar la ciudad de emisión.');
+        } finally {
+            setSavingCity(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -204,7 +224,19 @@ export default function ProposalDocBuilder() {
                     <div className="p-2 bg-indigo-50 rounded-xl">
                         <MapPin className="h-4 w-4 text-indigo-600" />
                     </div>
-                    <CityCombobox value={selectedCity} onChange={setSelectedCity} />
+                    <div className="flex items-center gap-2">
+                        <CityCombobox value={selectedCity} onChange={setSelectedCity} />
+                        {selectedCity !== savedCity && (
+                            <button
+                                type="button"
+                                onClick={handleSaveCity}
+                                disabled={savingCity}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                ✓ Guardar
+                            </button>
+                        )}
+                    </div>
                 </div>
                 {proposal && (
                     <>

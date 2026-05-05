@@ -136,6 +136,7 @@ export interface ProposalDetail {
     clientName: string;
     subject: string;
     issueDate: string;
+    issueCity?: string;
     validityDays: number;
     validityDate: string;
     status: ProposalStatus;
