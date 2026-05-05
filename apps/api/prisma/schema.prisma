@@ -222,7 +222,7 @@ model ScenarioItem {
   isDiluted         Boolean  @default(false) @map("is_diluted")
 
   scenario Scenario      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  item     ProposalItem  @relation(fields: [itemId], references: [id])
+  item     ProposalItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   parent   ScenarioItem? @relation("ScenarioItemChildren", fields: [parentId], references: [id])
   children ScenarioItem[] @relation("ScenarioItemChildren")
 

@@ -652,3 +652,28 @@ el valor volvía al default. La ciudad se usaba en `proposalVariables`
 **Commit:** `9da3884` — feat(proposals): agregar ciudad de emision a propuesta
 
 ---
+
+## ADR-021: Cascade en scenario_items.itemId para permitir borrado de propuestas
+
+**Fecha:** 2026-05-05
+**Estado:** Aceptada
+
+**Contexto:**
+Borrar una propuesta desde el dashboard fallaba con HTTP 500 y error de Prisma:
+"violates RESTRICT setting of foreign key constraint scenario_items_item_id_fkey".
+La cascade de Proposal → ProposalItem existía, pero la FK scenario_items.item_id
+usaba RESTRICT por defecto, bloqueando el borrado en cadena cuando la propuesta
+tenía escenarios con ítems.
+
+**Decisión:**
+Declarar `onDelete: Cascade` en la relación ScenarioItem.item dentro de
+schema.prisma, y emitir una migración SQL que ejecuta DROP CONSTRAINT + ADD
+CONSTRAINT con ON DELETE CASCADE sobre scenario_items_item_id_fkey.
+
+**Consecuencias:**
+- Borrar una propuesta ahora elimina en cadena: proposal → proposal_items →
+  scenario_items, sin intervención del service.
+- Borrar un proposal_item individual también elimina sus scenario_items.
+  Esto es el comportamiento esperado: un scenario_item sin proposal_item
+  referenciado no tiene sentido de negocio.
+- No se requiere lógica adicional en proposals.service.ts.
