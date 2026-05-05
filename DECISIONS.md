@@ -584,3 +584,71 @@ redirect automático todavía.
 /dashboard
 
 ---
+
+## ADR-020: Persistencia de ciudad de emisión en propuestas (mayo 2026)
+
+**Fecha:** Mayo 2026 (Sesión de corrección de pérdida de datos en builder)
+
+**Estado:** Vigente
+
+**Problema:** El campo "Ciudad de emisión" en `ProposalDocBuilder` era state local
+con default `'Bogotá D.C.'` sin persistencia. El usuario seleccionaba una
+ciudad, generaba el documento, y al recargar la página o reabrir la propuesta
+el valor volvía al default. La ciudad se usaba en `proposalVariables`
+(reemplazo de placeholders en plantillas) pero nunca se guardaba en DB.
+
+**Alternativas consideradas:**
+1. Autosave onChange con debounce: descartada — disparaba PATCH por cada
+   selección del combobox; ruido innecesario para un campo de baja frecuencia
+   de edición.
+2. Reutilizar `useProposalBuilder.updateProposal` desde el builder: descartada
+   por scope. `ProposalDocBuilder` no usa ese hook actualmente; integrarlo
+   requeriría refactor mayor (el hook también carga items y catálogos), fuera
+   del alcance de la corrección puntual.
+3. Botón "Guardar" general que cubriera múltiples campos del builder:
+   descartada por YAGNI — hoy el único campo de metadata editable en el
+   builder es la ciudad.
+
+**Decisión:**
+1. Nuevo campo `Proposal.issueCity` opcional (`VARCHAR(100) NULL`).
+2. Default `'Bogotá D.C.'` vive solo en UI; en DB el valor persiste como
+   `NULL` hasta que el usuario guarde explícitamente. Una propuesta sin
+   ciudad asentada no miente diciendo que es de Bogotá.
+3. Botón compacto inline al lado del `CityCombobox` en `ProposalDocBuilder`,
+   visible solo cuando `selectedCity !== savedCity`. Persiste vía
+   `PATCH /proposals/:id` con payload `{ issueCity }`.
+4. Doble estado local (`selectedCity` y `savedCity`) para detectar cambios
+   pendientes incluso cuando la DB tiene `NULL` y el usuario quiere asentar
+   Bogotá explícitamente. Sin `savedCity` separado, ese caso nunca dispararía
+   el botón.
+5. Decisión consciente de no usar `useProposalBuilder.updateProposal` aquí.
+   `ProposalDocBuilder` hace `api.patch` local, igual que ya hacía con
+   `api.get` en línea 62. Deuda técnica registrada: cuando se refactorice el
+   builder a consumir `useProposalBuilder`, este `api.patch` debe migrarse a
+   la whitelist del hook, que ya incluye `'issueCity'`.
+
+**Consecuencias:**
+- Positivas: la ciudad persiste correctamente; UX mínima sin botones
+  intrusivos; backend extensible (DTO + service ya soportan el campo);
+  whitelist del hook ya queda lista con `'issueCity'` para cuando se migre el
+  builder al patrón §A.
+- Negativas: deuda técnica de §A (componentes de UI no deben importar `api`)
+  preexistente en el archivo, no agravada pero tampoco resuelta.
+- Migración: `20260505154055_add_issue_city_to_proposal` aplicada en local y
+  desplegada a Railway en el mismo commit.
+
+**Archivos modificados:**
+- `apps/api/prisma/schema.prisma`: campo `issueCity` en modelo `Proposal`.
+- `apps/api/prisma/migrations/20260505154055_add_issue_city_to_proposal/migration.sql`:
+  nueva migración.
+- `apps/api/src/proposals/dto/proposals.dto.ts`: `UpdateProposalDto.issueCity?`
+  con `@MaxLength(100)`.
+- `apps/api/src/proposals/proposals.service.ts`: `updateProposal` mapea
+  `issueCity` con patrón `data.X ?? undefined`.
+- `apps/web/src/lib/types.ts`: `ProposalDetail.issueCity?`.
+- `apps/web/src/pages/proposals/ProposalDocBuilder.tsx`: estados `savedCity` y
+  `savingCity`, handler `handleSaveCity`, botón inline de guardado.
+
+**Commit:** `9da3884` — feat(proposals): agregar ciudad de emision a propuesta
+
+---
