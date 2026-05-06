@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, UseGuards, Query, Request, Param, Patch, Delete, UseInterceptors, UploadedFile, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, UseGuards, Query, Request, Param, Patch, Delete, UseInterceptors, UploadedFile, ParseUUIDPipe, ParseIntPipe, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -60,6 +60,18 @@ export class ProposalsController {
     @Get('client-history')
     async getClientHistory(@Query('clientName') query: string) {
         return this.proposalsService.findPotentialConflicts(query);
+    }
+
+    @Get('validate-manual')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Valida un número manual contra los códigos del usuario logueado' })
+    @ApiQuery({ name: 'n', type: Number, required: true, example: 1234 })
+    async validateManual(
+        @Query('n', ParseIntPipe) n: number,
+        @Request() req: { user: AuthenticatedUser },
+    ) {
+        return this.proposalsService.validateManualConsecutive(req.user.id, n);
     }
 
     @UseGuards(JwtAuthGuard)

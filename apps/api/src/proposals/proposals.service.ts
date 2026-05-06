@@ -1,6 +1,6 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProposalStatus } from '@prisma/client';
+import { ProposalStatus, ConsecutiveSource } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
 import {
@@ -10,6 +10,16 @@ import {
     UpdateProposalItemDto,
 } from './dto/proposals.dto';
 
+
+/** Resultado de la validación de un consecutivo manual. */
+export type ManualConsecutiveValidation =
+  | { ok: true }
+  | { ok: false; reason: 'OUT_OF_RANGE' | 'GTE_AUTO' | 'TAKEN'; conflict?: string; suggestion: number | null };
+
+/** Límite superior del rango de consecutivos. */
+const MAX_CONSECUTIVE = 99999;
+/** Dígitos de padding para los consecutivos nuevos. */
+const CONSECUTIVE_PAD_LENGTH = 5;
 
 @Injectable()
 export class ProposalsService {
@@ -67,20 +77,47 @@ export class ProposalsService {
 
   /**
    * Orquesta la creación de una nueva propuesta comercial.
-   * 
+   * Soporta tanto generación automática como consecutivo manual.
+   *
    * @param {string} userId - ID del usuario comercial que crea la oferta.
-   * @param {ICreateProposalInput} data - Payload con la información de la propuesta.
+   * @param {CreateProposalDto} data - Payload con la información de la propuesta.
    * @throws {NotFoundException} Si el usuario no existe.
+   * @throws {BadRequestException} Si el consecutivo manual es inválido.
    */
   async createProposal(userId: string, data: CreateProposalDto) {
     try {
       const user = await this.validateUserAccess(userId);
       const clientId = await this.ensureClientExists(data.clientName, data.clientId);
-      const proposalCode = await this.generateProposalCode(user.nomenclature, userId);
+
+      let proposalCode: string;
+      let consecutiveSource: ConsecutiveSource;
+
+      if (data.manualConsecutive !== undefined) {
+        const validation: ManualConsecutiveValidation = await this.validateManualConsecutive(userId, data.manualConsecutive);
+
+        if (validation.ok === false) {
+          const { reason, conflict, suggestion } = validation;
+          const messages: Record<string, string> = {
+            OUT_OF_RANGE: `El consecutivo ${data.manualConsecutive} está fuera del rango permitido (1-${MAX_CONSECUTIVE}).`,
+            GTE_AUTO: `El consecutivo ${data.manualConsecutive} es igual o mayor al próximo automático. Solo se permiten números por debajo del automático.`,
+            TAKEN: `El consecutivo ${data.manualConsecutive} ya está en uso${conflict ? ` (${conflict})` : ''}.${suggestion ? ` Sugerencia: ${suggestion}` : ''}`,
+          };
+          throw new BadRequestException(messages[reason]);
+        }
+
+        const prefix = user.nomenclature || 'XX';
+        const sequential = data.manualConsecutive.toString().padStart(CONSECUTIVE_PAD_LENGTH, '0');
+        proposalCode = `COT-${prefix}${sequential}-1`;
+        consecutiveSource = ConsecutiveSource.MANUAL;
+      } else {
+        proposalCode = await this.generateProposalCode(user.nomenclature, userId);
+        consecutiveSource = ConsecutiveSource.AUTO;
+      }
 
       return await this.prisma.proposal.create({
         data: {
           proposalCode,
+          consecutiveSource,
           userId,
           clientId,
           clientName: sanitizePlainText(data.clientName.trim().toUpperCase()),
@@ -138,31 +175,29 @@ export class ProposalsService {
   }
 
   /**
-   * Genera un código de propuesta único siguiendo el estándar corporativo COT-[NOMENCLATURA][SECUENCIAL]-[VERSION].
+   * Calcula el próximo número automático para un usuario (sin considerar huecos manuales).
+   * Se usa como fuente única tanto en generateProposalCode como en validateManualConsecutive.
    * @private
    */
-  private async generateProposalCode(nomenclature: string, userId: string): Promise<string> {
-    const prefix = nomenclature || 'XX';
-    
-    // Buscamos la última propuesta de este usuario para obtener el número secuencial más alto
-    const lastProposal = await this.prisma.proposal.findFirst({
-      where: { userId },
-      orderBy: { proposalCode: 'desc' },
-      select: { proposalCode: true }
+  private async getNextAutoNumber(userId: string): Promise<number> {
+    const autoCodes = await this.prisma.proposal.findMany({
+      where: { userId, consecutiveSource: ConsecutiveSource.AUTO },
+      select: { proposalCode: true },
     });
-    
-    let nextNumber = 1;
-    
-    if (lastProposal?.proposalCode) {
-      // Extraemos el número del formato COT-PREFIX0001-1 usando regex
-      // El patrón busca dígitos antes del guion de la versión final
-      const match = lastProposal.proposalCode.match(/(\d+)-\d+$/);
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1;
-      }
-    }
 
-    // Aplicar el offset inicial del usuario (si tiene historial previo fuera del sistema)
+    const autoNumbers = autoCodes
+      .map(p => p.proposalCode)
+      .filter((c): c is string => c !== null)
+      .map(c => {
+        const m = c.match(/(\d+)-\d+$/);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter(n => n > 0);
+
+    const maxAutoNumber = autoNumbers.length > 0 ? Math.max(...autoNumbers) : 0;
+    let nextNumber = maxAutoNumber + 1;
+
+    // Aplicar offset del usuario (historial previo fuera del sistema)
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { proposalCounterStart: true },
@@ -170,11 +205,99 @@ export class ProposalsService {
     if (user && user.proposalCounterStart > 0) {
       nextNumber = Math.max(nextNumber, user.proposalCounterStart + 1);
     }
-    
-    const sequential = nextNumber.toString().padStart(4, '0');
-    
-    // El "-1" representa la versión inicial del borrador
+
+    return nextNumber;
+  }
+
+  /**
+   * Construye un Set con todos los números de consecutivo ya tomados por el usuario.
+   * Incluye tanto AUTO como MANUAL.
+   * @private
+   */
+  private async getTakenNumbers(userId: string): Promise<Set<number>> {
+    const allCodes = await this.prisma.proposal.findMany({
+      where: { userId },
+      select: { proposalCode: true },
+    });
+
+    return new Set(
+      allCodes
+        .map(p => p.proposalCode)
+        .filter((c): c is string => c !== null)
+        .map(c => {
+          const m = c.match(/(\d+)-\d+$/);
+          return m ? parseInt(m[1], 10) : -1;
+        })
+        .filter(n => n > 0),
+    );
+  }
+
+  /**
+   * Genera un código de propuesta único siguiendo el estándar corporativo
+   * COT-[NOMENCLATURA][SECUENCIAL]-[VERSION].
+   * Solo cuenta códigos AUTO para calcular el siguiente número y salta
+   * números ya tomados por manuales.
+   * @private
+   */
+  private async generateProposalCode(nomenclature: string, userId: string): Promise<string> {
+    const prefix = nomenclature || 'XX';
+
+    let nextNumber = await this.getNextAutoNumber(userId);
+
+    // Saltar números que ya estén tomados (por manuales u otros)
+    const takenNumbers = await this.getTakenNumbers(userId);
+    while (takenNumbers.has(nextNumber)) {
+      nextNumber++;
+    }
+
+    if (nextNumber > MAX_CONSECUTIVE) {
+      throw new BadRequestException('Se agotó el rango de consecutivos disponibles para este usuario.');
+    }
+
+    const sequential = nextNumber.toString().padStart(CONSECUTIVE_PAD_LENGTH, '0');
     return `COT-${prefix}${sequential}-1`;
+  }
+
+  /**
+   * Valida un número de consecutivo manual contra el estado actual del usuario.
+   * Retorna { ok: true } si es válido, o un objeto con reason, conflict y suggestion si no.
+   */
+  async validateManualConsecutive(userId: string, number: number): Promise<ManualConsecutiveValidation> {
+    if (!Number.isInteger(number) || number < 1 || number > MAX_CONSECUTIVE) {
+      return { ok: false, reason: 'OUT_OF_RANGE', suggestion: null };
+    }
+
+    const nextAuto = await this.getNextAutoNumber(userId);
+
+    if (number >= nextAuto) {
+      return { ok: false, reason: 'GTE_AUTO', suggestion: null };
+    }
+
+    const takenNumbers = await this.getTakenNumbers(userId);
+
+    if (takenNumbers.has(number)) {
+      // Buscar sugerencia: siguiente libre entre number+1 y nextAuto-1
+      let suggestion: number | null = null;
+      let candidate = number + 1;
+      while (candidate < nextAuto && takenNumbers.has(candidate)) {
+        candidate++;
+      }
+      if (candidate < nextAuto) {
+        suggestion = candidate;
+      }
+
+      // Construir el código en conflicto para feedback
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { nomenclature: true },
+      });
+      const prefix = user?.nomenclature || 'XX';
+      const conflict = `COT-${prefix}${number.toString().padStart(CONSECUTIVE_PAD_LENGTH, '0')}`;
+
+      return { ok: false, reason: 'TAKEN', conflict, suggestion };
+    }
+
+    return { ok: true };
   }
 
   /**
@@ -322,8 +445,8 @@ export class ProposalsService {
 
   /**
    * Clona una propuesta existente incluyendo ítems y escenarios.
-   * NEW_VERSION: incrementa la versión (COT-LM0001-1 → COT-LM0001-2)
-   * NEW_PROPOSAL: genera nuevo código secuencial (COT-LM0002-1)
+   * NEW_VERSION: incrementa la versión (COT-LM0001-1 → COT-LM0001-2), conserva consecutiveSource.
+   * NEW_PROPOSAL: genera nuevo código secuencial (COT-LM0002-1), siempre AUTO.
    */
   async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser) {
     await this.verifyProposalOwnership(id, user);
@@ -360,10 +483,15 @@ export class ProposalsService {
       newCode = await this.generateProposalCode(user.nomenclature, userId);
     }
 
-    // Create the new proposal
+    // Determinar consecutiveSource según el tipo de clonación
+    const clonedConsecutiveSource = cloneType === 'NEW_VERSION'
+      ? original.consecutiveSource
+      : ConsecutiveSource.AUTO;
+
     const cloned = await this.prisma.proposal.create({
       data: {
         proposalCode: newCode,
+        consecutiveSource: clonedConsecutiveSource,
         userId,
         clientId: original.clientId,
         clientName: original.clientName,

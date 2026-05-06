@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, IsEnum, IsDateString, Min, MaxLength, IsObject, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, IsEnum, IsDateString, Min, Max, MaxLength, IsObject, IsIn } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ItemType, ProposalStatus, AcquisitionType } from '@prisma/client';
 
 /**
@@ -29,6 +30,18 @@ export class CreateProposalDto {
     @IsNumber()
     @Min(0)
     manualAmount?: number;
+
+    @ApiPropertyOptional({
+        description: 'Número manual del consecutivo (1-99999). Si se provee, la propuesta se crea con consecutiveSource=MANUAL. Debe ser estrictamente menor al próximo número automático del usuario y no estar tomado.',
+        example: 1234,
+        minimum: 1,
+        maximum: 99999,
+    })
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(99999)
+    manualConsecutive?: number;
 }
 
 /**
