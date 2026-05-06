@@ -748,9 +748,9 @@ constructor) cuando ya existieran ítems con valor.
    - `exportDashboard.ts` consume `manualAmount` automáticamente vía
      `getSubtotalUsd` porque el flag `currency: 'USD'` ya lo deja pasar sin
      conversión TRM. No requirió cambio.
-   - La UI de edición del campo después de la creación queda diferida
-     (no se implementó en este feature). El backend lo soporta vía
-     `PATCH /proposals/:id` desde ya.
+   - La UI de edición post-creación se implementó en chat siguiente
+     (mayo 2026); ver Adenda al final del ADR. El backend ya soportaba
+     `PATCH /proposals/:id` desde la primera implementación.
 
 **Consecuencias:**
 
@@ -788,3 +788,54 @@ constructor) cuando ya existieran ítems con valor.
 - `apps/web/src/pages/proposals/NewProposal.tsx`: campo nuevo "Monto estimado
   inicial" con sufijo USD en el formulario de creación.
 - `apps/web/src/pages/Dashboard.tsx`: indicador `~` cuando `row.isManual`.
+
+**Adenda — mayo 2026 (cierre de UI de edición post-creación):**
+
+Se completó la edición de `manualAmount` después de la creación de la
+propuesta, dentro del header del constructor de items. Esto cierra el
+bullet diferido del punto 6.
+
+Patrón de implementación:
+
+- El input se agregó como cuarta columna en el grid del header de
+  `ProposalItemsBuilder.tsx`, junto a `issueDate`, `validityDays` y
+  `validityDate`. Submit explícito vía el form existente; sin autosave.
+- La coerción string→number (necesaria porque el tipo
+  `ProposalDetail.manualAmount` es `string | null` para lectura, pero
+  el DTO de escritura espera `number`) se centralizó en el hook
+  `updateProposal`, no en el componente. Un solo punto de coerción
+  para todos los consumidores futuros del PATCH.
+- Input vacío → `null` al backend → campo limpiado en DB. Esto permite
+  revertir el monto manual sin tener que crear escenarios.
+
+Bug encontrado y corregido durante la implementación:
+
+En `proposals.service.ts`, la línea original
+`manualAmount: data.manualAmount ?? undefined` silenciaba los `null`
+enviados desde el frontend (porque `null ?? undefined === undefined`,
+y Prisma trata `undefined` como "no tocar el campo"). El usuario veía
+200 OK pero el campo no se limpiaba. Se reemplazó por
+`manualAmount: data.manualAmount === undefined ? undefined : data.manualAmount`
+para distinguir explícitamente "no enviado" (preservar) de "enviado
+como null" (limpiar).
+
+**Patrón generalizable:** para cualquier campo opcional-nullable en
+`prisma.update`, NO usar `field ?? undefined` cuando el frontend pueda
+enviar `null` con intención de limpiar. Usar
+`field === undefined ? undefined : field`. El operador `??` solo es
+seguro cuando el frontend nunca envía `null`.
+
+Archivos modificados en la adenda:
+
+- `apps/web/src/hooks/useProposalBuilder.ts`: `'manualAmount'` agregado
+  al array `allowed` del whitelist; bloque de coerción string→number
+  centralizado antes del `api.patch`.
+- `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx`: input nuevo
+  con icono `DollarSign` en el header del form; payload extendido en
+  `handleUpdateProposal`.
+- `apps/web/src/lib/types.ts`: campo `manualAmount?: string | null`
+  agregado a `ProposalDetail` (faltaba; solo estaba en
+  `ProposalSummary`).
+- `apps/api/src/proposals/proposals.service.ts`: fix del `??` por
+  ternario explícito en la línea de `manualAmount` dentro de
+  `updateProposal`.
