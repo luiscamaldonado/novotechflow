@@ -210,7 +210,7 @@ export class ProposalsService {
         billingDate: data.billingDate ? new Date(data.billingDate) : data.billingDate === null ? null : undefined,
         acquisitionType: data.acquisitionType ?? undefined,
         issueCity: data.issueCity ?? undefined,
-        manualAmount: data.manualAmount ?? undefined,
+        manualAmount: data.manualAmount === undefined ? undefined : data.manualAmount,
       },
     });
   }
