@@ -5,7 +5,7 @@ import {
     Package, Save, Loader2,
     Plus, Trash2, Lock,
     Calendar, Clock, FileText, ChevronRight, Edit2, Copy,
-    Cpu
+    Cpu, DollarSign
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { ProposalItem, ProposalDetail } from '../../lib/types';
@@ -37,6 +37,7 @@ export default function ProposalItemsBuilder() {
             issueDate: proposal.issueDate,
             validityDays: proposal.validityDays,
             validityDate: proposal.validityDate,
+            manualAmount: proposal.manualAmount,
         });
     };
 
@@ -256,7 +257,7 @@ export default function ProposalItemsBuilder() {
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 w-full">
                             <div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                     <Calendar className="h-3 w-3 mr-1.5" /> Emisión
@@ -274,6 +275,12 @@ export default function ProposalItemsBuilder() {
                                     <Calendar className="h-3 w-3 mr-1.5" /> Fecha Validez
                                 </label>
                                 <input type="date" name="validityDate" value={proposal.validityDate} onChange={handleDateChange} className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px]" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                    <DollarSign className="h-3 w-3 mr-1.5" /> Monto Manual (USD)
+                                </label>
+                                <input type="number" step="0.01" min="0" name="manualAmount" value={proposal.manualAmount ?? ''} onChange={handleDateChange} placeholder="Opcional" className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px]" />
                             </div>
                             <div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-emerald-500">

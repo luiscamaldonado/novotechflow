@@ -129,11 +129,22 @@ export function useProposalBuilder(proposalId: string | undefined) {
             const allowed = [
                 'subject', 'issueDate', 'validityDays', 'validityDate',
                 'status', 'closeDate', 'billingDate', 'acquisitionType',
+                'manualAmount',
             ];
             const cleanData: Record<string, unknown> = {};
             const anyData = data as Record<string, unknown>;
             for (const key of allowed) {
                 if (key in anyData) cleanData[key] = anyData[key];
+            }
+            // Coerce manualAmount from string (Prisma Decimal) to number for the DTO
+            if ('manualAmount' in cleanData) {
+                const v = cleanData.manualAmount;
+                if (v === '' || v == null) {
+                    cleanData.manualAmount = null;
+                } else {
+                    const num = Number(v);
+                    cleanData.manualAmount = Number.isFinite(num) ? num : null;
+                }
             }
             await api.patch(`/proposals/${proposalId}`, cleanData);
         } catch (error) {

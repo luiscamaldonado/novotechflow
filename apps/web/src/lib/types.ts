@@ -138,6 +138,7 @@ export interface ProposalDetail {
     subject: string;
     issueDate: string;
     issueCity?: string;
+    manualAmount?: string | null;
     validityDays: number;
     validityDate: string;
     status: ProposalStatus;
