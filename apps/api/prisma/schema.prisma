@@ -55,6 +55,11 @@ enum AcquisitionType {
   DAAS
 }
 
+enum ConsecutiveSource {
+  AUTO
+  MANUAL
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   name         String   @db.VarChar(100)
@@ -80,7 +85,8 @@ model User {
 
 model Proposal {
   id             String         @id @default(uuid()) @db.Uuid
-  proposalCode   String?        @unique @map("proposal_code") @db.VarChar(20)
+  proposalCode        String?             @unique @map("proposal_code") @db.VarChar(20)
+  consecutiveSource   ConsecutiveSource   @default(AUTO) @map("consecutive_source")
   userId         String         @map("user_id") @db.Uuid
   clientId       String?        @map("client_id") @db.Uuid
   clientName     String         @map("client_name") @db.VarChar(200)
