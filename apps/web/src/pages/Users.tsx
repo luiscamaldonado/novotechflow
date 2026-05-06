@@ -106,12 +106,24 @@ export default function Users() {
         const formData = new FormData(e.currentTarget);
         const passwordValue = (formData.get('password') as string).trim();
 
+        const counterStartRaw = formData.get('proposalCounterStart') as string | null;
+        const parsedCounterStart = counterStartRaw !== null && counterStartRaw !== ''
+            ? parseInt(counterStartRaw, 10)
+            : undefined;
+
+        if (parsedCounterStart !== undefined && (Number.isNaN(parsedCounterStart) || parsedCounterStart < 0)) {
+            setError('El consecutivo inicial debe ser un número mayor o igual a 0.');
+            setIsSaving(false);
+            return;
+        }
+
         const data: Record<string, unknown> = {
             name: formData.get('name'),
             email: formData.get('email'),
             role: formData.get('role'),
             nomenclature: (formData.get('nomenclature') as string).toUpperCase(),
             isActive: formData.get('isActive') === 'true',
+            ...(parsedCounterStart !== undefined ? { proposalCounterStart: parsedCounterStart } : {}),
         };
         if (passwordValue.length > 0) {
             data.password = passwordValue;
@@ -451,8 +463,21 @@ export default function Users() {
                                 </div>
                             </div>
 
-                            <div className="mt-4 px-1 py-2 text-xs text-gray-400">
-                                Consecutivo inicial: <span className="font-mono font-semibold text-gray-500">{editingUser.proposalCounterStart}</span> (no editable)
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-sm font-medium text-gray-700 ml-1">Consecutivo Inicial de Cotizaciones</label>
+                                <div className="relative group max-w-xs">
+                                    <input
+                                        type="number"
+                                        name="proposalCounterStart"
+                                        min={0}
+                                        max={99999}
+                                        defaultValue={editingUser.proposalCounterStart}
+                                        className="block w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-novo-primary/20 focus:border-novo-primary transition-all"
+                                    />
+                                </div>
+                                <p className="text-xs text-amber-600 ml-1">
+                                    ⚠️ Modificar este valor afecta la numeración futura de propuestas. No puede ser menor o igual al último número emitido.
+                                </p>
                             </div>
 
                             <div className="mt-6 flex items-center space-x-3">

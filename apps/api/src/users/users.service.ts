@@ -83,20 +83,43 @@ export class UsersService {
             }
         }
 
-        // 4. Construir data del update
+        // 4. Validar proposalCounterStart contra \u00FAltimo emitido
+        if (dto.proposalCounterStart !== undefined) {
+            const proposals = await this.prisma.proposal.findMany({
+                where: { userId: targetUserId },
+                select: { proposalCode: true },
+            });
+            const sequentialRegex = /(\d+)-\d+$/;
+            const emittedNumbers = proposals
+                .map((p) => p.proposalCode)
+                .filter((code): code is string => code !== null)
+                .map((code) => {
+                    const match = code.match(sequentialRegex);
+                    return match ? parseInt(match[1], 10) : 0;
+                });
+            const maxEmitted = Math.max(0, ...emittedNumbers);
+            if (dto.proposalCounterStart <= maxEmitted) {
+                throw new BadRequestException(
+                    `El consecutivo inicial debe ser mayor a ${maxEmitted} (\u00FAltimo n\u00FAmero emitido por el usuario).`,
+                );
+            }
+        }
+
+        // 5. Construir data del update
         const data: Prisma.UserUpdateInput = {};
         if (dto.name !== undefined) data.name = dto.name;
         if (dto.email !== undefined) data.email = dto.email;
         if (dto.nomenclature !== undefined) data.nomenclature = dto.nomenclature;
         if (dto.role !== undefined) data.role = dto.role;
         if (dto.isActive !== undefined) data.isActive = dto.isActive;
+        if (dto.proposalCounterStart !== undefined) data.proposalCounterStart = dto.proposalCounterStart;
 
-        // 5. Password: solo si viene válido
+        // 6. Password: solo si viene v\u00E1lido
         if (dto.password && dto.password.trim().length > 0) {
             data.passwordHash = await bcrypt.hash(dto.password, 10);
         }
 
-        // 6. Ejecutar update SIN retornar passwordHash
+        // 7. Ejecutar update SIN retornar passwordHash
         return this.prisma.user.update({
             where: { id: targetUserId },
             data,
@@ -125,6 +148,7 @@ export class UsersService {
                 nomenclature: true,
                 signatureUrl: true,
                 isActive: true,
+                proposalCounterStart: true,
                 createdAt: true,
             },
             orderBy: {
