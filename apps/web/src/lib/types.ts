@@ -217,3 +217,17 @@ export interface BillingProjection {
     user?: { name: string; nomenclature: string };
 }
 
+// ──────────────────────────────────────────────────────────
+// Validación de consecutivo manual
+// ──────────────────────────────────────────────────────────
+
+/** Respuesta del endpoint GET /proposals/validate-manual. */
+export type ManualConsecutiveValidation =
+    | { ok: true }
+    | {
+          ok: false;
+          reason: 'OUT_OF_RANGE' | 'GTE_AUTO' | 'TAKEN';
+          conflict?: string;
+          suggestion: number | null;
+      };
+
