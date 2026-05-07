@@ -13,6 +13,7 @@ interface PageEditorProps {
     page: ProposalPage;
     editingTitle: string | null;
     setEditingTitle: (v: string | null) => void;
+    isReadOnly: boolean;
     onUpdatePage: (pageId: string, data: { title?: string }) => void;
     onCreateBlock: (pageId: string, blockType: 'RICH_TEXT' | 'IMAGE') => Promise<PageBlock | null>;
     onUpdateBlock: (blockId: string, content: Record<string, unknown>) => void;
@@ -27,7 +28,7 @@ interface PageEditorProps {
 
 function PageEditor({
     page, editingTitle, setEditingTitle,
-    onUpdatePage, onUpdateBlock, onDeleteBlock,
+    isReadOnly, onUpdatePage, onUpdateBlock, onDeleteBlock,
     onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage,
     proposalVars,
 }: PageEditorProps) {
@@ -48,6 +49,7 @@ function PageEditor({
                                 <input
                                     type="text"
                                     value={editingTitle}
+                                    disabled={isReadOnly}
                                     onChange={(e) => setEditingTitle(e.target.value)}
                                     onBlur={() => {
                                         if (editingTitle.trim() && editingTitle.trim() !== page.title) {
@@ -60,17 +62,19 @@ function PageEditor({
                                         if (e.key === 'Escape') setEditingTitle(null);
                                     }}
                                     autoFocus
-                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none w-full max-w-md"
+                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none w-full max-w-md disabled:opacity-60 disabled:cursor-not-allowed"
                                 />
                             ) : (
                                 <button
-                                    onClick={() => setEditingTitle(page.title || '')}
+                                    onClick={() => { if (!isReadOnly) setEditingTitle(page.title || ''); }}
                                     className="group/name flex items-center space-x-2 hover:bg-indigo-50 rounded-xl px-3 py-1 -mx-3 -my-1 transition-colors"
                                 >
                                     <h4 className="text-xl font-black text-slate-900 tracking-tight">
                                         {page.title || PAGE_TYPE_LABELS[page.pageType]}
                                     </h4>
-                                    <Pencil className="h-3.5 w-3.5 text-slate-300 group-hover/name:text-indigo-500 transition-colors" />
+                                    {!isReadOnly && (
+                                        <Pencil className="h-3.5 w-3.5 text-slate-300 group-hover/name:text-indigo-500 transition-colors" />
+                                    )}
                                 </button>
                             )}
                             <div className="flex items-center space-x-2 mt-1">
@@ -90,22 +94,24 @@ function PageEditor({
                     </div>
 
                     {/* Add block buttons */}
-                    <div className="flex items-center space-x-3">
-                        <button
-                            onClick={onAddTextBlock}
-                            className="flex items-center space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
-                        >
-                            <Type className="h-4 w-4" />
-                            <span>Agregar Texto</span>
-                        </button>
-                        <button
-                            onClick={onAddImageBlock}
-                            className="flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
-                        >
-                            <ImagePlus className="h-4 w-4" />
-                            <span>Agregar Imagen</span>
-                        </button>
-                    </div>
+                    {!isReadOnly && (
+                        <div className="flex items-center space-x-3">
+                            <button
+                                onClick={onAddTextBlock}
+                                className="flex items-center space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                            >
+                                <Type className="h-4 w-4" />
+                                <span>Agregar Texto</span>
+                            </button>
+                            <button
+                                onClick={onAddImageBlock}
+                                className="flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-5 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest"
+                            >
+                                <ImagePlus className="h-4 w-4" />
+                                <span>Agregar Imagen</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -147,6 +153,7 @@ function PageEditor({
                                     index={idx}
                                     totalBlocks={page.blocks.length}
                                     pageId={page.id}
+                                    isReadOnly={isReadOnly}
                                     onUpdate={onUpdateBlock}
                                     onDelete={() => onDeleteBlock(page.id, block.id)}
                                     onUploadImage={() => onUploadImageForBlock(block.id)}

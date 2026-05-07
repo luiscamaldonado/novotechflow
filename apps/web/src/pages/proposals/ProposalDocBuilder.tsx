@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useProposalPages, type ProposalPage } from '../../hooks/useProposalPages';
+import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
+import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
 import { useProposalScenarios } from '../../hooks/useProposalScenarios';
 import { useAuthStore } from '../../store/authStore';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
@@ -37,6 +39,7 @@ export default function ProposalDocBuilder() {
 
     const { processedScenarios } = useProposalScenarios(id);
 
+
     const movePage = (index: number, direction: 'up' | 'down') => {
         const newIndex = direction === 'up' ? index - 1 : index + 1;
         if (newIndex < 0 || newIndex >= pages.length) return;
@@ -58,6 +61,8 @@ export default function ProposalDocBuilder() {
     const [selectedCity, setSelectedCity] = useState<string>('Bogotá D.C.');
     const [savedCity, setSavedCity] = useState<string>('Bogotá D.C.');
     const [savingCity, setSavingCity] = useState<boolean>(false);
+
+    const { isReadOnly } = useProposalReadOnly(proposal);
 
     useEffect(() => {
         if (!id) return;
@@ -196,6 +201,8 @@ export default function ProposalDocBuilder() {
 
             <ProposalStepper proposalId={id!} currentStep={3} />
 
+            {isReadOnly && <ReadOnlyBanner />}
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
@@ -225,8 +232,8 @@ export default function ProposalDocBuilder() {
                         <MapPin className="h-4 w-4 text-indigo-600" />
                     </div>
                     <div className="flex items-center gap-2">
-                        <CityCombobox value={selectedCity} onChange={setSelectedCity} />
-                        {selectedCity !== savedCity && (
+                        <CityCombobox value={selectedCity} onChange={setSelectedCity} disabled={isReadOnly} />
+                        {!isReadOnly && selectedCity !== savedCity && (
                             <button
                                 type="button"
                                 onClick={handleSaveCity}
@@ -282,13 +289,15 @@ export default function ProposalDocBuilder() {
                     <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Páginas</h3>
-                            <button
-                                onClick={() => setIsCreatingPage(true)}
-                                className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all scale-90"
-                                title="Agregar página personalizada"
-                            >
-                                <Plus className="h-4 w-4" />
-                            </button>
+                            {!isReadOnly && (
+                                <button
+                                    onClick={() => setIsCreatingPage(true)}
+                                    className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all scale-90"
+                                    title="Agregar página personalizada"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </button>
+                            )}
                         </div>
 
                         <div className="space-y-2">
@@ -334,31 +343,33 @@ export default function ProposalDocBuilder() {
                                                 </div>
                                             </div>
                                             <div className="flex items-center shrink-0 gap-0.5">
-                                                <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); movePage(idx, 'up'); }}
-                                                        disabled={idx === 0}
-                                                        className={cn(
-                                                            "p-0.5 rounded transition-colors disabled:opacity-30",
-                                                            isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                                                        )}
-                                                        title="Subir"
-                                                    >
-                                                        <ChevronUp className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); movePage(idx, 'down'); }}
-                                                        disabled={idx === pages.length - 1}
-                                                        className={cn(
-                                                            "p-0.5 rounded transition-colors disabled:opacity-30",
-                                                            isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                                                        )}
-                                                        title="Bajar"
-                                                    >
-                                                        <ChevronDown className="h-3.5 w-3.5" />
-                                                    </button>
-                                                </div>
-                                                {!page.isLocked && (
+                                                {!isReadOnly && (
+                                                    <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); movePage(idx, 'up'); }}
+                                                            disabled={idx === 0}
+                                                            className={cn(
+                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                            )}
+                                                            title="Subir"
+                                                        >
+                                                            <ChevronUp className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); movePage(idx, 'down'); }}
+                                                            disabled={idx === pages.length - 1}
+                                                            className={cn(
+                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                            )}
+                                                            title="Bajar"
+                                                        >
+                                                            <ChevronDown className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {!page.isLocked && !isReadOnly && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
                                                         className={cn(
@@ -463,7 +474,7 @@ export default function ProposalDocBuilder() {
                                 })}
                             </AnimatePresence>
 
-                            {isCreatingPage && (
+                            {!isReadOnly && isCreatingPage && (
                                 <motion.form
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
@@ -530,6 +541,7 @@ export default function ProposalDocBuilder() {
                                 page={activePage}
                                 editingTitle={editingTitle}
                                 setEditingTitle={setEditingTitle}
+                                isReadOnly={isReadOnly}
                                 onUpdatePage={updatePage}
                                 onCreateBlock={createBlock}
                                 onUpdateBlock={updateBlock}

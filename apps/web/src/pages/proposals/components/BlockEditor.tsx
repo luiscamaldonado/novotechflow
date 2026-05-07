@@ -11,6 +11,7 @@ interface BlockEditorProps {
     index: number;
     totalBlocks: number;
     pageId: string;
+    isReadOnly: boolean;
     onUpdate: (blockId: string, content: Record<string, unknown>) => void;
     onDelete: () => void;
     onUploadImage: () => void;
@@ -18,7 +19,7 @@ interface BlockEditorProps {
     proposalVars: ProposalVariables;
 }
 
-function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImage, proposalVars }: BlockEditorProps) {
+function BlockEditor({ block, index, totalBlocks, isReadOnly, onUpdate, onDelete, uploadImage, proposalVars }: BlockEditorProps) {
     const [captionBuffer, setCaptionBuffer] = useState(
         (block.content as Record<string, string>)?.caption || ''
     );
@@ -60,7 +61,7 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
                     <span className="text-[10px] text-slate-400 font-bold">Bloque {index + 1} de {totalBlocks}</span>
                 </div>
                 <div className="flex items-center space-x-1">
-                    {isImage && (
+                    {!isReadOnly && isImage && (
                         <>
                             <input ref={blockFileRef} type="file" accept={ACCEPT_IMAGES} className="hidden" onChange={handleInlineUpload} />
                             <button
@@ -72,13 +73,15 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
                             </button>
                         </>
                     )}
-                    <button
-                        onClick={onDelete}
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        title="Eliminar bloque"
-                    >
-                        <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {!isReadOnly && (
+                        <button
+                            onClick={onDelete}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            title="Eliminar bloque"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -96,8 +99,9 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
                             </div>
                         ) : (
                             <button
-                                onClick={() => blockFileRef.current?.click()}
-                                className="w-full py-16 border-2 border-dashed border-slate-200 rounded-2xl text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-all"
+                                onClick={() => { if (!isReadOnly) blockFileRef.current?.click(); }}
+                                disabled={isReadOnly}
+                                className="w-full py-16 border-2 border-dashed border-slate-200 rounded-2xl text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 <ImagePlus className="h-12 w-12 mx-auto text-slate-300 mb-3" />
                                 <p className="text-sm font-bold text-slate-400">Click para subir una imagen</p>
@@ -108,6 +112,7 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
                         <input
                             type="text"
                             value={captionBuffer}
+                            disabled={isReadOnly}
                             onChange={(e) => setCaptionBuffer(e.target.value)}
                             onBlur={() => {
                                 if (captionBuffer !== (block.content as Record<string, string>)?.caption) {
@@ -115,13 +120,14 @@ function BlockEditor({ block, index, totalBlocks, onUpdate, onDelete, uploadImag
                                 }
                             }}
                             placeholder="Agregar descripción de la imagen..."
-                            className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:border-indigo-200 focus:ring-0"
+                            className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-medium text-slate-700 placeholder:text-slate-300 focus:border-indigo-200 focus:ring-0 disabled:opacity-60 disabled:cursor-not-allowed"
                         />
                     </div>
                 ) : (
                     <RichTextEditor
                         content={block.content as Record<string, unknown> | null}
                         onUpdate={(content) => onUpdate(block.id, content)}
+                        readOnly={isReadOnly}
                         proposalVars={proposalVars}
                     />
                 )}

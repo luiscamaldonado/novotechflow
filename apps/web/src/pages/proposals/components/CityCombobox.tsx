@@ -4,7 +4,13 @@ import { ChevronDown } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { COLOMBIAN_CAPITAL_CITIES } from '../../../lib/colombianCities';
 
-function CityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+interface CityComboboxProps {
+    value: string;
+    onChange: (v: string) => void;
+    disabled?: boolean;
+}
+
+function CityCombobox({ value, onChange, disabled = false }: CityComboboxProps) {
     const [query, setQuery] = useState(value);
     const [open, setOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -47,26 +53,29 @@ function CityCombobox({ value, onChange }: { value: string; onChange: (v: string
                     id="city-selector"
                     type="text"
                     value={query}
-                    onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-                    onFocus={() => setOpen(true)}
+                    disabled={disabled}
+                    onChange={(e) => { setQuery(e.target.value); if (!disabled) setOpen(true); }}
+                    onFocus={() => { if (!disabled) setOpen(true); }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') { setOpen(false); setQuery(value); }
-                        if (e.key === 'Enter' && filtered.length > 0) {
+                        if (e.key === 'Enter' && !disabled && filtered.length > 0) {
                             e.preventDefault();
                             handleSelect(filtered[0]);
                         }
                     }}
                     placeholder="Buscar ciudad..."
-                    className="bg-transparent border-none text-sm font-bold text-slate-800 focus:ring-0 p-0 w-44 placeholder:text-slate-300 placeholder:font-normal"
+                    className="bg-transparent border-none text-sm font-bold text-slate-800 focus:ring-0 p-0 w-44 placeholder:text-slate-300 placeholder:font-normal disabled:opacity-60 disabled:cursor-not-allowed"
                     autoComplete="off"
                 />
-                <button
-                    type="button"
-                    onClick={() => setOpen(!open)}
-                    className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors"
-                >
-                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-                </button>
+                {!disabled && (
+                    <button
+                        type="button"
+                        onClick={() => setOpen(!open)}
+                        className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                    >
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+                    </button>
+                )}
             </div>
 
             <AnimatePresence>
