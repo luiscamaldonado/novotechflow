@@ -9,6 +9,7 @@ import {
     CreateProposalItemDto,
     UpdateProposalItemDto,
 } from './dto/proposals.dto';
+import { assertProposalNotLocked } from './proposals-lock.helper';
 
 
 /** Resultado de la validación de un consecutivo manual. */
@@ -320,7 +321,8 @@ export class ProposalsService {
    * @param {any} data - Nuevos datos (asunto, fechas, etc).
    */
   async updateProposal(id: string, data: UpdateProposalDto, user: AuthenticatedUser) {
-    await this.verifyProposalOwnership(id, user);
+    const proposal = await this.verifyProposalOwnership(id, user);
+    assertProposalNotLocked(proposal);
     return this.prisma.proposal.update({
       where: { id },
       data: {
@@ -343,7 +345,8 @@ export class ProposalsService {
    * Gestiona el correlativo de orden (sortOrder) automáticamente.
    */
   async addProposalItem(proposalId: string, data: CreateProposalItemDto, user: AuthenticatedUser) {
-    await this.verifyProposalOwnership(proposalId, user);
+    const proposal = await this.verifyProposalOwnership(proposalId, user);
+    assertProposalNotLocked(proposal);
     const aggregate = await this.prisma.proposalItem.aggregate({
       where: { proposalId },
       _max: { sortOrder: true }
@@ -379,7 +382,8 @@ export class ProposalsService {
   async removeProposalItem(itemId: string, user: AuthenticatedUser) {
     const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
     if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
-    await this.verifyProposalOwnership(item.proposalId, user);
+    const proposal = await this.verifyProposalOwnership(item.proposalId, user);
+    assertProposalNotLocked(proposal);
     return this.prisma.proposalItem.delete({
       where: { id: itemId }
     });
@@ -391,7 +395,8 @@ export class ProposalsService {
   async updateProposalItem(itemId: string, data: UpdateProposalItemDto, user: AuthenticatedUser) {
     const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
     if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
-    await this.verifyProposalOwnership(item.proposalId, user);
+    const proposal = await this.verifyProposalOwnership(item.proposalId, user);
+    assertProposalNotLocked(proposal);
     return this.prisma.proposalItem.update({
       where: { id: itemId },
       data: {
@@ -466,116 +471,126 @@ export class ProposalsService {
 
     if (!original) throw new NotFoundException('Propuesta no encontrada.');
 
-    let newCode: string;
+    return this.prisma.$transaction(async (tx) => {
+      let newCode: string;
 
-    if (cloneType === 'NEW_VERSION') {
-      // Increment version: COT-LM0001-1 → COT-LM0001-2
-      const baseParts = original.proposalCode?.match(/^(.+)-(\d+)$/);
-      if (baseParts) {
-        const nextVersion = parseInt(baseParts[2], 10) + 1;
-        newCode = `${baseParts[1]}-${nextVersion}`;
+      if (cloneType === 'NEW_VERSION') {
+        const groupPrefix = this.extractVersionGroupPrefix(original.proposalCode);
+
+        if (groupPrefix) {
+          const groupCodes = await tx.proposal.findMany({
+            where: { proposalCode: { startsWith: groupPrefix } },
+            select: { proposalCode: true },
+          });
+          const maxVersion = this.calculateMaxVersion(groupCodes, groupPrefix);
+          newCode = `${groupPrefix}${maxVersion + 1}`;
+
+          await tx.proposal.updateMany({
+            where: { proposalCode: { startsWith: groupPrefix } },
+            data: { isLocked: true },
+          });
+        } else {
+          newCode = `${original.proposalCode}-2`;
+        }
       } else {
-        newCode = `${original.proposalCode}-2`;
+        const cloneUser = await this.validateUserAccess(userId);
+        newCode = await this.generateProposalCode(cloneUser.nomenclature, userId);
       }
-    } else {
-      // NEW_PROPOSAL: Generate new sequential code
-      const user = await this.validateUserAccess(userId);
-      newCode = await this.generateProposalCode(user.nomenclature, userId);
-    }
 
-    // Determinar consecutiveSource según el tipo de clonación
-    const clonedConsecutiveSource = cloneType === 'NEW_VERSION'
-      ? original.consecutiveSource
-      : ConsecutiveSource.AUTO;
+      const clonedConsecutiveSource = cloneType === 'NEW_VERSION'
+        ? original.consecutiveSource
+        : ConsecutiveSource.AUTO;
 
-    const cloned = await this.prisma.proposal.create({
-      data: {
-        proposalCode: newCode,
-        consecutiveSource: clonedConsecutiveSource,
-        userId,
-        clientId: original.clientId,
-        clientName: original.clientName,
-        subject: original.subject,
-        issueDate: new Date(),
-        validityDays: original.validityDays,
-        validityDate: original.validityDate,
-        status: ProposalStatus.ELABORACION,
-      },
+      const cloned = await tx.proposal.create({
+        data: {
+          proposalCode: newCode,
+          consecutiveSource: clonedConsecutiveSource,
+          userId,
+          clientId: original.clientId,
+          clientName: original.clientName,
+          subject: original.subject,
+          issueDate: new Date(),
+          validityDays: original.validityDays,
+          validityDate: original.validityDate,
+          status: ProposalStatus.ELABORACION,
+          isLocked: false,
+        },
+      });
+
+      // Clone proposal items, mapping old IDs to new IDs
+      const itemIdMap = new Map<string, string>();
+      for (const item of original.proposalItems) {
+        const newItem = await tx.proposalItem.create({
+          data: {
+            proposalId: cloned.id,
+            itemType: item.itemType,
+            name: item.name,
+            description: item.description,
+            brand: item.brand,
+            partNumber: item.partNumber,
+            quantity: item.quantity,
+            unitCost: item.unitCost,
+            costCurrency: item.costCurrency,
+            deliveryDays: item.deliveryDays,
+            marginPct: item.marginPct,
+            unitPrice: item.unitPrice,
+            isTaxable: item.isTaxable,
+            technicalSpecs: item.technicalSpecs as object | undefined,
+            internalCosts: item.internalCosts as object | undefined,
+            sortOrder: item.sortOrder,
+          },
+        });
+        itemIdMap.set(item.id, newItem.id);
+      }
+
+      // Clone scenarios with items
+      for (const scenario of original.scenarios) {
+        const newScenario = await tx.scenario.create({
+          data: {
+            proposalId: cloned.id,
+            name: scenario.name,
+            currency: scenario.currency,
+            description: scenario.description,
+            sortOrder: scenario.sortOrder,
+          },
+        });
+
+        // Clone root scenario items (parentId = null)
+        const rootItems = scenario.scenarioItems.filter(si => !si.parentId);
+        const scenarioItemIdMap = new Map<string, string>();
+
+        for (const si of rootItems) {
+          const newItemId = itemIdMap.get(si.itemId) || si.itemId;
+          const newSi = await tx.scenarioItem.create({
+            data: {
+              scenarioId: newScenario.id,
+              itemId: newItemId,
+              quantity: si.quantity,
+              marginPctOverride: si.marginPctOverride,
+            },
+          });
+          scenarioItemIdMap.set(si.id, newSi.id);
+        }
+
+        // Clone child scenario items
+        const childItems = scenario.scenarioItems.filter(si => si.parentId);
+        for (const child of childItems) {
+          const newParentId = scenarioItemIdMap.get(child.parentId!) || child.parentId;
+          const newItemId = itemIdMap.get(child.itemId) || child.itemId;
+          await tx.scenarioItem.create({
+            data: {
+              scenarioId: newScenario.id,
+              itemId: newItemId,
+              parentId: newParentId,
+              quantity: child.quantity,
+              marginPctOverride: child.marginPctOverride,
+            },
+          });
+        }
+      }
+
+      return cloned;
     });
-
-    // Clone proposal items, mapping old IDs to new IDs
-    const itemIdMap = new Map<string, string>();
-    for (const item of original.proposalItems) {
-      const newItem = await this.prisma.proposalItem.create({
-        data: {
-          proposalId: cloned.id,
-          itemType: item.itemType,
-          name: item.name,
-          description: item.description,
-          brand: item.brand,
-          partNumber: item.partNumber,
-          quantity: item.quantity,
-          unitCost: item.unitCost,
-          costCurrency: item.costCurrency,
-          deliveryDays: item.deliveryDays,
-          marginPct: item.marginPct,
-          unitPrice: item.unitPrice,
-          isTaxable: item.isTaxable,
-          technicalSpecs: item.technicalSpecs as object | undefined,
-          internalCosts: item.internalCosts as object | undefined,
-          sortOrder: item.sortOrder,
-        },
-      });
-      itemIdMap.set(item.id, newItem.id);
-    }
-
-    // Clone scenarios with items
-    for (const scenario of original.scenarios) {
-      const newScenario = await this.prisma.scenario.create({
-        data: {
-          proposalId: cloned.id,
-          name: scenario.name,
-          currency: scenario.currency,
-          description: scenario.description,
-          sortOrder: scenario.sortOrder,
-        },
-      });
-
-      // Clone root scenario items (parentId = null)
-      const rootItems = scenario.scenarioItems.filter(si => !si.parentId);
-      const scenarioItemIdMap = new Map<string, string>();
-
-      for (const si of rootItems) {
-        const newItemId = itemIdMap.get(si.itemId) || si.itemId;
-        const newSi = await this.prisma.scenarioItem.create({
-          data: {
-            scenarioId: newScenario.id,
-            itemId: newItemId,
-            quantity: si.quantity,
-            marginPctOverride: si.marginPctOverride,
-          },
-        });
-        scenarioItemIdMap.set(si.id, newSi.id);
-      }
-
-      // Clone child scenario items
-      const childItems = scenario.scenarioItems.filter(si => si.parentId);
-      for (const child of childItems) {
-        const newParentId = scenarioItemIdMap.get(child.parentId!) || child.parentId;
-        const newItemId = itemIdMap.get(child.itemId) || child.itemId;
-        await this.prisma.scenarioItem.create({
-          data: {
-            scenarioId: newScenario.id,
-            itemId: newItemId,
-            parentId: newParentId,
-            quantity: child.quantity,
-            marginPctOverride: child.marginPctOverride,
-          },
-        });
-      }
-    }
-
-    return cloned;
   }
 
   /**
@@ -585,7 +600,36 @@ export class ProposalsService {
    * SyncedFiles se desvinculan (onDelete: SetNull).
    */
   async deleteProposal(id: string, user: AuthenticatedUser) {
-    await this.verifyProposalOwnership(id, user);
+    const proposal = await this.verifyProposalOwnership(id, user);
+    assertProposalNotLocked(proposal);
     return this.prisma.proposal.delete({ where: { id } });
+  }
+
+  /**
+   * Extrae el prefijo del grupo de versiones de un proposalCode.
+   * Ej: 'COT-LMA05001-3' → 'COT-LMA05001-'
+   */
+  private extractVersionGroupPrefix(proposalCode: string | null): string | null {
+    if (!proposalCode) return null;
+    const lastDashIndex = proposalCode.lastIndexOf('-');
+    if (lastDashIndex === -1) return null;
+    const suffix = proposalCode.substring(lastDashIndex + 1);
+    if (!/^\d+$/.test(suffix)) return null;
+    return proposalCode.substring(0, lastDashIndex + 1);
+  }
+
+  /**
+   * Calcula la versión máxima dentro de un grupo de propuestas.
+   */
+  private calculateMaxVersion(
+    groupCodes: { proposalCode: string | null }[],
+    groupPrefix: string,
+  ): number {
+    return groupCodes.reduce((max, row) => {
+      if (!row.proposalCode) return max;
+      const suffix = row.proposalCode.substring(groupPrefix.length);
+      const version = parseInt(suffix, 10);
+      return Number.isNaN(version) ? max : Math.max(max, version);
+    }, 0);
   }
 }

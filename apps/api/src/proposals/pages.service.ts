@@ -4,6 +4,7 @@ import { ProposalsService } from './proposals.service';
 import { BlockType, PageType } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizeRichText } from '../common/sanitize';
+import { assertProposalNotLocked } from './proposals-lock.helper';
 import {
     CreatePageDto,
     UpdatePageDto,
@@ -28,7 +29,8 @@ export class PagesService {
   private async verifyPageOwnership(pageId: string, user: AuthenticatedUser) {
     const page = await this.prisma.proposalPage.findUnique({ where: { id: pageId } });
     if (!page) throw new NotFoundException('P\u00e1gina no encontrada.');
-    await this.proposalsService.verifyProposalOwnership(page.proposalId, user);
+    const proposal = await this.proposalsService.verifyProposalOwnership(page.proposalId, user);
+    assertProposalNotLocked(proposal);
     return page;
   }
 
@@ -39,7 +41,8 @@ export class PagesService {
    * Agrega la firma del comercial a la página de presentación.
    */
   async initializeDefaultPages(proposalId: string, user: AuthenticatedUser) {
-    await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    const proposalOwner = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    assertProposalNotLocked(proposalOwner);
     // Check for ANY existing pages to prevent re-initialization
     const existingCount = await this.prisma.proposalPage.count({
       where: { proposalId },
@@ -148,7 +151,8 @@ export class PagesService {
    * Crea una página personalizada.
    */
   async createCustomPage(proposalId: string, data: CreatePageDto, user: AuthenticatedUser) {
-    await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    const proposal = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    assertProposalNotLocked(proposal);
     // Insert before TERMS (sortOrder 1000) but after everything else
     const aggregate = await this.prisma.proposalPage.aggregate({
       where: { proposalId, pageType: { not: 'TERMS' } },
@@ -198,7 +202,8 @@ export class PagesService {
    * Reordena las páginas respetando las posiciones fijas de predeterminadas.
    */
   async reorderPages(proposalId: string, data: ReorderPagesDto, user: AuthenticatedUser) {
-    await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    const proposal = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    assertProposalNotLocked(proposal);
     await this.prisma.$transaction(
       data.pageIds.map((id, index) =>
         this.prisma.proposalPage.update({

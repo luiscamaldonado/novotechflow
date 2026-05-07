@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProposalsService } from './proposals.service';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
+import { assertProposalNotLocked } from './proposals-lock.helper';
 import {
     CreateScenarioDto,
     UpdateScenarioDto,
@@ -25,7 +26,8 @@ export class ScenariosService {
   private async verifyScenarioOwnership(scenarioId: string, user: AuthenticatedUser) {
     const scenario = await this.prisma.scenario.findUnique({ where: { id: scenarioId } });
     if (!scenario) throw new NotFoundException('Escenario no encontrado.');
-    await this.proposalsService.verifyProposalOwnership(scenario.proposalId, user);
+    const proposal = await this.proposalsService.verifyProposalOwnership(scenario.proposalId, user);
+    assertProposalNotLocked(proposal);
     return scenario;
   }
 
@@ -55,7 +57,8 @@ export class ScenariosService {
    * Crea un nuevo escenario para una propuesta.
    */
   async createScenario(proposalId: string, data: CreateScenarioDto, user: AuthenticatedUser) {
-    await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    const proposal = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    assertProposalNotLocked(proposal);
     const aggregate = await this.prisma.scenario.aggregate({
       where: { proposalId },
       _max: { sortOrder: true }
