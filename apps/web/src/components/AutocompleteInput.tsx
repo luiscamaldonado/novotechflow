@@ -29,6 +29,8 @@ interface AutocompleteInputProps {
     minChars?: number;
     /** Debounce delay in ms (default 300) */
     debounceMs?: number;
+    /** If true, the input is disabled and suggestions are suppressed */
+    disabled?: boolean;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -60,6 +62,7 @@ export default function AutocompleteInput({
     className,
     minChars = DEFAULT_MIN_CHARS,
     debounceMs = DEFAULT_DEBOUNCE_MS,
+    disabled = false,
 }: AutocompleteInputProps) {
     const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -153,6 +156,7 @@ export default function AutocompleteInput({
                 onFocus={handleFocus}
                 placeholder={placeholder}
                 autoComplete="off"
+                disabled={disabled}
                 className={className}
             />
             {isOpen && suggestions.length > 0 && (

@@ -14,6 +14,8 @@ import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
+import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
+import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
 
 export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -23,6 +25,8 @@ export default function ProposalItemsBuilder() {
         initialItemForm, saveItem, deleteItem, updateProposal,
         fetchSpecSuggestions,
     } = useProposalBuilder(id);
+
+    const { isReadOnly } = useProposalReadOnly(proposal);
 
     // UI state
     const [isAddingItem, setIsAddingItem] = useState(false);
@@ -205,6 +209,8 @@ export default function ProposalItemsBuilder() {
         <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
             <ProposalStepper proposalId={id!} currentStep={1} />
 
+            {isReadOnly && <ReadOnlyBanner />}
+
             {/* Header del Asistente */}
             <div className="flex items-center justify-between">
                 <div>
@@ -252,7 +258,8 @@ export default function ProposalItemsBuilder() {
                                 name="subject" 
                                 value={proposal.subject} 
                                 onChange={handleDateChange} 
-                                className="block w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 font-bold text-slate-700 min-h-[96px] resize-none leading-relaxed" 
+                                disabled={isReadOnly}
+                                className="block w-full px-5 py-4 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 font-bold text-slate-700 min-h-[96px] resize-none leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed" 
                                 placeholder="Especifique el asunto del requerimiento..."
                             />
                         </div>
@@ -262,34 +269,34 @@ export default function ProposalItemsBuilder() {
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                     <Calendar className="h-3 w-3 mr-1.5" /> Emisión
                                 </label>
-                                <input type="date" name="issueDate" value={proposal.issueDate} onChange={handleDateChange} className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px]" />
+                                <input type="date" name="issueDate" value={proposal.issueDate} onChange={handleDateChange} disabled={isReadOnly} className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px] disabled:opacity-60 disabled:cursor-not-allowed" />
                             </div>
                             <div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                     <Clock className="h-3 w-3 mr-1.5" /> Días Validez
                                 </label>
-                                <input type="number" name="validityDays" value={proposal.validityDays} onChange={handleDateChange} className="block w-full px-4 py-3 bg-indigo-50 border-none rounded-2xl text-sm text-center focus:ring-2 focus:ring-indigo-600/20 font-black text-indigo-600" />
+                                <input type="number" name="validityDays" value={proposal.validityDays} onChange={handleDateChange} disabled={isReadOnly} className="block w-full px-4 py-3 bg-indigo-50 border-none rounded-2xl text-sm text-center focus:ring-2 focus:ring-indigo-600/20 font-black text-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed" />
                             </div>
                             <div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                     <Calendar className="h-3 w-3 mr-1.5" /> Fecha Validez
                                 </label>
-                                <input type="date" name="validityDate" value={proposal.validityDate} onChange={handleDateChange} className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px]" />
+                                <input type="date" name="validityDate" value={proposal.validityDate} onChange={handleDateChange} disabled={isReadOnly} className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px] disabled:opacity-60 disabled:cursor-not-allowed" />
                             </div>
                             <div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                     <DollarSign className="h-3 w-3 mr-1.5" /> Monto Manual (USD)
                                 </label>
-                                <input type="number" step="0.01" min="0" name="manualAmount" value={proposal.manualAmount ?? ''} onChange={handleDateChange} placeholder="Opcional" className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px]" />
+                                <input type="number" step="0.01" min="0" name="manualAmount" value={proposal.manualAmount ?? ''} onChange={handleDateChange} disabled={isReadOnly} placeholder="Opcional" className="block w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-600/20 text-slate-700 font-black min-w-[150px] disabled:opacity-60 disabled:cursor-not-allowed" />
                             </div>
-                            <div className="space-y-2">
+                            {!isReadOnly && (<div className="space-y-2">
                                 <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-emerald-500">
                                     <Save className="h-3 w-3 mr-1.5" /> Acción
                                 </label>
                                 <button type="submit" disabled={saving} className="w-full flex justify-center items-center h-[46px] px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-lg shadow-indigo-200 text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50">
                                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "ACTUALIZAR"}
                                 </button>
-                            </div>
+                            </div>)}
                         </div>
                     </form>
                 </div>
@@ -321,16 +328,16 @@ export default function ProposalItemsBuilder() {
                                 </button>
                             ) : (
                                 <>
-                                    {(itemForm.name !== '' || editingItemId) && (
+                                    {!isReadOnly && (itemForm.name !== '' || editingItemId) && (
                                         <button onClick={() => setIsAddingItem(true)} className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 transition-colors px-6 py-4 font-black text-xs uppercase tracking-widest border-2 border-indigo-200 rounded-2xl bg-indigo-50 hover:bg-indigo-100 shadow-sm">
                                              <ChevronRight className="h-5 w-5 rotate-90" />
                                              <span>EXPANDIR</span>
                                         </button>
                                     )}
-                                    <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
+                                    {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
                                         <Plus className="h-5 w-5" />
                                         <span>NUEVO ITEM</span>
-                                    </button>
+                                    </button>}
                                 </>
                             )}
                         </div>
@@ -355,7 +362,7 @@ export default function ProposalItemsBuilder() {
                                         {/* Selector de Tipo */}
                                         <div className="md:col-span-3 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Elegible Categoría</label>
-                                            <select name="itemType" value={itemForm.itemType} onChange={handleItemChange} className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 appearance-none shadow-sm cursor-pointer hover:border-indigo-200 transition-colors">
+                                            <select name="itemType" value={itemForm.itemType} onChange={handleItemChange} disabled={isReadOnly} className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 appearance-none shadow-sm cursor-pointer hover:border-indigo-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
                                                 {Object.entries(ITEM_TYPE_LABELS).map(([key, label]) => (
                                                     <option key={key} value={key}>{label}</option>
                                                 ))}
@@ -365,7 +372,7 @@ export default function ProposalItemsBuilder() {
                                         {/* Nombre del Item */}
                                         <div className="md:col-span-7 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nombre de Item</label>
-                                            <input type="text" name="name" value={itemForm.name} onChange={handleItemChange} required placeholder="Ej. Laptops Dell Vostro 3400..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all" />
+                                            <input type="text" name="name" value={itemForm.name} onChange={handleItemChange} required disabled={isReadOnly} placeholder="Ej. Laptops Dell Vostro 3400..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
                                         </div>
 
                                         {/* SECCIÓN DE ESPECIFICACIONES TÉCNICAS (data-driven) */}
@@ -375,6 +382,7 @@ export default function ProposalItemsBuilder() {
                                             onChange={handleItemChange}
                                             onSelectSuggestion={selectSuggestion}
                                             fetchSuggestions={fetchSpecSuggestions}
+                                            isReadOnly={isReadOnly}
                                         />
 
                                         {/* Tiempo de Entrega */}
@@ -394,21 +402,22 @@ export default function ProposalItemsBuilder() {
                                                 min={0}
                                                 step={1}
                                                 placeholder="Ej: 30"
-                                                className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all"
+                                                disabled={isReadOnly}
+                                                className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                             />
                                         </div>
 
                                         {/* Descripción General */}
                                         <div className="md:col-span-12 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Notas Técnicas Complementarias</label>
-                                            <textarea name="description" value={itemForm.description} onChange={handleItemChange} rows={3} placeholder="Ingrese detalles específicos no contemplados en la ficha técnica..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-medium text-slate-700 resize-none shadow-sm transition-all" />
+                                            <textarea name="description" value={itemForm.description} onChange={handleItemChange} rows={3} disabled={isReadOnly} placeholder="Ingrese detalles específicos no contemplados en la ficha técnica..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-medium text-slate-700 resize-none shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
                                         </div>
 
                                         {/* Estructura Comercial */}
                                         <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl">
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Origen (Prov)</label>
-                                                <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none">
+                                                <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} disabled={isReadOnly} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none disabled:opacity-60 disabled:cursor-not-allowed">
                                                     <option value="MAYORISTA">MAYORISTA</option>
                                                     <option value="FABRICANTE">FABRICANTE</option>
                                                     <option value="NOVOTECHNO">NOVOTECHNO</option>
@@ -417,16 +426,17 @@ export default function ProposalItemsBuilder() {
                                             </div>
                                             <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Flete (%)</label>
-                                                <input type="text" inputMode="decimal" name="internal.fletePct" value={itemForm.internalCosts?.fletePct !== undefined ? itemForm.internalCosts.fletePct : 1.5} onChange={handleItemChange} required className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 text-center focus:ring-2 focus:ring-slate-700" />
+                                                <input type="text" inputMode="decimal" name="internal.fletePct" value={itemForm.internalCosts?.fletePct !== undefined ? itemForm.internalCosts.fletePct : 1.5} onChange={handleItemChange} required disabled={isReadOnly} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 text-center focus:ring-2 focus:ring-slate-700 disabled:opacity-60 disabled:cursor-not-allowed" />
                                             </div>
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest ml-1">Costo Unitario ($)</label>
                                                 <div className="flex items-stretch gap-0">
-                                                    <input type="text" inputMode="decimal" name="unitCost" value={itemForm.unitCost !== undefined ? itemForm.unitCost : ''} onChange={handleItemChange} required className="flex-1 min-w-0 px-5 py-4 rounded-l-2xl bg-slate-800 border-none text-sm font-black text-emerald-400 text-right focus:ring-2 focus:ring-emerald-500/20" />
+                                                    <input type="text" inputMode="decimal" name="unitCost" value={itemForm.unitCost !== undefined ? itemForm.unitCost : ''} onChange={handleItemChange} required disabled={isReadOnly} className="flex-1 min-w-0 px-5 py-4 rounded-l-2xl bg-slate-800 border-none text-sm font-black text-emerald-400 text-right focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-60 disabled:cursor-not-allowed" />
                                                     <div className="flex flex-col">
                                                         <button
                                                             type="button"
                                                             onClick={() => setItemForm(prev => ({ ...prev, costCurrency: 'COP' }))}
+                                                            disabled={isReadOnly}
                                                             className={`flex-1 px-3 text-[9px] font-black tracking-wider rounded-tr-2xl transition-all ${
                                                                 (itemForm.costCurrency || 'COP') === 'COP'
                                                                     ? 'bg-emerald-500 text-white'
@@ -436,6 +446,7 @@ export default function ProposalItemsBuilder() {
                                                         <button
                                                             type="button"
                                                             onClick={() => setItemForm(prev => ({ ...prev, costCurrency: 'USD' }))}
+                                                            disabled={isReadOnly}
                                                             className={`flex-1 px-3 text-[9px] font-black tracking-wider rounded-br-2xl transition-all ${
                                                                 itemForm.costCurrency === 'USD'
                                                                     ? 'bg-indigo-500 text-white'
@@ -462,7 +473,8 @@ export default function ProposalItemsBuilder() {
                                                     name="isTaxable" 
                                                     value={itemForm.isTaxable ? "true" : "false"} 
                                                     onChange={(e) => setItemForm(prev => ({ ...prev, isTaxable: e.target.value === "true" }))}
-                                                    className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none shadow-xl"
+                                                    disabled={isReadOnly}
+                                                    className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
                                                 >
                                                     <option value="true">19%</option>
                                                     <option value="false">0%</option>
@@ -472,17 +484,17 @@ export default function ProposalItemsBuilder() {
                                     </div>
 
                                     <div className="flex justify-end space-x-4 pt-4">
-                                        <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
+                                        {!isReadOnly && <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
                                             Descartar
-                                        </button>
-                                        <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
+                                        </button>}
+                                        {!isReadOnly && <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
                                             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-3" /> : (
                                                 <>
                                                     <Save className="h-4 w-4 mr-3" />
                                                     {editingItemId ? 'GUARDAR_CAMBIOS' : 'INSERTAR_VALORES'}
                                                 </>
                                             )}
-                                        </button>
+                                        </button>}
                                     </div>
                                 </form>
                             </motion.div>
@@ -508,7 +520,7 @@ export default function ProposalItemsBuilder() {
                                             <div className="max-w-xs mx-auto space-y-4 grayscale opacity-40">
                                                 <Cpu className="h-20 w-20 mx-auto text-indigo-300" />
                                                 <p className="text-sm font-bold text-slate-400">Su arquitectura aún no tiene componentes definidos.</p>
-                                                <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>
+                                                {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>}
                                             </div>
                                         </td>
                                     </tr>
@@ -592,12 +604,12 @@ export default function ProposalItemsBuilder() {
                                                     <button onClick={() => editItem(i)} title="Editar" className="p-2 sm:p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 hover:shadow-lg hover:shadow-indigo-100 rounded-2xl transition-all border border-transparent hover:border-indigo-100">
                                                         <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
                                                     </button>
-                                                    <button onClick={() => duplicateItem(i)} title="Duplicar" className="p-2 sm:p-3 text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-lg hover:shadow-emerald-100 rounded-2xl transition-all border border-transparent hover:border-emerald-100">
+                                                    {!isReadOnly && <button onClick={() => duplicateItem(i)} title="Duplicar" className="p-2 sm:p-3 text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 hover:shadow-lg hover:shadow-emerald-100 rounded-2xl transition-all border border-transparent hover:border-emerald-100">
                                                         <Copy className="h-4 w-4 sm:h-5 sm:w-5" />
-                                                    </button>
-                                                    <button onClick={() => i.id && deleteItem(i.id)} title="Eliminar" className="p-2 sm:p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 hover:shadow-lg hover:shadow-red-100 rounded-2xl transition-all border border-transparent hover:border-red-100">
+                                                    </button>}
+                                                    {!isReadOnly && <button onClick={() => i.id && deleteItem(i.id)} title="Eliminar" className="p-2 sm:p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 hover:shadow-lg hover:shadow-red-100 rounded-2xl transition-all border border-transparent hover:border-red-100">
                                                         <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                                                    </button>
+                                                    </button>}
                                                 </div>
                                             </td>
                                         </tr>

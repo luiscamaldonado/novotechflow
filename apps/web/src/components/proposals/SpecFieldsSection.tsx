@@ -139,6 +139,8 @@ interface SpecFieldsSectionProps {
     onSelectSuggestion: (field: string, value: string) => void;
     /** Fetch de sugerencias desde el backend (fieldName resuelto, query) */
     fetchSuggestions: (fieldName: string, query: string) => Promise<AutocompleteSuggestion[]>;
+    /** Si true, todos los campos se renderizan deshabilitados */
+    isReadOnly?: boolean;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -156,6 +158,7 @@ export default function SpecFieldsSection({
     onChange,
     onSelectSuggestion,
     fetchSuggestions,
+    isReadOnly = false,
 }: SpecFieldsSectionProps) {
     const theme = SECTION_THEMES[itemType];
     const specFields = SPEC_FIELDS_BY_ITEM_TYPE[itemType];
@@ -221,9 +224,11 @@ export default function SpecFieldsSection({
                             onSelect={(val) => onSelectSuggestion(field, val)}
                             fetchSuggestions={fieldFetchFns[field]}
                             placeholder={`Escriba ${spec.label}...`}
+                            disabled={isReadOnly}
                             className={cn(
                                 'w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none',
-                                theme.focusColor
+                                theme.focusColor,
+                                'disabled:opacity-60 disabled:cursor-not-allowed'
                             )}
                         />
                     </div>
