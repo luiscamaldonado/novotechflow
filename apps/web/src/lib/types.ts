@@ -142,6 +142,7 @@ export interface ProposalDetail {
     validityDays: number;
     validityDate: string;
     status: ProposalStatus;
+    isLocked: boolean;
     proposalItems: ProposalItemFromApi[];
     user?: { name: string; nomenclature: string };
 }

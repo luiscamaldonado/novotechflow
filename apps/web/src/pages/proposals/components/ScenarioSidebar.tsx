@@ -11,6 +11,7 @@ interface ScenarioSidebarProps {
     scenarios: Scenario[];
     activeScenarioId: string | null;
     saving: boolean;
+    isReadOnly: boolean;
     setActiveScenarioId: (id: string) => void;
     createScenario: (name: string) => Promise<boolean | undefined>;
     deleteScenario: (id: string) => Promise<void>;
@@ -21,6 +22,7 @@ export default function ScenarioSidebar({
     scenarios,
     activeScenarioId,
     saving,
+    isReadOnly,
     setActiveScenarioId,
     createScenario,
     deleteScenario,
@@ -43,12 +45,14 @@ export default function ScenarioSidebar({
             <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Escenarios</h3>
-                    <button 
-                        onClick={() => setIsCreatingScenario(true)}
-                        className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all scale-90"
-                    >
-                        <Plus className="h-4 w-4" />
-                    </button>
+                    {!isReadOnly && (
+                        <button 
+                            onClick={() => setIsCreatingScenario(true)}
+                            className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all scale-90"
+                        >
+                            <Plus className="h-4 w-4" />
+                        </button>
+                    )}
                 </div>
 
                 <div className="space-y-2">
@@ -75,6 +79,7 @@ export default function ScenarioSidebar({
                                 <div className="flex items-center space-x-1">
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); cloneScenario(s.id); }}
+                                        disabled={isReadOnly}
                                         className={cn(
                                             "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
                                             activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-500"
@@ -85,6 +90,7 @@ export default function ScenarioSidebar({
                                     </button>
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); deleteScenario(s.id); }}
+                                        disabled={isReadOnly}
                                         className={cn(
                                             "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
                                             activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
@@ -97,7 +103,7 @@ export default function ScenarioSidebar({
                         ))}
                     </AnimatePresence>
 
-                    {isCreatingScenario && (
+                    {isCreatingScenario && !isReadOnly && (
                         <motion.form 
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}

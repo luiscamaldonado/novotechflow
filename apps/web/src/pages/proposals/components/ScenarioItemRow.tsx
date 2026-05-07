@@ -18,6 +18,7 @@ interface ScenarioItemRowProps {
     displayValues: ItemDisplayValues;
 
     displayIdx: number;
+    isReadOnly: boolean;
     editingCell: { id: string; field: string; value: string } | null;
     setEditingCell: (cell: { id: string; field: string; value: string } | null) => void;
     isExpanded: boolean;
@@ -40,6 +41,7 @@ export default function ScenarioItemRow({
     displayValues,
 
     displayIdx,
+    isReadOnly,
     editingCell,
     setEditingCell,
     isExpanded,
@@ -116,7 +118,8 @@ export default function ScenarioItemRow({
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingCell(null);
                     }}
-                    className="w-20 mx-auto bg-slate-100 border-none rounded-xl text-center font-black text-xs py-2 focus:ring-2 focus:ring-indigo-600/20"
+                    disabled={isReadOnly}
+                    className="w-20 mx-auto bg-slate-100 border-none rounded-xl text-center font-black text-xs py-2 focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
             </td>
             <td className="px-4 py-6">
@@ -162,8 +165,9 @@ export default function ScenarioItemRow({
                                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                                 if (e.key === 'Escape') setEditingCell(null);
                             }}
+                            disabled={isReadOnly}
                             className={cn(
-                                "w-full bg-indigo-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6",
+                                "w-full bg-indigo-50 border-none rounded-xl text-center font-black text-xs py-2 pl-6 disabled:opacity-60 disabled:cursor-not-allowed",
                                 (si.marginPctOverride !== undefined && si.marginPctOverride !== null) ? "text-indigo-600" : "text-slate-400"
                             )}
                         />
@@ -195,7 +199,8 @@ export default function ScenarioItemRow({
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             if (e.key === 'Escape') setEditingCell(null);
                         }}
-                        className="w-28 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20"
+                        disabled={isReadOnly}
+                        className="w-28 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                 )}
             </td>
@@ -211,8 +216,9 @@ export default function ScenarioItemRow({
             <td className="px-4 py-6 text-center">
                 <button
                     onClick={() => toggleDilpidate(si.id!)}
+                    disabled={isReadOnly}
                     className={cn(
-                        "p-2 rounded-xl transition-all border-2",
+                        "p-2 rounded-xl transition-all border-2 disabled:opacity-40 disabled:cursor-not-allowed",
                         si.isDiluted
                             ? "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-200 scale-110"
                             : "bg-white border-slate-200 text-slate-300 hover:border-amber-300 hover:text-amber-500"
@@ -223,12 +229,14 @@ export default function ScenarioItemRow({
                 </button>
             </td>
             <td className="px-8 py-6 text-right">
-                <button 
-                    onClick={() => removeItemFromScenario(si.id!)}
-                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                >
-                    <Trash2 className="h-4 w-4" />
-                </button>
+                {!isReadOnly && (
+                    <button 
+                        onClick={() => removeItemFromScenario(si.id!)}
+                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </button>
+                )}
             </td>
         </tr>
         {/* Expanded children section */}
@@ -244,13 +252,15 @@ export default function ScenarioItemRow({
                         <div className="px-12 py-4 space-y-2">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-[9px] font-black text-violet-500 uppercase tracking-widest">Sub-ítems ocultos de #{displayIdx}</span>
-                                <button
-                                    onClick={() => setPickingChildrenFor(si.id!)}
-                                    className="flex items-center space-x-1.5 text-[9px] font-black uppercase tracking-widest text-violet-600 bg-violet-100 hover:bg-violet-200 px-3 py-1.5 rounded-lg transition-colors"
-                                >
-                                    <Plus className="h-3 w-3" />
-                                    <span>Agregar Oculto</span>
-                                </button>
+                                {!isReadOnly && (
+                                    <button
+                                        onClick={() => setPickingChildrenFor(si.id!)}
+                                        className="flex items-center space-x-1.5 text-[9px] font-black uppercase tracking-widest text-violet-600 bg-violet-100 hover:bg-violet-200 px-3 py-1.5 rounded-lg transition-colors"
+                                    >
+                                        <Plus className="h-3 w-3" />
+                                        <span>Agregar Oculto</span>
+                                    </button>
+                                )}
                             </div>
                             {children.length === 0 ? (
                                 <p className="text-[10px] text-violet-400 font-bold py-3 text-center">No hay sub-ítems ocultos. Agregue artículos cuyo costo se absorba dentro del ítem #{displayIdx}.</p>
@@ -276,7 +286,8 @@ export default function ScenarioItemRow({
                                                         inputMode="numeric"
                                                         value={child.quantity}
                                                         onChange={(e) => updateChildQuantity(si.id!, child.id!, e.target.value)}
-                                                        className="w-14 text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-violet-300 border-none px-2 py-1 rounded-lg text-center transition-all"
+                                                        disabled={isReadOnly}
+                                                        className="w-14 text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-violet-300 border-none px-2 py-1 rounded-lg text-center transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                                     />
                                                 </div>
                                                 <div className="flex flex-col items-end">
@@ -287,12 +298,14 @@ export default function ScenarioItemRow({
                                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total</span>
                                                     <span className="text-[11px] font-mono font-black text-violet-600">${(cLanded * child.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                 </div>
-                                                <button
-                                                    onClick={() => removeChildItem(si.id!, child.id!)}
-                                                    className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
-                                                >
-                                                    <Trash2 className="h-3 w-3" />
-                                                </button>
+                                                {!isReadOnly && (
+                                                    <button
+                                                        onClick={() => removeChildItem(si.id!, child.id!)}
+                                                        className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <Trash2 className="h-3 w-3" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     );

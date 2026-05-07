@@ -18,6 +18,8 @@ import ScenarioSidebar from './components/ScenarioSidebar';
 import ScenarioHeader from './components/ScenarioHeader';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
+import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
+import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
 
 export default function ProposalCalculations() {
     const { id } = useParams<{ id: string }>();
@@ -34,6 +36,8 @@ export default function ProposalCalculations() {
         renameScenario,
         cloneScenario,
     } = useScenarios(id);
+
+    const { isReadOnly } = useProposalReadOnly(proposal);
 
     // UI-only state
     const [isPickingItems, setIsPickingItems] = useState(false);
@@ -103,6 +107,8 @@ export default function ProposalCalculations() {
     return (
         <div className="max-w-[1600px] mx-auto space-y-6 px-4 pb-20">
             <ProposalStepper proposalId={id!} currentStep={2} />
+
+            {isReadOnly && <ReadOnlyBanner />}
 
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -181,26 +187,28 @@ export default function ProposalCalculations() {
             </div>
 
             {/* Export */}
-            <div className="flex justify-end">
-                <button 
-                    onClick={async () => {
-                        const { user } = useAuthStore.getState();
-                        await exportToExcel({
-                            proposalCode: proposal.proposalCode,
-                            clientName: proposal.clientName,
-                            userName: user?.name || 'Usuario',
-                            scenarios,
-                            proposalItems,
-                            acquisitionModes,
-                        });
-                    }}
-                    disabled={scenarios.length === 0}
-                    className="flex items-center space-x-3 px-6 py-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all font-black text-[10px] uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                    <FileSpreadsheet className="h-4 w-4" />
-                    <span>Exportar Excel</span>
-                </button>
-            </div>
+            {!isReadOnly && (
+                <div className="flex justify-end">
+                    <button 
+                        onClick={async () => {
+                            const { user } = useAuthStore.getState();
+                            await exportToExcel({
+                                proposalCode: proposal.proposalCode,
+                                clientName: proposal.clientName,
+                                userName: user?.name || 'Usuario',
+                                scenarios,
+                                proposalItems,
+                                acquisitionModes,
+                            });
+                        }}
+                        disabled={scenarios.length === 0}
+                        className="flex items-center space-x-3 px-6 py-3 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all font-black text-[10px] uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        <span>Exportar Excel</span>
+                    </button>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Sidebar de Escenarios */}
@@ -208,6 +216,7 @@ export default function ProposalCalculations() {
                     scenarios={scenarios}
                     activeScenarioId={activeScenarioId}
                     saving={saving}
+                    isReadOnly={isReadOnly}
                     setActiveScenarioId={setActiveScenarioId}
                     createScenario={createScenario}
                     deleteScenario={deleteScenario}
@@ -224,6 +233,7 @@ export default function ProposalCalculations() {
                                     activeScenario={activeScenario}
                                     totals={totals}
                                     activeScenarioId={activeScenarioId}
+                                    isReadOnly={isReadOnly}
                                     isDaasMode={isDaasMode(activeScenarioId)}
                                     acquisitionModes={acquisitionModes}
                                     globalMarginBuffer={globalMarginBuffer}
@@ -287,6 +297,7 @@ export default function ProposalCalculations() {
                                                             item={item}
                                                             displayValues={displayValues}
                                                             displayIdx={displayIdx}
+                                                            isReadOnly={isReadOnly}
                                                             editingCell={editingCell}
                                                             setEditingCell={setEditingCell}
                                                             isExpanded={expandedItems.has(si.id!)}

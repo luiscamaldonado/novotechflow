@@ -16,6 +16,7 @@ interface ScenarioHeaderProps {
     activeScenario: Scenario;
     totals: ScenarioTotals;
     activeScenarioId: string | null;
+    isReadOnly: boolean;
     isDaasMode: boolean;
     acquisitionModes: Record<string, AcquisitionMode>;
     globalMarginBuffer: string | null;
@@ -34,6 +35,7 @@ export default function ScenarioHeader({
     activeScenario,
     totals,
     activeScenarioId,
+    isReadOnly,
     isDaasMode,
     acquisitionModes,
     globalMarginBuffer,
@@ -114,7 +116,7 @@ export default function ScenarioHeader({
                         />
                     ) : (
                         <button
-                            onClick={() => setEditingScenarioName(activeScenario.name)}
+                            onClick={() => { if (!isReadOnly) setEditingScenarioName(activeScenario.name); }}
                             className="group/name flex items-center space-x-2 hover:bg-indigo-50 rounded-xl px-3 py-1 -mx-3 -my-1 transition-colors"
                             title="Haga clic para editar el nombre del escenario"
                         >
@@ -137,15 +139,15 @@ export default function ScenarioHeader({
                         <input 
                             type="text"
                             value={globalMarginBuffer !== null ? globalMarginBuffer : totals.globalMarginPct.toFixed(2)}
-                            onFocus={() => !isDaasMode && setGlobalMarginBuffer(totals.globalMarginPct.toFixed(2))}
-                            onChange={(e) => !isDaasMode && setGlobalMarginBuffer(e.target.value)}
+                            onFocus={() => !isDaasMode && !isReadOnly && setGlobalMarginBuffer(totals.globalMarginPct.toFixed(2))}
+                            onChange={(e) => !isDaasMode && !isReadOnly && setGlobalMarginBuffer(e.target.value)}
                             onBlur={(e) => {
-                                if (!isDaasMode) {
+                                if (!isDaasMode && !isReadOnly) {
                                     updateGlobalMargin(e.target.value);
                                     setGlobalMarginBuffer(null);
                                 }
                             }}
-                            disabled={isDaasMode}
+                            disabled={isDaasMode || isReadOnly}
                             className={cn(
                                 "w-16 bg-transparent border-none text-right font-black p-0 focus:ring-0 text-sm",
                                 isDaasMode
@@ -168,6 +170,7 @@ export default function ScenarioHeader({
                         <select
                             value={acquisitionModes[activeScenarioId!] || 'VENTA'}
                             onChange={(e) => handleAcquisitionChange(e.target.value as AcquisitionMode)}
+                            disabled={isReadOnly}
                             className={cn(
                                 "bg-transparent border-none font-black text-xs focus:ring-0 cursor-pointer pr-6",
                                 isDaasMode ? "text-pink-600" : "text-sky-700"
@@ -182,7 +185,8 @@ export default function ScenarioHeader({
 
                 <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                     <button 
-                        onClick={() => changeCurrency('COP')}
+                        onClick={() => { if (!isReadOnly) changeCurrency('COP'); }}
+                        disabled={isReadOnly}
                         className={cn(
                             "px-4 py-2 rounded-lg text-[10px] font-black transition-all",
                             activeScenario.currency === 'COP' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
@@ -191,7 +195,8 @@ export default function ScenarioHeader({
                         COP
                     </button>
                     <button 
-                        onClick={() => changeCurrency('USD')}
+                        onClick={() => { if (!isReadOnly) changeCurrency('USD'); }}
+                        disabled={isReadOnly}
                         className={cn(
                             "px-4 py-2 rounded-lg text-[10px] font-black transition-all",
                             activeScenario.currency === 'USD' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
@@ -239,7 +244,7 @@ export default function ScenarioHeader({
                                     setTrmBuffer(null);
                                 }
                             }}
-                            disabled={isConversionUnnecessary}
+                            disabled={isConversionUnnecessary || isReadOnly}
                             className={cn(
                                 "w-24 bg-transparent border-none text-right font-black p-0 focus:ring-0 text-sm",
                                 isConversionUnnecessary
@@ -247,7 +252,7 @@ export default function ScenarioHeader({
                                     : "text-amber-700"
                             )}
                         />
-                        {!isConversionUnnecessary && trm && (
+                        {!isConversionUnnecessary && trm && !isReadOnly && (
                             <button
                                 onClick={handleFillTodayTrm}
                                 className="ml-2 flex items-center space-x-1 px-2 py-1 text-[9px] font-black text-amber-600 bg-white hover:bg-amber-100 rounded-lg border border-amber-200 transition-colors whitespace-nowrap"
@@ -261,8 +266,9 @@ export default function ScenarioHeader({
                 </div>
 
                 <button 
-                    onClick={() => setIsPickingItems(true)}
-                    className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all font-black text-[11px] uppercase tracking-widest"
+                    onClick={() => { if (!isReadOnly) setIsPickingItems(true); }}
+                    disabled={isReadOnly}
+                    className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all font-black text-[11px] uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     <Plus className="h-4 w-4" />
                     <span>Pick de Items</span>
