@@ -5,6 +5,7 @@ const PAGE_HEIGHT = 1056;
 
 interface EconomicProposalTableProps {
     scenario: ProcessedScenario;
+    variantLabelByScenarioItemId: Map<string, string | null>;
 }
 
 /** Formats a number as Colombian currency */
@@ -67,7 +68,7 @@ function getUnitOfMeasure(itemType: string, technicalSpecs?: Record<string, stri
  * Renderiza la tabla de propuesta económica de un escenario.
  * Muestra todos los ítems visibles con sus valores y totales al pie.
  */
-export default function EconomicProposalTable({ scenario }: EconomicProposalTableProps) {
+export default function EconomicProposalTable({ scenario, variantLabelByScenarioItemId }: EconomicProposalTableProps) {
     const { visibleItems, totals, currency } = scenario;
 
     return (
@@ -108,6 +109,8 @@ export default function EconomicProposalTable({ scenario }: EconomicProposalTabl
                         const item = vi.scenarioItem.item;
                         const unitOfMeasure = getUnitOfMeasure(item.itemType, item.technicalSpecs);
                         const quickDesc = buildQuickDescription(item.itemType, item.technicalSpecs);
+                        const variantLabel = variantLabelByScenarioItemId.get(vi.scenarioItem.id) ?? null;
+                        const displayName = variantLabel ? `${item.name} — ${variantLabel}` : item.name;
 
                         return (
                             <tr
@@ -116,7 +119,7 @@ export default function EconomicProposalTable({ scenario }: EconomicProposalTabl
                             >
                                 <td className="px-4 py-3 border border-slate-200">
                                     <span className="text-sm font-bold text-slate-800 block">
-                                        {item.name}
+                                        {displayName}
                                     </span>
                                     {quickDesc && (
                                         <span className="text-[10px] text-slate-500 leading-tight block mt-0.5">

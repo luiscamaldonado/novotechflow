@@ -989,3 +989,39 @@ Activar el campo `Proposal.isLocked` (que ya existía en el schema sin uso) como
 - `36ef99e` — frontend foundation + Cálculos
 - `d569c65` — frontend Constructor de Propuesta
 - `f3dd0e2` — frontend Items
+## ADR-025 — Consolidación de items en la Propuesta Técnica del PDF
+
+**Fecha:** 2026-05-07
+**Estado:** Aceptado
+
+### Contexto
+
+La sección "Propuesta Técnica" del PDF se generaba iterando `for scenario → for visibleItem`, lo que producía una ficha por item por cada escenario donde aparecía. Si un mismo item estaba visible en N escenarios, su ficha técnica se imprimía N veces en el PDF, generando documentos largos con información redundante. La sección "Propuesta Técnica" debe describir cada item una sola vez, no repetirlo por escenario, ya que la información técnica del item no cambia entre escenarios (lo que cambia es precio/cantidad, que viven en la Propuesta Económica).
+
+### Decisión
+
+Se introduce un módulo puro `apps/web/src/lib/consolidateTechnicalItems.ts` que recibe `processedScenarios` y devuelve:
+- `items: ConsolidatedTechItem[]` — items deduplicados con `globalIndex` 1..N y `variantLabel` opcional ("Config A", "Config B", ...).
+- `variantLabelByScenarioItemId: Map<string, string | null>` — mapa para etiquetar las apariciones individuales en la Propuesta Económica.
+
+**Reglas de deduplicación:**
+- Dedup key: `${itemType}::${name.trim().toLowerCase()}`. Mismo nombre con distinto `itemType` → items distintos.
+- Items con el mismo `name+itemType` pero `technicalSpecs` distintos (hash canónico: trim valores, descartar vacíos, sort keys, JSON.stringify) → variantes "Config A", "Config B", etc. Solo se etiquetan cuando hay ≥2 variantes en el grupo.
+- Items diluidos no entran (ya excluidos por `scenario.visibleItems`). Un item visible en al menos un escenario entra una sola vez.
+
+**Orden:** primero las variantes que aparecen en el primer escenario, en su orden de `visibleItems`; luego las que aparecen por primera vez en escenarios posteriores.
+
+**Render:**
+- `TechnicalSpecSheet.tsx` ya no muestra precio (vive solo en la económica) ni nombre del escenario en el subtítulo. El header pasa a "Item N de M" + pill `Config X` opcional. El badge "Gravado/No Gravado" se mueve al lado del nombre del item como info técnica.
+- `EconomicProposalTable.tsx` recibe `variantLabelByScenarioItemId` y appendea ` — Config X` al nombre cuando aplica, para que el cliente pueda distinguir variantes en la cotización.
+- `IndexPageContent` genera una sola entrada "Propuesta Técnica" en el índice (en vez de una por escenario).
+- `VirtualSectionPreview.tsx` (preview en pantalla del constructor) y el contador del sidebar de `ProposalDocBuilder.tsx` consumen el mismo helper vía `useMemo`, para mantener consistencia entre lo que se ve en pantalla y lo que sale en el PDF.
+- La consolidación en `PdfPreviewModal.tsx` se calcula con `useMemo` derivado de `processedScenarios`, no con `useState`, para que esté disponible desde el primer render y funcione aunque la propuesta no tenga página INDEX.
+
+### Consecuencias
+
+- **Retroactivo:** el cambio es 100% en la capa de render. Las propuestas existentes en la base de datos no se migran; al regenerar el PDF salen con el nuevo formato automáticamente.
+- **Sin precio en la ficha técnica:** decisión consciente para evitar duplicar información que ya vive en la Propuesta Económica. La separación queda más limpia: la técnica describe el qué, la económica describe el cuánto.
+- **Variantes etiquetadas en ambos lados:** garantiza trazabilidad cuando un mismo nombre tiene specs distintos. El cliente puede mapear `Laptop Dell — Config A` de la económica a la ficha técnica con badge `Config A`.
+- **Helper reutilizable:** la lógica de consolidación es función pura sin dependencias de React, y se reutiliza en tres puntos (PdfPreviewModal, VirtualSectionPreview, ProposalDocBuilder sidebar) sin duplicación.
+- **Performance:** la consolidación es O(items) en cada escenario, agrupada en un Map. No hay impacto perceptible para propuestas con cientos de items.

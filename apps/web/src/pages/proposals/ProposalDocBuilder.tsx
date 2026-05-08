@@ -12,6 +12,7 @@ import { useProposalPages, type ProposalPage } from '../../hooks/useProposalPage
 import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
 import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
 import { useProposalScenarios } from '../../hooks/useProposalScenarios';
+import { consolidateTechnicalItems } from '../../lib/consolidateTechnicalItems';
 import { useAuthStore } from '../../store/authStore';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
 import { api } from '../../lib/api';
@@ -38,6 +39,11 @@ export default function ProposalDocBuilder() {
     } = useProposalPages(id);
 
     const { processedScenarios } = useProposalScenarios(id);
+
+    const consolidatedTechCount = useMemo(
+        () => consolidateTechnicalItems(processedScenarios).items.length,
+        [processedScenarios],
+    );
 
 
     const movePage = (index: number, direction: 'up' | 'down') => {
@@ -423,7 +429,7 @@ export default function ProposalDocBuilder() {
                                                             ? "bg-indigo-500 text-indigo-200"
                                                             : "bg-cyan-50 text-cyan-600"
                                                     )}>
-                                                        {processedScenarios.reduce((acc, s) => acc + s.visibleItems.length, 0)} págs
+                                                        {consolidatedTechCount} págs
                                                     </span>
                                                 </motion.div>
 

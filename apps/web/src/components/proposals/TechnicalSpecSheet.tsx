@@ -6,24 +6,18 @@ const PAGE_HEIGHT = 1056;
 
 interface TechnicalSpecSheetProps {
     item: VisibleItemCalc;
-    scenarioName: string;
-    currency: string;
-    itemIndex: number;
+    globalIndex: number;
+    totalItems: number;
+    variantLabel: string | null;
 }
 
-/** Formats a number as Colombian currency */
-function formatCurrency(value: number, currency: string): string {
-    if (currency === 'USD') {
-        return `USD $${value.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
-    return `$${value.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+
 
 /**
- * Renderiza la ficha técnica de un solo item con su precio unitario de venta.
- * Se usa dentro del PdfPreviewModal para generar una página por item visible.
+ * Renderiza la ficha técnica de un solo item (sin precio).
+ * Se usa dentro del PdfPreviewModal para generar una página por item consolidado.
  */
-export default function TechnicalSpecSheet({ item, scenarioName, currency, itemIndex }: TechnicalSpecSheetProps) {
+export default function TechnicalSpecSheet({ item, globalIndex, totalItems, variantLabel }: TechnicalSpecSheetProps) {
     const si = item.scenarioItem;
     const proposalItem = si.item;
     const itemType = proposalItem.itemType;
@@ -42,16 +36,30 @@ export default function TechnicalSpecSheet({ item, scenarioName, currency, itemI
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
                     Propuesta Técnica
                 </h2>
-                <p className="text-sm text-indigo-600 font-bold mt-1">
-                    Item {itemIndex} — {scenarioName}
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm text-indigo-600 font-bold">
+                        Item {globalIndex} de {totalItems}
+                    </p>
+                    {variantLabel && (
+                        <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-widest">
+                            {variantLabel}
+                        </span>
+                    )}
+                </div>
             </div>
 
-            {/* Item name */}
-            <div className="mb-6">
+            {/* Item name + tax badge */}
+            <div className="mb-6 flex items-center gap-3">
                 <h3 className="text-lg font-black text-slate-900 tracking-tight">
                     {proposalItem.name}
                 </h3>
+                <span className={`rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-widest shrink-0 ${
+                    proposalItem.isTaxable
+                        ? 'text-emerald-600 bg-emerald-50 border border-emerald-200'
+                        : 'text-amber-600 bg-amber-50 border border-amber-200'
+                }`}>
+                    {proposalItem.isTaxable ? 'Gravado 19%' : 'No Gravado'}
+                </span>
             </div>
 
             {/* Technical specifications table */}
@@ -104,29 +112,7 @@ export default function TechnicalSpecSheet({ item, scenarioName, currency, itemI
                 </div>
             )}
 
-            {/* Spacer to push price box to bottom */}
-            <div className="flex-1" />
 
-            {/* Unit sale price box — anchored to bottom */}
-            <div>
-                <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl p-6 flex items-center justify-between">
-                    <div>
-                        <span className="text-xs font-black text-indigo-400 uppercase tracking-widest block mb-1">
-                            Valor Unitario de Venta antes de IVA
-                        </span>
-                        <span className={`text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                            proposalItem.isTaxable
-                                ? 'text-emerald-600 bg-emerald-50'
-                                : 'text-amber-600 bg-amber-50'
-                        }`}>
-                            {proposalItem.isTaxable ? 'Gravado 19%' : 'No Gravado'}
-                        </span>
-                    </div>
-                    <span className="text-3xl font-black text-indigo-700 tracking-tight">
-                        {formatCurrency(item.unitSalePrice, currency)}
-                    </span>
-                </div>
-            </div>
         </div>
     );
 }

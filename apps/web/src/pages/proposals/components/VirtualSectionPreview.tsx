@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { cn } from '../../../lib/utils';
 import { type ProcessedScenario } from '../../../hooks/useProposalScenarios';
 import { PAGE_TYPE_STYLES, VIRTUAL_TECH_SPEC_ID } from '../../../lib/constants';
+import { consolidateTechnicalItems } from '../../../lib/consolidateTechnicalItems';
 
 interface VirtualSectionPreviewProps {
     sectionId: string;
@@ -11,7 +13,12 @@ function VirtualSectionPreview({ sectionId, processedScenarios }: VirtualSection
     const isTechSpec = sectionId === VIRTUAL_TECH_SPEC_ID;
     const style = PAGE_TYPE_STYLES[isTechSpec ? 'TECH_SPEC' : 'ECONOMIC'];
     const IconComponent = style.icon;
-    const totalItems = processedScenarios.reduce((acc, s) => acc + s.visibleItems.length, 0);
+
+    const consolidation = useMemo(
+        () => consolidateTechnicalItems(processedScenarios),
+        [processedScenarios],
+    );
+    const totalTechItems = consolidation.items.length;
 
     return (
         <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-100 border border-slate-100">
@@ -30,7 +37,7 @@ function VirtualSectionPreview({ sectionId, processedScenarios }: VirtualSection
                             </span>
                             <span className="text-sm text-slate-400 font-medium">
                                 · {isTechSpec
-                                    ? `${totalItems} ficha${totalItems !== 1 ? 's' : ''} técnica${totalItems !== 1 ? 's' : ''}`
+                                    ? `${totalTechItems} ficha${totalTechItems !== 1 ? 's' : ''} técnica${totalTechItems !== 1 ? 's' : ''}`
                                     : `${processedScenarios.length} escenario${processedScenarios.length !== 1 ? 's' : ''}`
                                 }
                             </span>
@@ -49,39 +56,46 @@ function VirtualSectionPreview({ sectionId, processedScenarios }: VirtualSection
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        {processedScenarios.map(scenario => (
-                            <div key={scenario.id} className="border-2 border-slate-100 rounded-2xl overflow-hidden">
-                                <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
-                                    <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                                        {scenario.name}
-                                    </span>
-                                </div>
-                                {isTechSpec ? (
-                                    <div className="divide-y divide-slate-100">
-                                        {scenario.visibleItems.map((vi, idx) => (
-                                            <div key={vi.scenarioItem.id}>
+                        {isTechSpec ? (
+                            <div className="border-2 border-slate-100 rounded-2xl overflow-hidden">
+                                <div className="divide-y divide-slate-100">
+                                    {consolidation.items.map(consolidated => {
+                                        const proposalItem = consolidated.item.scenarioItem.item;
+                                        return (
+                                            <div key={`tech-${consolidated.item.scenarioItem.id}`}>
                                                 <div className="px-6 py-3 flex items-center justify-between">
-                                                    <div className="flex items-center space-x-3">
-                                                        <span className="text-[10px] font-black text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded">
-                                                            #{idx + 1}
+                                                    <div className="flex items-center space-x-3 min-w-0">
+                                                        <span className="text-[10px] font-black text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded shrink-0">
+                                                            #{consolidated.globalIndex}
                                                         </span>
-                                                        <span className="text-sm font-bold text-slate-700">
-                                                            {vi.scenarioItem.item.name}
+                                                        <span className="text-sm font-bold text-slate-700 truncate">
+                                                            {proposalItem.name}
                                                         </span>
+                                                        {consolidated.variantLabel && (
+                                                            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg px-2 py-0.5 text-[9px] font-black uppercase tracking-widest shrink-0">
+                                                                {consolidated.variantLabel}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    <span className="text-sm font-mono font-bold text-indigo-600">
-                                                        ${vi.unitSalePrice.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </span>
                                                 </div>
-                                                {vi.scenarioItem.item.deliveryDays != null && vi.scenarioItem.item.deliveryDays > 0 && (
+                                                {proposalItem.deliveryDays != null && proposalItem.deliveryDays > 0 && (
                                                     <div className="px-6 py-1 text-xs text-slate-500">
-                                                        <span className="font-bold">Tiempo de Entrega:</span> {vi.scenarioItem.item.deliveryDays} días
+                                                        <span className="font-bold">Tiempo de Entrega:</span> {proposalItem.deliveryDays} días
                                                     </div>
                                                 )}
                                             </div>
-                                        ))}
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            processedScenarios.map(scenario => (
+                                <div key={scenario.id} className="border-2 border-slate-100 rounded-2xl overflow-hidden">
+                                    <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
+                                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                                            {scenario.name}
+                                        </span>
                                     </div>
-                                ) : (
                                     <div className="p-6">
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                             <div>
@@ -110,9 +124,9 @@ function VirtualSectionPreview({ sectionId, processedScenarios }: VirtualSection
                                             </div>
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        ))}
+                                </div>
+                            ))
+                        )}
 
                         <p className="text-[10px] text-slate-400 font-bold text-center italic">
                             Esta sección se genera automáticamente desde los datos de la Ventana de Cálculos.

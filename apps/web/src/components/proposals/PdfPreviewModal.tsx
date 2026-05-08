@@ -4,14 +4,15 @@ import { generateHTML } from '@tiptap/html';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Underline from '@tiptap/extension-underline';
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import type { ProposalPage, PageBlock } from '../../hooks/useProposalPages';
 import { type ProposalVariables, replaceMarkersInHtml } from '../../lib/proposalVariables';
-import type { ProcessedScenario, VisibleItemCalc } from '../../hooks/useProposalScenarios';
+import type { ProcessedScenario } from '../../hooks/useProposalScenarios';
 import TechnicalSpecSheet from './TechnicalSpecSheet';
 import EconomicProposalTable from './EconomicProposalTable';
+import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
@@ -69,11 +70,9 @@ interface VisualPage {
     coverBlocks: PageBlock[];
     /** For index pages */
     allPages?: ProposalPage[];
-    /** For tech spec pages */
-    techSpecItem?: VisibleItemCalc;
-    techSpecScenarioName?: string;
-    techSpecCurrency?: string;
-    techSpecItemIndex?: number;
+    /** For tech spec pages (consolidated) */
+    consolidatedTechItem?: ConsolidatedTechItem;
+    consolidatedTotalItems?: number;
     /** For economic proposal pages */
     economicScenario?: ProcessedScenario;
 }
@@ -90,6 +89,10 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
     const measureRef = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const consolidation = useMemo(
+        () => consolidateTechnicalItems(processedScenarios),
+        [processedScenarios],
+    );
     const pagesContainerRef = useRef<HTMLDivElement>(null);
 
     /** Genera y descarga el PDF capturando cada página como imagen */
@@ -175,25 +178,21 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     allPages: pages,
                 });
 
-                // Inject virtual TECH SPEC pages after INDEX
-                for (const scenario of processedScenarios) {
-                    scenario.visibleItems.forEach((vi, idx) => {
-                        result.push({
-                            id: `techspec-${scenario.id}-${vi.scenarioItem.id}`,
-                            pageType: 'TECH_SPEC',
-                            title: `Propuesta Técnica — ${scenario.name}`,
-                            htmlContent: '',
-                            isContinuation: false,
-                            isCover: false,
-                            isIndex: false,
-                            isTechSpec: true,
-                            isEconomic: false,
-                            coverBlocks: [],
-                            techSpecItem: vi,
-                            techSpecScenarioName: scenario.name,
-                            techSpecCurrency: scenario.currency,
-                            techSpecItemIndex: idx + 1,
-                        });
+                // Inject virtual TECH SPEC pages after INDEX (consolidated, deduplicated)
+                for (const consolidated of consolidation.items) {
+                    result.push({
+                        id: `techspec-${consolidated.item.scenarioItem.id}`,
+                        pageType: 'TECH_SPEC',
+                        title: 'Propuesta Técnica',
+                        htmlContent: '',
+                        isContinuation: false,
+                        isCover: false,
+                        isIndex: false,
+                        isTechSpec: true,
+                        isEconomic: false,
+                        coverBlocks: [],
+                        consolidatedTechItem: consolidated,
+                        consolidatedTotalItems: consolidation.items.length,
                     });
                 }
 
@@ -345,7 +344,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
         setVisualPages(result);
         setReady(true);
-    }, [pages, apiBase, proposalVars, processedScenarios]);
+    }, [pages, apiBase, proposalVars, processedScenarios, consolidation]);
 
     useEffect(() => {
         // Wait for DOM to be ready
@@ -445,15 +444,15 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                                     <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title ?? ''} apiBase={apiBase} resolveImageUrl={resolveImageUrl} />
                                 ) : vPage.isIndex ? (
                                     <IndexPageContent visualPages={visualPages} />
-                                ) : vPage.isTechSpec && vPage.techSpecItem ? (
+                                ) : vPage.isTechSpec && vPage.consolidatedTechItem ? (
                                     <TechnicalSpecSheet
-                                        item={vPage.techSpecItem}
-                                        scenarioName={vPage.techSpecScenarioName || ''}
-                                        currency={vPage.techSpecCurrency || 'COP'}
-                                        itemIndex={vPage.techSpecItemIndex || 1}
+                                        item={vPage.consolidatedTechItem.item}
+                                        globalIndex={vPage.consolidatedTechItem.globalIndex}
+                                        totalItems={vPage.consolidatedTotalItems!}
+                                        variantLabel={vPage.consolidatedTechItem.variantLabel}
                                     />
                                 ) : vPage.isEconomic && vPage.economicScenario ? (
-                                    <EconomicProposalTable scenario={vPage.economicScenario} />
+                                    <EconomicProposalTable scenario={vPage.economicScenario} variantLabelByScenarioItemId={consolidation.variantLabelByScenarioItemId} />
                                 ) : (
                                     <div className="px-16 py-16 h-full">
                                         {/* Header */}
@@ -556,13 +555,13 @@ function IndexPageContent({ visualPages }: { visualPages: VisualPage[] }) {
         // Skip continuations
         if (vp.isContinuation) return;
 
-        // For tech spec pages, group by scenario
-        if (vp.isTechSpec && vp.techSpecScenarioName) {
-            const sectionKey = `techspec-${vp.techSpecScenarioName}`;
+        // For tech spec pages, single global entry
+        if (vp.isTechSpec) {
+            const sectionKey = 'techspec-global';
             if (!seenSections.has(sectionKey)) {
                 seenSections.add(sectionKey);
                 entries.push({
-                    label: `Propuesta Técnica — ${vp.techSpecScenarioName}`,
+                    label: 'Propuesta Técnica',
                     pageNum: idx + 1,
                     pageType: 'TECH_SPEC',
                 });
