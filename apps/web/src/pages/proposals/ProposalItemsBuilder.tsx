@@ -385,6 +385,12 @@ export default function ProposalItemsBuilder() {
                                             isReadOnly={isReadOnly}
                                         />
 
+                                        {/* Descripción General */}
+                                        <div className="md:col-span-12 space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Notas Técnicas Complementarias</label>
+                                            <textarea name="description" value={itemForm.description} onChange={handleItemChange} rows={3} disabled={isReadOnly} placeholder="Ingrese detalles específicos no contemplados en la ficha técnica..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-medium text-slate-700 resize-none shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
+                                        </div>
+
                                         {/* Tiempo de Entrega */}
                                         <div className="md:col-span-3 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Tiempo de Entrega (días)</label>
@@ -405,12 +411,6 @@ export default function ProposalItemsBuilder() {
                                                 disabled={isReadOnly}
                                                 className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                             />
-                                        </div>
-
-                                        {/* Descripción General */}
-                                        <div className="md:col-span-12 space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Notas Técnicas Complementarias</label>
-                                            <textarea name="description" value={itemForm.description} onChange={handleItemChange} rows={3} disabled={isReadOnly} placeholder="Ingrese detalles específicos no contemplados en la ficha técnica..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-medium text-slate-700 resize-none shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
                                         </div>
 
                                         {/* Estructura Comercial */}

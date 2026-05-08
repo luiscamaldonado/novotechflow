@@ -88,18 +88,6 @@ export default function TechnicalSpecSheet({ item, globalIndex, totalItems, vari
                 </div>
             )}
 
-            {/* Tiempo de Entrega */}
-            {proposalItem.deliveryDays != null && proposalItem.deliveryDays > 0 && (
-                <div className="mb-4">
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-                        Tiempo de Entrega
-                    </h4>
-                    <p className="text-xs font-medium text-slate-800">
-                        {proposalItem.deliveryDays} días
-                    </p>
-                </div>
-            )}
-
             {/* Notas Complementarias (description) */}
             {proposalItem.description && (
                 <div className="mb-6">
@@ -108,6 +96,18 @@ export default function TechnicalSpecSheet({ item, globalIndex, totalItems, vari
                     </h4>
                     <p className="text-xs text-slate-600 leading-relaxed">
                         {proposalItem.description}
+                    </p>
+                </div>
+            )}
+
+            {/* Tiempo de Entrega */}
+            {proposalItem.deliveryDays != null && proposalItem.deliveryDays > 0 && (
+                <div className="mb-4">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                        Tiempo de Entrega
+                    </h4>
+                    <p className="text-xs font-medium text-slate-800">
+                        {proposalItem.deliveryDays} días
                     </p>
                 </div>
             )}
