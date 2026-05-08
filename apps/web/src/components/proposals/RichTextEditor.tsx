@@ -72,6 +72,7 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false, pr
     const prevVarsRef = useRef(proposalVars);
     useEffect(() => {
         if (!editor) return;
+        if (editor.isFocused) return;
         const contentChanged = content && content !== prevContentRef.current;
         const varsChanged = proposalVars !== prevVarsRef.current;
 
