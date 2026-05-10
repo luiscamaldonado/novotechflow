@@ -37,7 +37,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { icon: Users, label: 'Clientes', path: '/admin/clients' },
         { icon: BookOpen, label: 'Plantillas', path: '/admin/templates' },
         { icon: Users, label: 'Usuarios', path: '/users' },
-        { icon: Settings, label: 'Configuración', path: '/settings' },
+        { icon: Settings, label: 'Configuración', path: '/admin/settings' },
     ];
 
     const isAdmin = user?.role === 'ADMIN';
