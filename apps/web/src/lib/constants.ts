@@ -181,3 +181,14 @@ export const EXCEL_SHEET_NAME_MAX_LENGTH = 31;
 
 /** Characters forbidden in XLSX worksheet names (format limit). */
 export const EXCEL_SHEET_NAME_FORBIDDEN_CHARS = /[\\/?*\[\]:]/g;
+
+// ── Inactivity timeout constants ─────────────────────────────
+
+/** Minutos de inactividad por defecto si el backend no responde. */
+export const INACTIVITY_TIMEOUT_FALLBACK_MINUTES = 5;
+
+/** Aviso al usuario antes del cierre por inactividad (ms). */
+export const INACTIVITY_WARNING_BEFORE_MS = 60 * 1000;
+
+/** Clave de localStorage para cachear el timeout entre recargas. */
+export const INACTIVITY_TIMEOUT_STORAGE_KEY = 'inactivity_timeout_minutes';

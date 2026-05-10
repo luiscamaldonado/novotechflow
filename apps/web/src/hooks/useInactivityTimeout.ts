@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
-
-const INACTIVITY_LIMIT_MS = 5 * 60 * 1000;   // 5 minutos
-const WARNING_BEFORE_MS = 60 * 1000;          // Aviso 1 minuto antes
-const WARNING_AT_MS = INACTIVITY_LIMIT_MS - WARNING_BEFORE_MS; // 4 minutos
+import {
+  INACTIVITY_TIMEOUT_FALLBACK_MINUTES,
+  INACTIVITY_WARNING_BEFORE_MS,
+} from '../lib/constants';
 
 const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
   'mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click', 'wheel'
@@ -17,6 +17,7 @@ interface InactivityState {
 export function useInactivityTimeout(): InactivityState & { dismissWarning: () => void } {
   const logout = useAuthStore((state) => state.logout);
   const token = useAuthStore((state) => state.token);
+  const inactivityTimeoutMinutes = useAuthStore((s) => s.inactivityTimeoutMinutes);
   const [showWarning, setShowWarning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(60);
 
@@ -35,12 +36,16 @@ export function useInactivityTimeout(): InactivityState & { dismissWarning: () =
   }, []);
 
   const startTimers = useCallback(() => {
+    const minutes = inactivityTimeoutMinutes ?? INACTIVITY_TIMEOUT_FALLBACK_MINUTES;
+    const inactivityLimitMs = minutes * 60 * 1000;
+    const warningAtMs = inactivityLimitMs - INACTIVITY_WARNING_BEFORE_MS;
+
     clearAllTimers();
     lastActivityRef.current = Date.now();
     setShowWarning(false);
     setSecondsLeft(60);
 
-    // Timer 1: show warning at 4 minutes
+    // Timer 1: show warning 1 minute before logout
     warningTimerRef.current = setTimeout(() => {
       setShowWarning(true);
       setSecondsLeft(60);
@@ -54,15 +59,15 @@ export function useInactivityTimeout(): InactivityState & { dismissWarning: () =
           return prev - 1;
         });
       }, 1000);
-    }, WARNING_AT_MS);
+    }, warningAtMs);
 
-    // Timer 2: force logout at 5 minutes
+    // Timer 2: force logout at limit
     logoutTimerRef.current = setTimeout(() => {
       clearAllTimers();
       setShowWarning(false);
       logout();
-    }, INACTIVITY_LIMIT_MS);
-  }, [clearAllTimers, logout]);
+    }, inactivityLimitMs);
+  }, [clearAllTimers, logout, inactivityTimeoutMinutes]);
 
   const handleActivity = useCallback(() => {
     // Throttle: only reset if more than 1 second since last reset

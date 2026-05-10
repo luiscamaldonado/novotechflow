@@ -38,11 +38,15 @@ const PageLoader = () => (
 );
 
 function App() {
-  const { checkAuth, isLoading, isAuthenticated } = useAuthStore();
+  const { checkAuth, loadInactivityTimeout, isLoading, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     checkAuth();
-  }, [checkAuth]);
+    const { isAuthenticated: authed, inactivityTimeoutMinutes } = useAuthStore.getState();
+    if (authed && inactivityTimeoutMinutes === null) {
+      loadInactivityTimeout();
+    }
+  }, [checkAuth, loadInactivityTimeout]);
 
   if (isLoading) {
     return (

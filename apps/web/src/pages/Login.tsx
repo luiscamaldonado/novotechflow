@@ -16,11 +16,12 @@ export default function Login() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
-    const { login } = useAuthStore();
+    const { login, loadInactivityTimeout } = useAuthStore();
     const navigate = useNavigate();
 
-    const handleVerified = (data: { access_token: string; user: AuthUser }) => {
+    const handleVerified = async (data: { access_token: string; user: AuthUser }) => {
         login(data.access_token, data.user);
+        await loadInactivityTimeout();
         navigate('/dashboard');
     };
 
@@ -45,6 +46,7 @@ export default function Login() {
             }
 
             login(response.data.access_token, response.data.user);
+            await loadInactivityTimeout();
             navigate('/dashboard');
         } catch {
             setError('Credenciales inv\u00e1lidas. Por favor intenta de nuevo.');
