@@ -61,17 +61,17 @@ enum ConsecutiveSource {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  name         String   @db.VarChar(100)
-  email        String   @unique @db.VarChar(150)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  role         Role
-  nomenclature String   @unique @db.VarChar(10)
-  signatureUrl String?  @map("signature_url") @db.Text
-  isActive              Boolean  @default(true) @map("is_active")
-  proposalCounterStart  Int      @default(0) @map("proposal_counter_start")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                   String   @id @default(uuid()) @db.Uuid
+  name                 String   @db.VarChar(100)
+  email                String   @unique @db.VarChar(150)
+  passwordHash         String   @map("password_hash") @db.VarChar(255)
+  role                 Role
+  nomenclature         String   @unique @db.VarChar(10)
+  signatureUrl         String?  @map("signature_url") @db.Text
+  isActive             Boolean  @default(true) @map("is_active")
+  proposalCounterStart Int      @default(0) @map("proposal_counter_start")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   proposals          Proposal[]
   pdfTemplates       PdfTemplate[]
@@ -79,31 +79,32 @@ model User {
   EmailLog           EmailLog[]
   billingProjections BillingProjection[]
   verificationCodes  VerificationCode[]
+  updatedAppSettings AppSetting[]        @relation("AppSettingUpdatedBy")
 
   @@map("users")
 }
 
 model Proposal {
-  id             String         @id @default(uuid()) @db.Uuid
-  proposalCode        String?             @unique @map("proposal_code") @db.VarChar(20)
-  consecutiveSource   ConsecutiveSource   @default(AUTO) @map("consecutive_source")
-  userId         String         @map("user_id") @db.Uuid
-  clientId       String?        @map("client_id") @db.Uuid
-  clientName     String         @map("client_name") @db.VarChar(200)
-  subject        String         @db.Text
-  issueDate      DateTime       @map("issue_date") @db.Date
-  issueCity      String?        @map("issue_city") @db.VarChar(100)
-  validityDays   Int?           @map("validity_days")
-  validityDate   DateTime?      @map("validity_date") @db.Date
-  status         ProposalStatus @default(ELABORACION)
-  currentVersion Int            @default(1) @map("current_version")
-  isLocked       Boolean        @default(false) @map("is_locked")
-  closeDate      DateTime?      @map("close_date") @db.Date
-  billingDate    DateTime?      @map("billing_date") @db.Date
-  acquisitionType AcquisitionType? @map("acquisition_type")
-  manualAmount    Decimal?         @map("manual_amount") @db.Decimal(15, 2)
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
+  id                String            @id @default(uuid()) @db.Uuid
+  proposalCode      String?           @unique @map("proposal_code") @db.VarChar(20)
+  consecutiveSource ConsecutiveSource @default(AUTO) @map("consecutive_source")
+  userId            String            @map("user_id") @db.Uuid
+  clientId          String?           @map("client_id") @db.Uuid
+  clientName        String            @map("client_name") @db.VarChar(200)
+  subject           String            @db.Text
+  issueDate         DateTime          @map("issue_date") @db.Date
+  issueCity         String?           @map("issue_city") @db.VarChar(100)
+  validityDays      Int?              @map("validity_days")
+  validityDate      DateTime?         @map("validity_date") @db.Date
+  status            ProposalStatus    @default(ELABORACION)
+  currentVersion    Int               @default(1) @map("current_version")
+  isLocked          Boolean           @default(false) @map("is_locked")
+  closeDate         DateTime?         @map("close_date") @db.Date
+  billingDate       DateTime?         @map("billing_date") @db.Date
+  acquisitionType   AcquisitionType?  @map("acquisition_type")
+  manualAmount      Decimal?          @map("manual_amount") @db.Decimal(15, 2)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
 
   user             User              @relation(fields: [userId], references: [id])
   client           Client?           @relation(fields: [clientId], references: [id])
@@ -147,7 +148,7 @@ model ProposalPage {
   sortOrder  Int      @default(0) @map("sort_order")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  proposal      Proposal           @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  proposal      Proposal            @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   blocks        ProposalPageBlock[]
   proposalItems ProposalItem[]
 
@@ -193,8 +194,8 @@ model ProposalItem {
   technicalSpecs Json?    @map("technical_specs")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  proposal      Proposal         @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  page          ProposalPage?    @relation(fields: [pageId], references: [id])
+  proposal      Proposal       @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  page          ProposalPage?  @relation(fields: [pageId], references: [id])
   scenarioItems ScenarioItem[]
 
   @@index([proposalId])
@@ -202,9 +203,9 @@ model ProposalItem {
 }
 
 model Scenario {
-  id          String  @id @default(uuid()) @db.Uuid
-  proposalId  String  @map("proposal_id") @db.Uuid
-  name        String  @db.VarChar(100)
+  id            String  @id @default(uuid()) @db.Uuid
+  proposalId    String  @map("proposal_id") @db.Uuid
+  name          String  @db.VarChar(100)
   currency      String  @default("COP") @db.VarChar(5)
   conversionTrm Float?  @map("conversion_trm")
   description   String? @db.Text
@@ -228,9 +229,9 @@ model ScenarioItem {
   unitPriceOverride Decimal? @map("unit_price_override") @db.Decimal(15, 2)
   isDiluted         Boolean  @default(false) @map("is_diluted")
 
-  scenario Scenario      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  item     ProposalItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  parent   ScenarioItem? @relation("ScenarioItemChildren", fields: [parentId], references: [id])
+  scenario Scenario       @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  item     ProposalItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  parent   ScenarioItem?  @relation("ScenarioItemChildren", fields: [parentId], references: [id])
   children ScenarioItem[] @relation("ScenarioItemChildren")
 
   @@index([scenarioId])
@@ -306,6 +307,7 @@ model Client {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   proposals Proposal[]
+
   @@map("clients")
 }
 
@@ -321,17 +323,17 @@ model Catalog {
 }
 
 model BillingProjection {
-  id             String         @id @default(uuid()) @db.Uuid
-  userId         String         @map("user_id") @db.Uuid
-  projectionCode String         @unique @map("projection_code") @db.VarChar(20)
-  clientName     String         @map("client_name") @db.VarChar(200)
-  subtotal       Decimal        @db.Decimal(15, 2)
-  currency       String         @default("COP") @db.VarChar(5)
-  status         ProposalStatus @default(PENDIENTE_FACTURAR)
-  billingDate    DateTime?      @map("billing_date") @db.Date
+  id              String           @id @default(uuid()) @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  projectionCode  String           @unique @map("projection_code") @db.VarChar(20)
+  clientName      String           @map("client_name") @db.VarChar(200)
+  subtotal        Decimal          @db.Decimal(15, 2)
+  currency        String           @default("COP") @db.VarChar(5)
+  status          ProposalStatus   @default(PENDIENTE_FACTURAR)
+  billingDate     DateTime?        @map("billing_date") @db.Date
   acquisitionType AcquisitionType? @map("acquisition_type")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id])
 
@@ -366,4 +368,17 @@ model VerificationCode {
   @@index([userId])
   @@index([expiresAt])
   @@map("verification_codes")
+}
+
+model AppSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  value       String   @db.VarChar(500)
+  description String?  @db.Text
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  updatedBy User? @relation("AppSettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("app_settings")
 }

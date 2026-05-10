@@ -19,6 +19,18 @@ async function main() {
   });
 
   console.log('Admin seeded!');
+
+  await prisma.appSetting.upsert({
+    where: { key: 'inactivity_timeout_minutes' },
+    update: {},
+    create: {
+      key: 'inactivity_timeout_minutes',
+      value: '5',
+      description: 'Minutos de inactividad antes de cerrar sesión automáticamente',
+    },
+  });
+
+  console.log('AppSettings seeded!');
 }
 
 main()

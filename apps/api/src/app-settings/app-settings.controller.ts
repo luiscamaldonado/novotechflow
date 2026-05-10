@@ -1,0 +1,46 @@
+import { Controller, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../common/guards/admin.guard';
+import { AppSettingsService } from './app-settings.service';
+import { UpdateInactivityTimeoutDto } from './dto/update-inactivity-timeout.dto';
+
+/** Typed request after JWT authentication — mirrors the pattern in users.controller.ts */
+interface AuthenticatedRequest {
+  user: { id: string; role: string };
+}
+
+/**
+ * @class AppSettingsController
+ * Controlador REST para configuraciones globales de la aplicación.
+ * GET endpoints disponibles para cualquier usuario autenticado.
+ * PATCH endpoints restringidos a administradores.
+ */
+@Controller('app-settings')
+@ApiTags('app-settings')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class AppSettingsController {
+  constructor(private readonly appSettingsService: AppSettingsService) {}
+
+  @Get('inactivity-timeout')
+  @ApiOperation({ summary: 'Obtener timeout de inactividad (minutos)' })
+  async getInactivityTimeout(): Promise<{ minutes: number }> {
+    const minutes = await this.appSettingsService.getInactivityTimeoutMinutes();
+    return { minutes };
+  }
+
+  @Patch('inactivity-timeout')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Actualizar timeout de inactividad (solo admin)' })
+  async updateInactivityTimeout(
+    @Body() dto: UpdateInactivityTimeoutDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ minutes: number }> {
+    const minutes = await this.appSettingsService.updateInactivityTimeoutMinutes(
+      dto.minutes,
+      req.user.id,
+    );
+    return { minutes };
+  }
+}
