@@ -1025,3 +1025,34 @@ Se introduce un módulo puro `apps/web/src/lib/consolidateTechnicalItems.ts` que
 - **Variantes etiquetadas en ambos lados:** garantiza trazabilidad cuando un mismo nombre tiene specs distintos. El cliente puede mapear `Laptop Dell — Config A` de la económica a la ficha técnica con badge `Config A`.
 - **Helper reutilizable:** la lógica de consolidación es función pura sin dependencias de React, y se reutiliza en tres puntos (PdfPreviewModal, VirtualSectionPreview, ProposalDocBuilder sidebar) sin duplicación.
 - **Performance:** la consolidación es O(items) en cada escenario, agrupada en un Map. No hay impacto perceptible para propuestas con cientos de items.
+
+## ADR-026 — Configuración global del timeout de inactividad por sesión
+
+**Fecha:** 2026-05-10
+**Estado:** Aceptado
+**Contexto:** El cierre automático de sesión por inactividad estaba hardcoded en el frontend (`apps/web/src/hooks/useInactivityTimeout.ts`, constante `INACTIVITY_LIMIT_MS = 5 * 60 * 1000`). Cualquier ajuste requería un commit + redeploy. Se necesita que el administrador pueda modificar este tiempo desde la UI, aplicando para todos los usuarios.
+
+**Decisión:** 
+1. Crear tabla genérica `AppSetting` (modelo Prisma `AppSetting` con `@@map("app_settings")`) clave-valor con `key UNIQUE`, `value` string, `description`, `updatedAt`, `updatedById` (FK a `users` con `ON DELETE SET NULL`). El diseño es extensible: en el futuro otros settings globales (validez por defecto, footers de PDF, etc.) usan la misma tabla.
+2. Backend: módulo nuevo `apps/api/src/app-settings/` con dos endpoints:
+   - `GET /app-settings/inactivity-timeout` (`JwtAuthGuard`) — cualquier autenticado.
+   - `PATCH /app-settings/inactivity-timeout` (`JwtAuthGuard + AdminGuard`) — admin only.
+   Body validado con `class-validator`: `IsInt + Min(2) + Max(60)`. Service hace upsert idempotente para garantizar que la key siempre existe (default 5).
+3. Constante de dominio: clave fija `inactivity_timeout_minutes` exportada como `INACTIVITY_TIMEOUT_KEY` desde el service (no magic string).
+4. Frontend: 
+   - `authStore` extendido con `inactivityTimeoutMinutes: number | null` y action `loadInactivityTimeout` que hace el GET, valida rango [2, 60] y persiste en localStorage (`inactivity_timeout_minutes`).
+   - `useInactivityTimeout` lee del store, calcula `inactivityLimitMs` dinámicamente y reinicia timers cuando el valor cambia. Fallback a 5 min si el GET falló o el valor es inválido.
+   - `Login.tsx` dispara `loadInactivityTimeout()` después del login (con o sin 2FA), antes de navegar al dashboard.
+   - `App.tsx` dispara la carga tras `checkAuth()` cuando rehidrata sesión sin caché en localStorage.
+5. UI admin: nueva página `apps/web/src/pages/admin/SettingsAdmin.tsx` (ruta `/admin/settings` bajo `AdminRoute`), un solo campo numérico hoy con validación cliente espejo del backend. Al guardar, dispara `loadInactivityTimeout()` para que el cambio aplique de inmediato a la sesión actual del admin. El ítem "Configuración" del sidebar (que ya existía apuntando a `/settings` muerto) ahora apunta a la ruta nueva.
+
+**Alcance:** El cambio del setting NO se refleja en sesiones ya abiertas de otros usuarios. Aplica al próximo login de cada usuario, o al recargar la app si la rehidratación de sesión dispara `loadInactivityTimeout` (caso sin caché). Para el admin que está editando, sí aplica de inmediato porque la UI llama explícitamente a `loadInactivityTimeout` post-guardado.
+
+**Patrón visual:** Sin librería de toast (el proyecto no tiene react-hot-toast ni sonner). Mensajes inline con auto-clear vía `setTimeout`, mismo patrón que `DefaultPagesAdmin.tsx` (`savedMsg`).
+
+**Migración:** `20260510181712_add_app_settings`. Seed extendido para upsert idempotente de `inactivity_timeout_minutes = 5` con descripción.
+
+**Commits:**
+- `387f88a` — backend: modelo + endpoints + seed
+- `2af9020` — frontend: consumo del setting + refactor de useInactivityTimeout
+- `3c5b5dd` — frontend: UI admin de configuración
