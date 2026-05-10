@@ -173,3 +173,11 @@ export const ACQUISITION_OPTIONS: { value: AcquisitionMode; label: string }[] = 
     { value: 'DAAS_48', label: 'DaaS 48 Meses' },
     { value: 'DAAS_60', label: 'DaaS 60 Meses' },
 ];
+
+// ── Excel export constants ───────────────────────────────────
+
+/** Maximum characters allowed in an XLSX worksheet name (format limit). */
+export const EXCEL_SHEET_NAME_MAX_LENGTH = 31;
+
+/** Characters forbidden in XLSX worksheet names (format limit). */
+export const EXCEL_SHEET_NAME_FORBIDDEN_CHARS = /[\\/?*\[\]:]/g;

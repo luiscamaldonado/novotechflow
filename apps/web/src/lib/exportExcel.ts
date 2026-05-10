@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import type { Scenario, ProposalCalcItem } from '../hooks/useScenarios';
-import { ITEM_TYPE_LABELS } from './constants';
+import { ITEM_TYPE_LABELS, EXCEL_SHEET_NAME_MAX_LENGTH, EXCEL_SHEET_NAME_FORBIDDEN_CHARS } from './constants';
 import { calculateItemDisplayValues } from './pricing-engine';
 
 // ── Types ──────────────────────────────────────────────
@@ -35,6 +35,35 @@ function getManufacturerField(specs?: Record<string, string | undefined>): strin
     return specs.fabricante || specs.responsable || '';
 }
 
+// ── Helper: build a unique, XLSX-safe sheet name ──────
+function buildSheetName(rawName: string, usedNames: Set<string>): string {
+    const sanitized = rawName.replace(EXCEL_SHEET_NAME_FORBIDDEN_CHARS, '-');
+
+    let candidate = sanitized.length > EXCEL_SHEET_NAME_MAX_LENGTH
+        ? sanitized.substring(0, EXCEL_SHEET_NAME_MAX_LENGTH)
+        : sanitized;
+
+    if (!usedNames.has(candidate)) {
+        usedNames.add(candidate);
+        return candidate;
+    }
+
+    let counter = 2;
+    while (true) {
+        const suffix = ` (${counter})`;
+        const baseMaxLen = EXCEL_SHEET_NAME_MAX_LENGTH - suffix.length;
+        const base = sanitized.length > baseMaxLen
+            ? sanitized.substring(0, baseMaxLen)
+            : sanitized;
+        candidate = `${base}${suffix}`;
+        if (!usedNames.has(candidate)) {
+            usedNames.add(candidate);
+            return candidate;
+        }
+        counter++;
+    }
+}
+
 // ── Main export function ──────────────────────────────
 export async function exportToExcel(opts: ExportOptions) {
     const { proposalCode, clientName, userName, scenarios, proposalItems, acquisitionModes } = opts;
@@ -43,9 +72,11 @@ export async function exportToExcel(opts: ExportOptions) {
     wb.creator = 'NovoTechFlow';
     wb.created = new Date();
 
+    const usedSheetNames = new Set<string>();
+
     for (let sIdx = 0; sIdx < scenarios.length; sIdx++) {
         const scenario = scenarios[sIdx];
-        const sheetName = scenario.name.length > 31 ? scenario.name.substring(0, 31) : scenario.name;
+        const sheetName = buildSheetName(scenario.name, usedSheetNames);
         const ws = wb.addWorksheet(sheetName);
 
         // ── Column widths ──
