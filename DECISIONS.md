@@ -1088,3 +1088,64 @@ Introducir paginación lógica en el DOM: el escenario se parte en N slices ante
 ### Pendientes
 - Validar contra propuestas con muchos items (>30) en producción.
 - Considerar medición dinámica de altura si los valores fijos generan desperdicio notorio.
+## ADR-028 — Persistencia de `unitPriceOverride` para evitar round-trip de precisión
+
+**Estado:** Aceptada e implementada
+**Fecha:** 2026-05-11
+
+### Contexto
+
+En la pantalla de cálculos, al editar el precio unitario de un ítem, el flujo previo era:
+
+1. Frontend toma el precio escrito.
+2. Calcula `marginPct = calculateMarginFromPrice(price, effectiveLandedCost)`.
+3. Persiste solo `marginPctOverride` (`Decimal(10, 4)`).
+4. En el siguiente render, `calculateItemDisplayValues` recalcula `unitPrice = effectiveLandedCost * (1 + marginPctOverride / 100)`.
+
+El paso (4) introducía pérdida de precisión: aunque `marginPctOverride` tiene 4 decimales y los `Number` de JS son float64, el costo efectivo suele tener decimales largos por conversión TRM y dilución, y el margen redondeado no permitía reconstruir el precio exacto que el usuario tecleó. Resultado: el usuario tecleaba `1500` y veía `1499.99...`.
+
+El schema ya definía dos columnas no usadas: `unitPriceOverride Decimal(15,2)` y `unitCostOverride Decimal(15,2)`. La columna existía en DB pero el código nunca la leía ni la escribía.
+
+### Decisión
+
+Cablear `unitPriceOverride` end-to-end. Cuando el usuario edita el precio unitario, persistimos el valor directo. El pricing-engine lo respeta como fuente de verdad del precio:
+
+- Si `unitPriceOverride != null`: `unitPrice = Number(si.unitPriceOverride)` y el margen mostrado se deriva inverso vía `calculateMarginFromPrice` solo para display, sin persistirlo.
+- Si `unitPriceOverride == null`: comportamiento previo (precio derivado de `marginPctOverride` o `item.marginPct`).
+
+**Regla de "última acción manda"**: cualquier acción que invalida la suposición de "precio fijo" limpia el override automáticamente:
+
+- Editar el margen ítem por ítem → `PATCH { marginPct, unitPriceOverride: null }`.
+- Aplicar margen global al escenario → `applyMarginToEntireScenario` setea `unitPriceOverride: null` en todos los items en la misma `updateMany`.
+- Cambiar la moneda del escenario → `updateScenario` envuelve el cambio en una `$transaction` Prisma que primero hace `scenarioItem.updateMany({ where: { scenarioId }, data: { unitPriceOverride: null } })` y luego el `scenario.update` con la moneda nueva.
+
+`unitCostOverride` queda fuera de scope: no se usa en ningún sitio y no hay caso de uso documentado.
+
+### Implementación
+
+**Backend** (`apps/api`):
+- `UpdateScenarioItemDto` acepta `unitPriceOverride?: number | null` con `@IsOptional() + @ValidateIf(v !== null) + @IsNumber()`.
+- `scenarios.service.ts::updateScenarioItem` persiste con el patrón `data.unitPriceOverride === undefined ? undefined : data.unitPriceOverride` para distinguir "no tocar" (undefined) de "limpiar" (null) de "fijar" (number).
+- `cloneScenario` propaga `unitPriceOverride` tanto en items raíz como en hijos (sin esto los overrides se perdían al clonar).
+
+**Frontend** (`apps/web`):
+- `unitPriceOverride` agregado al tipo `ScenarioItem` en `lib/types.ts` y a la interfaz interna del pricing-engine.
+- `calculateItemDisplayValues` y `calculateScenarioTotals` respetan el override como precio canónico cuando está presente; el margen de display se deriva inverso.
+- `updateUnitPrice` simplificado: PATCH directo `{ unitPriceOverride: val }`, sin cálculo inverso de margen.
+- Nueva acción `clearUnitPriceOverride(siId)` expuesta por el hook.
+- `ScenarioItemRow.tsx` muestra indicador visual (badge "fijo" + ícono de candado + fondo indigo) y botón ✕ para limpiar el override cuando está activo.
+
+### Consecuencias
+
+- Round-trip de precisión eliminado de raíz. Lo tecleado es lo persistido y lo mostrado. Display sigue formateado a 2 decimales.
+- `pricing-engine.ts` mantiene su rol de fuente única; el nuevo branch del override vive ahí.
+- Los registros existentes (`unitPriceOverride = NULL`) no cambian de comportamiento.
+- El override desaparece en cualquier cambio de contexto del escenario (moneda, margen global, margen item). El usuario que necesite un precio fijo en el nuevo contexto lo re-aplica.
+- Casos cubiertos por las transacciones atómicas: si el `update` del escenario falla, los overrides no quedan limpiados a medias.
+
+### Alternativas consideradas
+
+- **Subir precisión de `marginPctOverride` a `Decimal(10, 6)` o más**: mitiga pero no cura. Siempre habrá un costo efectivo que requiera más decimales. Descartado.
+- **Convertir `unitPriceOverride` al cambiar moneda en lugar de limpiarlo**: introduce ambigüedad sobre qué TRM usar para la conversión y des-conversión. Si la TRM del día cambia, el número persistido pierde significado. Descartado.
+- **Persistir `unitPriceOverrideCurrency` junto al override**: viable pero pesado (migración + propagación end-to-end). No hay caso de uso documentado que lo justifique hoy. Diferido.
+- **Eliminar `marginPctOverride`**: rompe la aplicación de margen global y la edición de margen ítem por ítem. Descartado.
