@@ -284,8 +284,19 @@ export default function ScenarioItemRow({
                                                     <input
                                                         type="text"
                                                         inputMode="numeric"
-                                                        value={child.quantity}
-                                                        onChange={(e) => updateChildQuantity(si.id!, child.id!, e.target.value)}
+                                                        value={editingCell?.id === child.id && editingCell?.field === 'childQuantity'
+                                                            ? editingCell.value
+                                                            : String(child.quantity ?? '')}
+                                                        onFocus={() => setEditingCell({ id: child.id!, field: 'childQuantity', value: String(child.quantity ?? '') })}
+                                                        onChange={(e) => setEditingCell({ id: child.id!, field: 'childQuantity', value: e.target.value })}
+                                                        onBlur={() => {
+                                                            updateChildQuantity(si.id!, child.id!, editingCell?.value ?? '');
+                                                            setEditingCell(null);
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') e.currentTarget.blur();
+                                                            if (e.key === 'Escape') setEditingCell(null);
+                                                        }}
                                                         disabled={isReadOnly}
                                                         className="w-14 text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-violet-300 border-none px-2 py-1 rounded-lg text-center transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                                     />
