@@ -1056,3 +1056,35 @@ Se introduce un módulo puro `apps/web/src/lib/consolidateTechnicalItems.ts` que
 - `387f88a` — backend: modelo + endpoints + seed
 - `2af9020` — frontend: consumo del setting + refactor de useInactivityTimeout
 - `3c5b5dd` — frontend: UI admin de configuración
+
+## ADR-027 — Paginación de la propuesta económica en el PDF
+
+**Fecha:** 2026-05-11
+**Estado:** Cerrado
+
+### Contexto
+El PDF se genera client-side con html2canvas-pro + jsPDF en `PdfPreviewModal.tsx`, capturando cada `[data-pdf-page]` (1056px de alto, `overflow: hidden`) como imagen. `EconomicProposalTable` renderizaba todos los `visibleItems` de un escenario más el bloque de totales en una sola hoja, y cuando los items no cabían, el contenido se recortaba visualmente sin emitir nuevas páginas (html2canvas no maneja paginación nativa).
+
+### Decisión
+Introducir paginación lógica en el DOM: el escenario se parte en N slices antes de renderizarse, y cada slice produce su propio `VisualPage` con su `[data-pdf-page]`. El loop existente que captura una hoja PDF por `[data-pdf-page]` queda intocado.
+
+- Helper puro `paginateEconomicProposal(scenario): EconomicPageSlice[]` en `apps/web/src/lib/paginateEconomicProposal.ts`. Es lógica de presentación, no financiera; no va al pricing-engine.
+- Límites por página en `ECONOMIC_PDF_PAGINATION` (constants.ts), valores conservadores 7/10/12/7: SINGLE_PAGE_MAX_ITEMS, FIRST_PAGE_ITEMS, MIDDLE_PAGE_ITEMS, LAST_PAGE_ITEMS.
+- Regla de la última hoja: siempre lleva items + totales. Nunca hay hoja huérfana solo con totales. Si el remanente tras la primera y las intermedias excede LAST_PAGE_ITEMS, se promueve una intermedia adicional.
+- Header indigo grande solo en `isFirstSlice`; en continuaciones, header compacto con sufijo "— Continuación". El `<thead>` con columnas se repite en cada slice por estar dentro del componente.
+- Cada escenario sigue arrancando en hoja propia (el primer slice del siguiente escenario tiene `isFirstSlice: true`).
+
+### Consecuencias
+- Positivas: filas no se cortan a mitad, totales nunca quedan huérfanos, `IndexPageContent` no requiere cambios porque ya filtra `isContinuation`.
+- Negativas: límites por página fijos (no medidos dinámicamente), pueden generar desperdicio si las filas son cortas. Aceptable como primera iteración; los números son ajustables en una sola constante.
+- Patrón reutilizable: si más adelante `TechnicalSpecSheet` u otra sección desborda, se aplica el mismo enfoque (helper puro de slicing + `VisualPage` por slice + componente consciente de `isFirstSlice` / `showTotals`).
+
+### Archivos
+- `apps/web/src/lib/constants.ts` (+`ECONOMIC_PDF_PAGINATION`)
+- `apps/web/src/lib/paginateEconomicProposal.ts` (nuevo)
+- `apps/web/src/components/proposals/EconomicProposalTable.tsx`
+- `apps/web/src/components/proposals/PdfPreviewModal.tsx`
+
+### Pendientes
+- Validar contra propuestas con muchos items (>30) en producción.
+- Considerar medición dinámica de altura si los valores fijos generan desperdicio notorio.
