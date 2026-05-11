@@ -285,6 +285,7 @@ export default function ProposalDocBuilder() {
                         onClose={() => setShowPreview(false)}
                         proposalVars={proposalVars}
                         processedScenarios={processedScenarios}
+                        enableExcelExport
                     />
                 )}
             </AnimatePresence>

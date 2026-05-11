@@ -27,7 +27,7 @@ function formatCurrency(value: number, currency: string): string {
  * INFRASTRUCTURE: tipo de infraestructura, fabricante, garantía
  * INFRA_SERVICES: tipo de servicio, responsable, unidad de medida
  */
-function buildQuickDescription(itemType: string, specs?: Record<string, string>): string {
+export function buildQuickDescription(itemType: string, specs?: Record<string, string>): string {
     if (!specs) return '';
     const pick = (...keys: string[]) =>
         keys.map(k => specs[k]?.trim()).filter(Boolean).join(' | ');
@@ -55,7 +55,7 @@ function buildQuickDescription(itemType: string, specs?: Record<string, string>)
  * PCS, ACCESSORIES, INFRASTRUCTURE → "Unidad"
  * SOFTWARE, PC_SERVICES, INFRA_SERVICES → usa technicalSpecs.unidadMedida o fallback "Unidad"
  */
-function getUnitOfMeasure(itemType: string, technicalSpecs?: Record<string, string>): string {
+export function getUnitOfMeasure(itemType: string, technicalSpecs?: Record<string, string>): string {
     switch (itemType) {
         case 'SOFTWARE':
         case 'PC_SERVICES':

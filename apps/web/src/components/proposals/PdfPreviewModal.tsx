@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { X, FileText, ListOrdered, Download, Loader2 } from 'lucide-react';
+import { X, FileText, ListOrdered, Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { generateHTML } from '@tiptap/html';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
@@ -37,6 +37,7 @@ interface PdfPreviewModalProps {
     onClose: () => void;
     proposalVars?: ProposalVariables;
     processedScenarios?: ProcessedScenario[];
+    enableExcelExport?: boolean;
 }
 
 function renderRichText(content: Record<string, unknown> | null): string {
@@ -80,7 +81,7 @@ interface VisualPage {
     economicSlice?: EconomicPageSlice;
 }
 
-export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [] }: PdfPreviewModalProps) {
+export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [], enableExcelExport = false }: PdfPreviewModalProps) {
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
     /** Resuelve la URL de una imagen: data URIs se usan directamente, rutas relativas se prefijan con apiBase */
@@ -92,6 +93,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
     const measureRef = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [exportingExcel, setExportingExcel] = useState(false);
     const consolidation = useMemo(
         () => consolidateTechnicalItems(processedScenarios),
         [processedScenarios],
@@ -140,6 +142,26 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
             setDownloading(false);
         }
     }, [visualPages, proposalVars]);
+
+    /** Genera y descarga el Excel con ficha técnica + precios de venta */
+    const handleExportExcel = useCallback(async () => {
+        setExportingExcel(true);
+        try {
+            const { exportProposalExcel } = await import('../../lib/exportProposalExcel');
+            await exportProposalExcel({
+                consolidatedItems: consolidation.items,
+                variantLabelByScenarioItemId: consolidation.variantLabelByScenarioItemId,
+                processedScenarios,
+                proposalCode: proposalVars?.cotizacion ?? 'SIN-COT',
+                clientName: proposalVars?.cliente ?? 'CLIENTE',
+            });
+        } catch (err) {
+            console.error('Error exporting Excel:', err);
+            alert('No se pudo generar el archivo Excel. Intente de nuevo.');
+        } finally {
+            setExportingExcel(false);
+        }
+    }, [consolidation, processedScenarios, proposalVars]);
 
     const buildVisualPages = useCallback(() => {
         const container = measureRef.current;
@@ -392,6 +414,25 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     </div>
                 </div>
                 <div className="flex items-center space-x-3">
+                    {enableExcelExport && (
+                        <button
+                            onClick={handleExportExcel}
+                            disabled={exportingExcel || consolidation.items.length === 0}
+                            className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-black tracking-tight hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/30"
+                        >
+                            {exportingExcel ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span>Exportando…</span>
+                                </>
+                            ) : (
+                                <>
+                                    <FileSpreadsheet className="h-4 w-4" />
+                                    <span>Descargar Excel</span>
+                                </>
+                            )}
+                        </button>
+                    )}
                     <button
                         onClick={generatePdf}
                         disabled={downloading || visualPages.length === 0}
