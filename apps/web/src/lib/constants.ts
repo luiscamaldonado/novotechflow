@@ -192,3 +192,20 @@ export const INACTIVITY_WARNING_BEFORE_MS = 60 * 1000;
 
 /** Clave de localStorage para cachear el timeout entre recargas. */
 export const INACTIVITY_TIMEOUT_STORAGE_KEY = 'inactivity_timeout_minutes';
+
+// ── Economic proposal PDF pagination ─────────────────────────
+
+/**
+ * Límites de items por página en el PDF de la propuesta económica.
+ * Valores conservadores. Ajustar si se observa desperdicio o cortes.
+ */
+export const ECONOMIC_PDF_PAGINATION = {
+    /** Si items.length <= este valor, todo cabe en 1 página (items + totales) */
+    SINGLE_PAGE_MAX_ITEMS: 7,
+    /** Items en la primera página cuando hay continuaciones (sin totales) */
+    FIRST_PAGE_ITEMS: 10,
+    /** Items en páginas intermedias (sin totales) */
+    MIDDLE_PAGE_ITEMS: 12,
+    /** Items en la última página (con totales al pie) */
+    LAST_PAGE_ITEMS: 7,
+} as const;

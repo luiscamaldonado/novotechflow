@@ -13,6 +13,7 @@ import type { ProcessedScenario } from '../../hooks/useProposalScenarios';
 import TechnicalSpecSheet from './TechnicalSpecSheet';
 import EconomicProposalTable from './EconomicProposalTable';
 import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
+import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/paginateEconomicProposal';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
@@ -75,6 +76,8 @@ interface VisualPage {
     consolidatedTotalItems?: number;
     /** For economic proposal pages */
     economicScenario?: ProcessedScenario;
+    /** For pages ECONOMIC: slice específico del escenario */
+    economicSlice?: EconomicPageSlice;
 }
 
 export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [] }: PdfPreviewModalProps) {
@@ -196,21 +199,25 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     });
                 }
 
-                // Inject virtual ECONOMIC PROPOSAL pages after tech specs
+                // Inject virtual ECONOMIC PROPOSAL pages after tech specs (paginated)
                 for (const scenario of processedScenarios) {
-                    result.push({
-                        id: `economic-${scenario.id}`,
-                        pageType: 'ECONOMIC',
-                        title: `Propuesta Económica — ${scenario.name}`,
-                        htmlContent: '',
-                        isContinuation: false,
-                        isCover: false,
-                        isIndex: false,
-                        isTechSpec: false,
-                        isEconomic: true,
-                        coverBlocks: [],
-                        economicScenario: scenario,
-                    });
+                    const slices = paginateEconomicProposal(scenario);
+                    for (const slice of slices) {
+                        result.push({
+                            id: `economic-${scenario.id}-${slice.sliceIndex}`,
+                            pageType: 'ECONOMIC',
+                            title: `Propuesta Económica — ${scenario.name}`,
+                            htmlContent: '',
+                            isContinuation: !slice.isFirstSlice,
+                            isCover: false,
+                            isIndex: false,
+                            isTechSpec: false,
+                            isEconomic: true,
+                            coverBlocks: [],
+                            economicScenario: scenario,
+                            economicSlice: slice,
+                        });
+                    }
                 }
 
                 continue;
@@ -451,8 +458,12 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                                         totalItems={vPage.consolidatedTotalItems!}
                                         variantLabel={vPage.consolidatedTechItem.variantLabel}
                                     />
-                                ) : vPage.isEconomic && vPage.economicScenario ? (
-                                    <EconomicProposalTable scenario={vPage.economicScenario} variantLabelByScenarioItemId={consolidation.variantLabelByScenarioItemId} />
+                                ) : vPage.isEconomic && vPage.economicScenario && vPage.economicSlice ? (
+                                    <EconomicProposalTable
+                                        scenario={vPage.economicScenario}
+                                        variantLabelByScenarioItemId={consolidation.variantLabelByScenarioItemId}
+                                        slice={vPage.economicSlice}
+                                    />
                                 ) : (
                                     <div className="px-16 py-16 h-full">
                                         {/* Header */}

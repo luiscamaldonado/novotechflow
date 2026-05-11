@@ -1,4 +1,5 @@
 import type { ProcessedScenario } from '../../hooks/useProposalScenarios';
+import type { EconomicPageSlice } from '../../lib/paginateEconomicProposal';
 
 /** Page height for letter size at 96dpi */
 const PAGE_HEIGHT = 1056;
@@ -6,6 +7,7 @@ const PAGE_HEIGHT = 1056;
 interface EconomicProposalTableProps {
     scenario: ProcessedScenario;
     variantLabelByScenarioItemId: Map<string, string | null>;
+    slice: EconomicPageSlice;
 }
 
 /** Formats a number as Colombian currency */
@@ -68,20 +70,30 @@ function getUnitOfMeasure(itemType: string, technicalSpecs?: Record<string, stri
  * Renderiza la tabla de propuesta económica de un escenario.
  * Muestra todos los ítems visibles con sus valores y totales al pie.
  */
-export default function EconomicProposalTable({ scenario, variantLabelByScenarioItemId }: EconomicProposalTableProps) {
-    const { visibleItems, totals, currency } = scenario;
+export default function EconomicProposalTable({ scenario, variantLabelByScenarioItemId, slice }: EconomicProposalTableProps) {
+    const { totals, currency } = scenario;
+    const { items, isFirstSlice, showTotals } = slice;
 
     return (
         <div className="px-16 py-16" style={{ minHeight: `${PAGE_HEIGHT}px` }}>
             {/* Header */}
-            <div className="mb-8 pb-4 border-b-2 border-indigo-600">
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
-                    Propuesta Económica
-                </h2>
-                <p className="text-sm text-indigo-600 font-bold mt-1">
-                    {scenario.name}
-                </p>
-            </div>
+            {isFirstSlice ? (
+                <div className="mb-8 pb-4 border-b-2 border-indigo-600">
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
+                        Propuesta Económica
+                    </h2>
+                    <p className="text-sm text-indigo-600 font-bold mt-1">
+                        {scenario.name}
+                    </p>
+                </div>
+            ) : (
+                <div className="mb-6 pb-3 border-b border-slate-200 flex items-center justify-between">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
+                        Propuesta Económica — {scenario.name}
+                        <span className="text-slate-300 ml-2">— Continuación</span>
+                    </p>
+                </div>
+            )}
 
             {/* Items table */}
             <table className="w-full border-collapse mb-8">
@@ -105,7 +117,7 @@ export default function EconomicProposalTable({ scenario, variantLabelByScenario
                     </tr>
                 </thead>
                 <tbody>
-                    {visibleItems.map((vi, idx) => {
+                    {items.map((vi, idx) => {
                         const item = vi.scenarioItem.item;
                         const unitOfMeasure = getUnitOfMeasure(item.itemType, item.technicalSpecs);
                         const quickDesc = buildQuickDescription(item.itemType, item.technicalSpecs);
@@ -152,39 +164,41 @@ export default function EconomicProposalTable({ scenario, variantLabelByScenario
                 </tbody>
             </table>
 
-            {/* Totals */}
-            <div className="flex justify-end">
-                <div className="w-80">
-                    <div className="border-2 border-slate-300 rounded-xl overflow-hidden">
-                        <TotalRow
-                            label="Subtotal Gravado"
-                            value={formatCurrency(totals.subtotalGravado, currency)}
-                        />
-                        <TotalRow
-                            label="Subtotal No Gravado"
-                            value={formatCurrency(totals.subtotalNoGravado, currency)}
-                            isAlternate
-                        />
-                        <TotalRow
-                            label="Subtotal antes de IVA"
-                            value={formatCurrency(totals.subtotalBeforeVat, currency)}
-                        />
-                        <TotalRow
-                            label="IVA (19%)"
-                            value={formatCurrency(totals.iva, currency)}
-                            isAlternate
-                        />
-                        <div className="bg-slate-800 text-white px-4 py-4 flex items-center justify-between">
-                            <span className="text-xs font-black uppercase tracking-widest">
-                                Total
-                            </span>
-                            <span className="text-lg font-black tracking-tight">
-                                {formatCurrency(totals.total, currency)}
-                            </span>
+            {/* Totals — only on the last slice */}
+            {showTotals && (
+                <div className="flex justify-end">
+                    <div className="w-80">
+                        <div className="border-2 border-slate-300 rounded-xl overflow-hidden">
+                            <TotalRow
+                                label="Subtotal Gravado"
+                                value={formatCurrency(totals.subtotalGravado, currency)}
+                            />
+                            <TotalRow
+                                label="Subtotal No Gravado"
+                                value={formatCurrency(totals.subtotalNoGravado, currency)}
+                                isAlternate
+                            />
+                            <TotalRow
+                                label="Subtotal antes de IVA"
+                                value={formatCurrency(totals.subtotalBeforeVat, currency)}
+                            />
+                            <TotalRow
+                                label="IVA (19%)"
+                                value={formatCurrency(totals.iva, currency)}
+                                isAlternate
+                            />
+                            <div className="bg-slate-800 text-white px-4 py-4 flex items-center justify-between">
+                                <span className="text-xs font-black uppercase tracking-widest">
+                                    Total
+                                </span>
+                                <span className="text-lg font-black tracking-tight">
+                                    {formatCurrency(totals.total, currency)}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }
