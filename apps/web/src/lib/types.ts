@@ -55,6 +55,7 @@ export interface ProposalSummary {
             itemId: string;
             quantity: number;
             marginPctOverride?: number;
+            unitPriceOverride?: number | null;
             item: ProposalItemFromApi;
             children?: Array<{
                 id: string;
@@ -158,6 +159,7 @@ export interface ScenarioItem {
     parentId?: string | null;
     quantity: number;
     marginPctOverride?: number | null;
+    unitPriceOverride?: number | null;
     isDiluted?: boolean;
     item: ProposalItemFromApi;
     children?: ScenarioItem[];

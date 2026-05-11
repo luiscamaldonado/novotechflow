@@ -2,15 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 import {
     calculateScenarioTotals,
-    calculateParentLandedCost,
-    calculateChildrenCostPerUnit,
-    calculateBaseLandedCost,
-    calculateDilutionPerUnit,
-    calculateEffectiveLandedCost,
-    calculateTotalDilutedCost,
-    calculateTotalNormalSubtotal,
-    calculateMarginFromPrice,
-    convertCost,
     type ScenarioTotals,
 } from '../lib/pricing-engine';
 
@@ -41,6 +32,7 @@ export interface ScenarioItem {
     parentId?: string | null;
     quantity: number;
     marginPctOverride?: number;
+    unitPriceOverride?: number | null;
     isDiluted?: boolean;
     item: ProposalCalcItem;
     children?: ScenarioItem[];
@@ -272,7 +264,21 @@ export function useScenarios(proposalId: string | undefined) {
         if (!activeScenarioId) return;
         try {
             await api.patch(`/proposals/scenarios/${activeScenarioId}`, { currency });
-            setScenarios(prev => prev.map(s => (s.id === activeScenarioId ? { ...s, currency } : s)));
+            setScenarios(prev =>
+                prev.map(s =>
+                    s.id === activeScenarioId
+                        ? {
+                              ...s,
+                              currency,
+                              scenarioItems: s.scenarioItems.map(si => ({
+                                  ...si,
+                                  unitPriceOverride: null,
+                                  children: si.children?.map(c => ({ ...c, unitPriceOverride: null })),
+                              })),
+                          }
+                        : s,
+                ),
+            );
         } catch (error) {
             console.error(error);
         }
@@ -319,11 +325,13 @@ export function useScenarios(proposalId: string | undefined) {
         const val = parseFloat(margin.replace(',', '.'));
         if (isNaN(val)) return;
         try {
-            await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: val });
+            await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: val, unitPriceOverride: null });
             setScenarios(prev =>
                 prev.map(s => ({
                     ...s,
-                    scenarioItems: s.scenarioItems.map(si => (si.id === siId ? { ...si, marginPctOverride: val } : si)),
+                    scenarioItems: s.scenarioItems.map(si =>
+                        si.id === siId ? { ...si, marginPctOverride: val, unitPriceOverride: null } : si,
+                    ),
                 })),
             );
         } catch (error) {
@@ -376,44 +384,14 @@ export function useScenarios(proposalId: string | undefined) {
     const updateUnitPrice = async (siId: string, price: string) => {
         const val = parseFloat(price.replace(',', '.'));
         if (isNaN(val) || val <= 0) return;
-
-        const scenario = scenarios.find(s => s.scenarioItems.some(si => si.id === siId));
-        if (!scenario) return;
-        const si = scenario.scenarioItems.find(i => i.id === siId);
-        if (!si) return;
-
-        // Use effective TRM for the active scenario; persisted value for others
-        const trmForCalc = scenario.id === activeScenarioId
-            ? effectiveConversionTrm
-            : scenario.conversionTrm;
-
-        const rawCost = Number(si.item.unitCost);
-        const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenario.currency || 'COP', trmForCalc);
-        const flete = Number(si.item.internalCosts?.fletePct || 0);
-        const parentLanded = calculateParentLandedCost(cost, flete);
-        const childrenCost = calculateChildrenCostPerUnit(si.children || [], scenario.currency, trmForCalc);
-        const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
-
-        // Include dilution in effective cost for accurate margin reverse-calc
-        const totalDilutedCost = calculateTotalDilutedCost(scenario.scenarioItems, scenario.currency, trmForCalc);
-        const totalNormalSub = calculateTotalNormalSubtotal(scenario.scenarioItems, scenario.currency, trmForCalc);
-        const dilution = calculateDilutionPerUnit(cost, si.quantity, totalNormalSub, totalDilutedCost);
-        const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
-        const newMargin = calculateMarginFromPrice(val, effectiveLanded);
-
-        if (isNaN(newMargin) || !isFinite(newMargin)) {
-            console.warn('Invalid margin calculated:', newMargin);
-            return;
-        }
-        // Round to 4 decimal places to match DB precision Decimal(10,4)
-        const roundedMargin = Math.round(newMargin * 10000) / 10000;
-
         try {
-            await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: roundedMargin });
+            await api.patch(`/proposals/scenarios/items/${siId}`, { unitPriceOverride: val });
             setScenarios(prev =>
                 prev.map(s => ({
                     ...s,
-                    scenarioItems: s.scenarioItems.map(i => (i.id === siId ? { ...i, marginPctOverride: roundedMargin } : i)),
+                    scenarioItems: s.scenarioItems.map(i =>
+                        i.id === siId ? { ...i, unitPriceOverride: val } : i,
+                    ),
                 })),
             );
         } catch (error) {
@@ -429,13 +407,29 @@ export function useScenarios(proposalId: string | undefined) {
             setScenarios(prev =>
                 prev.map(s =>
                     s.id === activeScenarioId
-                        ? { ...s, scenarioItems: s.scenarioItems.map(si => ({ ...si, marginPctOverride: val })) }
+                        ? { ...s, scenarioItems: s.scenarioItems.map(si => ({ ...si, marginPctOverride: val, unitPriceOverride: null })) }
                         : s,
                 ),
             );
         } catch (error) {
             console.error(error);
             alert('No se pudo aplicar el margen global.');
+        }
+    };
+
+    const clearUnitPriceOverride = async (siId: string) => {
+        try {
+            await api.patch(`/proposals/scenarios/items/${siId}`, { unitPriceOverride: null });
+            setScenarios(prev =>
+                prev.map(s => ({
+                    ...s,
+                    scenarioItems: s.scenarioItems.map(i =>
+                        i.id === siId ? { ...i, unitPriceOverride: null } : i,
+                    ),
+                })),
+            );
+        } catch (error) {
+            console.error(error);
         }
     };
 
@@ -492,6 +486,7 @@ export function useScenarios(proposalId: string | undefined) {
         updateUnitPrice,
         updateGlobalMargin,
         toggleDilpidate,
+        clearUnitPriceOverride,
         renameScenario,
         cloneScenario,
     };

@@ -33,6 +33,7 @@ export default function ProposalCalculations() {
         addChildItem, removeChildItem, updateChildQuantity,
         changeCurrency, updateConversionTrm, updateMargin, updateQuantity,
         updateUnitPrice, updateGlobalMargin, toggleDilpidate,
+        clearUnitPriceOverride,
         renameScenario,
         cloneScenario,
     } = useScenarios(id);
@@ -313,6 +314,7 @@ export default function ProposalCalculations() {
                                                             removeItemFromScenario={removeItemFromScenario}
                                                             updateChildQuantity={updateChildQuantity}
                                                             removeChildItem={removeChildItem}
+                                                            clearUnitPriceOverride={clearUnitPriceOverride}
                                                             setPickingChildrenFor={setPickingChildrenFor}
                                                             proposal={proposal}
                                                         />

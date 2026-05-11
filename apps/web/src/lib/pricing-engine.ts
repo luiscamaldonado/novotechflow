@@ -37,6 +37,7 @@ export interface PricingItem {
 export interface PricingScenarioItem {
     quantity: number;
     marginPctOverride?: number | null;
+    unitPriceOverride?: number | null;
     isDiluted?: boolean;
     item: PricingItem;
     children?: PricingScenarioItem[];
@@ -236,11 +237,18 @@ export function calculateItemDisplayValues(
     }
 
     const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
-    const margin = resolveMargin(si.marginPctOverride, si.item.marginPct);
+    const baseMargin = resolveMargin(si.marginPctOverride, si.item.marginPct);
 
     let unitPrice = 0;
+    let displayMargin = baseMargin;
+
     if (!si.isDiluted) {
-        unitPrice = calculateUnitPrice(effectiveLanded, margin);
+        if (si.unitPriceOverride !== null && si.unitPriceOverride !== undefined) {
+            unitPrice = Number(si.unitPriceOverride);
+            displayMargin = calculateMarginFromPrice(unitPrice, effectiveLanded);
+        } else {
+            unitPrice = calculateUnitPrice(effectiveLanded, baseMargin);
+        }
     }
 
     const lineTotal = calculateLineTotal(unitPrice, si.quantity);
@@ -251,7 +259,7 @@ export function calculateItemDisplayValues(
         baseLandedCost: baseLanded,
         dilutionPerUnit: dilution,
         effectiveLandedCost: effectiveLanded,
-        margin,
+        margin: displayMargin,
         unitPrice,
         lineTotal,
     };
@@ -294,7 +302,12 @@ export function calculateScenarioTotals(
         const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
 
         const margin = resolveMargin(si.marginPctOverride, si.item.marginPct);
-        const unitPrice = calculateUnitPrice(effectiveLanded, margin);
+        let unitPrice: number;
+        if (si.unitPriceOverride !== null && si.unitPriceOverride !== undefined) {
+            unitPrice = Number(si.unitPriceOverride);
+        } else {
+            unitPrice = calculateUnitPrice(effectiveLanded, margin);
+        }
         const lineTotal = calculateLineTotal(unitPrice, si.quantity);
 
         totalCost += effectiveLanded * si.quantity;

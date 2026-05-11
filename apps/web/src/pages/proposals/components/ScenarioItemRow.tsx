@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import {
-    Trash2, Plus, Percent, ChevronDown, Layers,
+    Trash2, Plus, Percent, ChevronDown, Layers, Lock, X,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { ScenarioItem } from '../../../hooks/useScenarios';
@@ -33,6 +33,7 @@ interface ScenarioItemRowProps {
     removeItemFromScenario: (siId: string) => void;
     updateChildQuantity: (parentSiId: string, childId: string, value: string) => void;
     removeChildItem: (parentSiId: string, childId: string) => void;
+    clearUnitPriceOverride: (siId: string) => void;
     setPickingChildrenFor: (siId: string) => void;
     proposal: { proposalItems: ProposalCalcItem[] };
 }
@@ -59,10 +60,12 @@ export default function ScenarioItemRow({
     removeItemFromScenario,
     updateChildQuantity,
     removeChildItem,
+    clearUnitPriceOverride,
     setPickingChildrenFor,
     proposal,
 }: ScenarioItemRowProps) {
     const { childrenCostPerUnit, margin, unitPrice } = displayValues;
+    const hasUnitPriceOverride = si.unitPriceOverride !== null && si.unitPriceOverride !== undefined;
     const children = si.children || [];
     const childCount = children.length;
 
@@ -186,27 +189,47 @@ export default function ScenarioItemRow({
                 ) : isDaasMode ? (
                     <span className="text-xs font-black text-pink-400 bg-pink-50 px-3 py-2 rounded-xl">{unitPrice.toFixed(2)}</span>
                 ) : (
-                    <input 
-                        type="text"
-                        value={editingCell?.id === si.id && editingCell?.field === 'unitPrice' 
-                            ? editingCell.value 
-                            : formatDecimalWithThousands(unitPrice.toFixed(2))}
-                        onFocus={() => setEditingCell({ id: si.id!, field: 'unitPrice', value: unitPrice.toFixed(2) })}
-                        onChange={(e) => setEditingCell({ id: si.id!, field: 'unitPrice', value: e.target.value })}
-                        onBlur={(e) => {
-                            const parsed = parseFloat(e.target.value.replace(',', '.'));
-                            if (!isNaN(parsed) && parsed > 0) {
-                                updateUnitPrice(si.id!, String(parsed));
-                            }
-                            setEditingCell(null);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                            if (e.key === 'Escape') setEditingCell(null);
-                        }}
-                        disabled={isReadOnly}
-                        className="w-28 bg-slate-100 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                    />
+                    <div className="flex items-center justify-end space-x-1">
+                        {hasUnitPriceOverride && (
+                            <div className="flex items-center space-x-0.5">
+                                <Lock className="h-3 w-3 text-indigo-500" />
+                                <span className="text-[8px] font-black text-indigo-500 uppercase">fijo</span>
+                                {!isReadOnly && (
+                                    <button
+                                        onClick={() => clearUnitPriceOverride(si.id!)}
+                                        className="p-0.5 text-indigo-400 hover:text-red-500 transition-colors"
+                                        title="Quitar precio fijo y volver a cálculo por margen"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        <input 
+                            type="text"
+                            value={editingCell?.id === si.id && editingCell?.field === 'unitPrice' 
+                                ? editingCell.value 
+                                : formatDecimalWithThousands(unitPrice.toFixed(2))}
+                            onFocus={() => setEditingCell({ id: si.id!, field: 'unitPrice', value: unitPrice.toFixed(2) })}
+                            onChange={(e) => setEditingCell({ id: si.id!, field: 'unitPrice', value: e.target.value })}
+                            onBlur={(e) => {
+                                const parsed = parseFloat(e.target.value.replace(',', '.'));
+                                if (!isNaN(parsed) && parsed > 0) {
+                                    updateUnitPrice(si.id!, String(parsed));
+                                }
+                                setEditingCell(null);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                if (e.key === 'Escape') setEditingCell(null);
+                            }}
+                            disabled={isReadOnly}
+                            className={cn(
+                                "w-28 border-none rounded-xl text-right font-black text-xs py-2 px-3 focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-60 disabled:cursor-not-allowed",
+                                hasUnitPriceOverride ? "bg-indigo-50 text-indigo-600" : "bg-slate-100"
+                            )}
+                        />
+                    </div>
                 )}
             </td>
             <td className="px-4 py-6 text-right font-mono font-black text-indigo-600">
