@@ -5,8 +5,7 @@ import {
 import { cn } from '../../../lib/utils';
 import type { ScenarioItem } from '../../../hooks/useScenarios';
 import type { ProposalCalcItem } from '../../../hooks/useScenarios';
-import type { ItemDisplayValues } from '../../../lib/pricing-engine';
-import { calculateParentLandedCost } from '../../../lib/pricing-engine';
+import { calculateItemDisplayValues, type ItemDisplayValues } from '../../../lib/pricing-engine';
 import {
     formatNumberWithThousands,
     formatDecimalWithThousands,
@@ -16,6 +15,9 @@ interface ScenarioItemRowProps {
     si: ScenarioItem;
     item: ProposalCalcItem;
     displayValues: ItemDisplayValues;
+    scenarioItems: ScenarioItem[];
+    scenarioCurrency: string;
+    effectiveConversionTrm: number | null;
 
     displayIdx: number;
     isReadOnly: boolean;
@@ -39,6 +41,9 @@ export default function ScenarioItemRow({
     si,
     item,
     displayValues,
+    scenarioItems,
+    scenarioCurrency,
+    effectiveConversionTrm,
 
     displayIdx,
     isReadOnly,
@@ -268,7 +273,8 @@ export default function ScenarioItemRow({
                                 children.map(child => {
                                     const childGlobalIdx = proposal?.proposalItems.findIndex((pi: ProposalCalcItem) => pi.id === child.itemId) ?? -1;
                                     const childDisplayIdx = childGlobalIdx !== -1 ? childGlobalIdx + 1 : '?';
-                                    const cLanded = calculateParentLandedCost(Number(child.item.unitCost), Number(child.item.internalCosts?.fletePct || 0));
+                                    const childDv = calculateItemDisplayValues(child, scenarioItems, scenarioCurrency, effectiveConversionTrm);
+                                    const cLanded = childDv.parentLandedCost;
                                     return (
                                         <div key={child.id} className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-violet-100 shadow-sm">
                                             <div className="flex items-center space-x-3 flex-1 min-w-0">

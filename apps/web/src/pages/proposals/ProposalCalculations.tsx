@@ -26,7 +26,7 @@ export default function ProposalCalculations() {
 
     const {
         loading, saving, proposal, proposalItems, scenarios,
-        activeScenarioId, setActiveScenarioId, activeScenario, totals,
+        activeScenarioId, setActiveScenarioId, activeScenario, effectiveConversionTrm, totals,
         trm, extraTrm, loadData,
         createScenario, deleteScenario,
         addItemToScenario, removeItemFromScenario,
@@ -285,7 +285,7 @@ export default function ProposalCalculations() {
                                                         return 0;
                                                     })
                                                     .map((si, idx) => {
-                                                    const displayValues = calculateItemDisplayValues(si, activeScenario.scenarioItems, activeScenario.currency, activeScenario.conversionTrm);
+                                                    const displayValues = calculateItemDisplayValues(si, activeScenario.scenarioItems, activeScenario.currency, effectiveConversionTrm);
                                                     const item = si.item;
                                                     const globalItemIdx = proposal?.proposalItems.findIndex((pi: ProposalCalcItem) => pi.id === si.itemId) ?? -1;
                                                     const displayIdx = globalItemIdx !== -1 ? globalItemIdx + 1 : idx + 1;
@@ -296,6 +296,9 @@ export default function ProposalCalculations() {
                                                             si={si}
                                                             item={item}
                                                             displayValues={displayValues}
+                                                            scenarioItems={activeScenario.scenarioItems}
+                                                            scenarioCurrency={activeScenario.currency}
+                                                            effectiveConversionTrm={effectiveConversionTrm}
                                                             displayIdx={displayIdx}
                                                             isReadOnly={isReadOnly}
                                                             editingCell={editingCell}

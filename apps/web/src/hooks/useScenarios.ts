@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 import {
     calculateScenarioTotals,
@@ -382,16 +382,21 @@ export function useScenarios(proposalId: string | undefined) {
         const si = scenario.scenarioItems.find(i => i.id === siId);
         if (!si) return;
 
+        // Use effective TRM for the active scenario; persisted value for others
+        const trmForCalc = scenario.id === activeScenarioId
+            ? effectiveConversionTrm
+            : scenario.conversionTrm;
+
         const rawCost = Number(si.item.unitCost);
-        const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenario.currency || 'COP', scenario.conversionTrm);
+        const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenario.currency || 'COP', trmForCalc);
         const flete = Number(si.item.internalCosts?.fletePct || 0);
         const parentLanded = calculateParentLandedCost(cost, flete);
-        const childrenCost = calculateChildrenCostPerUnit(si.children || [], scenario.currency, scenario.conversionTrm);
+        const childrenCost = calculateChildrenCostPerUnit(si.children || [], scenario.currency, trmForCalc);
         const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
         // Include dilution in effective cost for accurate margin reverse-calc
-        const totalDilutedCost = calculateTotalDilutedCost(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
-        const totalNormalSub = calculateTotalNormalSubtotal(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
+        const totalDilutedCost = calculateTotalDilutedCost(scenario.scenarioItems, scenario.currency, trmForCalc);
+        const totalNormalSub = calculateTotalNormalSubtotal(scenario.scenarioItems, scenario.currency, trmForCalc);
         const dilution = calculateDilutionPerUnit(cost, si.quantity, totalNormalSub, totalDilutedCost);
         const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
         const newMargin = calculateMarginFromPrice(val, effectiveLanded);
@@ -434,12 +439,27 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
+    // ── Active scenario + effective TRM ────────────────────────
+    const activeScenario = scenarios.find(s => s.id === activeScenarioId) ?? null;
+
+    /** Persisted TRM takes priority; fallback to live TRM for in-memory calcs */
+    const effectiveConversionTrm = useMemo(() => {
+        if (!activeScenario) return null;
+        if (activeScenario.conversionTrm !== null && activeScenario.conversionTrm !== undefined) {
+            return activeScenario.conversionTrm;
+        }
+        return trm?.valor ?? null;
+    }, [activeScenario, trm]);
+
     // ── Cálculos (delegated to pricing-engine) ────────────────
     const calculateTotals = (scenario: Scenario): ScenarioTotals => {
-        return calculateScenarioTotals(scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
+        // Use effective TRM for active scenario; persisted value for others
+        const trmForCalc = scenario.id === activeScenarioId
+            ? effectiveConversionTrm
+            : scenario.conversionTrm;
+        return calculateScenarioTotals(scenario.scenarioItems, scenario.currency, trmForCalc);
     };
 
-    const activeScenario = scenarios.find(s => s.id === activeScenarioId) ?? null;
     const totals: ScenarioTotals = activeScenario
         ? calculateTotals(activeScenario)
         : { beforeVat: 0, nonTaxed: 0, subtotal: 0, vat: 0, total: 0, globalMarginPct: 0 };
@@ -453,6 +473,7 @@ export function useScenarios(proposalId: string | undefined) {
         activeScenarioId,
         setActiveScenarioId,
         activeScenario,
+        effectiveConversionTrm,
         totals,
         trm,
         extraTrm,
