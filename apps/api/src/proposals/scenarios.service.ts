@@ -82,16 +82,29 @@ export class ScenariosService {
    * Actualiza un escenario existente.
    */
   async updateScenario(id: string, data: UpdateScenarioDto, user: AuthenticatedUser) {
-    await this.verifyScenarioOwnership(id, user);
-    return this.prisma.scenario.update({
-      where: { id },
-      data: {
-        name: data.name,
-        currency: data.currency,
-        conversionTrm: data.conversionTrm,
-        description: data.description ? sanitizePlainText(data.description) : data.description
-      }
-    });
+    const scenario = await this.verifyScenarioOwnership(id, user);
+
+    const updateData = {
+      name: data.name,
+      currency: data.currency,
+      conversionTrm: data.conversionTrm,
+      description: data.description ? sanitizePlainText(data.description) : data.description,
+    };
+
+    const isCurrencyChanging =
+      data.currency !== undefined && data.currency !== scenario.currency;
+
+    if (isCurrencyChanging) {
+      return this.prisma.$transaction(async (tx) => {
+        await tx.scenarioItem.updateMany({
+          where: { scenarioId: id },
+          data: { unitPriceOverride: null },
+        });
+        return tx.scenario.update({ where: { id }, data: updateData });
+      });
+    }
+
+    return this.prisma.scenario.update({ where: { id }, data: updateData });
   }
 
   /**
@@ -147,6 +160,7 @@ export class ScenariosService {
           itemId: si.itemId,
           quantity: si.quantity,
           marginPctOverride: si.marginPctOverride,
+          unitPriceOverride: si.unitPriceOverride,
           isDiluted: si.isDiluted,
         },
       });
@@ -164,6 +178,7 @@ export class ScenariosService {
           parentId: newParentId,
           quantity: child.quantity,
           marginPctOverride: child.marginPctOverride,
+          unitPriceOverride: child.unitPriceOverride,
           isDiluted: child.isDiluted,
         },
       });
@@ -216,6 +231,9 @@ export class ScenariosService {
       data: {
         quantity: data.quantity,
         marginPctOverride: data.marginPct,
+        unitPriceOverride: data.unitPriceOverride === undefined
+          ? undefined
+          : data.unitPriceOverride,
         isDiluted: data.isDiluted,
       }
     });
@@ -242,7 +260,8 @@ export class ScenariosService {
     return this.prisma.scenarioItem.updateMany({
       where: { scenarioId },
       data: {
-        marginPctOverride: marginPct
+        marginPctOverride: marginPct,
+        unitPriceOverride: null,
       }
     });
   }

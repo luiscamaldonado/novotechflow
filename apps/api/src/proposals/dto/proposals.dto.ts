@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, IsEnum, IsDateString, Min, Max, MaxLength, IsObject, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, IsEnum, IsDateString, Min, Max, MaxLength, IsObject, IsIn, ValidateIf } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ItemType, ProposalStatus, AcquisitionType } from '@prisma/client';
 
@@ -294,6 +294,16 @@ export class UpdateScenarioItemDto {
     @IsOptional()
     @IsNumber()
     marginPct?: number;
+
+    @ApiPropertyOptional({
+        type: Number,
+        nullable: true,
+        description: 'Precio unitario override. Si est\u00e1 presente, manda sobre el margen para el c\u00e1lculo del precio. null = limpiar override.',
+    })
+    @IsOptional()
+    @ValidateIf((_obj, value) => value !== null)
+    @IsNumber()
+    unitPriceOverride?: number | null;
 
     @IsOptional()
     @IsBoolean()
