@@ -262,6 +262,24 @@ export function useScenarios(proposalId: string | undefined) {
 
     const changeCurrency = async (currency: string) => {
         if (!activeScenarioId) return;
+
+        const scenario = scenarios.find(s => s.id === activeScenarioId);
+        if (!scenario || scenario.currency === currency) return;
+
+        const hasOverrides = scenario.scenarioItems.some(
+            si =>
+                si.unitPriceOverride != null ||
+                (si.children ?? []).some(c => c.unitPriceOverride != null),
+        );
+
+        if (hasOverrides) {
+            const confirmed = window.confirm(
+                'Cambiar la moneda eliminará los precios unitarios fijados manualmente. ' +
+                'Los precios se recalcularán automáticamente a partir del costo y margen. ¿Continuar?',
+            );
+            if (!confirmed) return;
+        }
+
         try {
             await api.patch(`/proposals/scenarios/${activeScenarioId}`, { currency });
             setScenarios(prev =>
@@ -273,7 +291,7 @@ export function useScenarios(proposalId: string | undefined) {
                               scenarioItems: s.scenarioItems.map(si => ({
                                   ...si,
                                   unitPriceOverride: null,
-                                  children: si.children?.map(c => ({ ...c, unitPriceOverride: null })),
+                                  children: (si.children ?? []).map(c => ({ ...c, unitPriceOverride: null })),
                               })),
                           }
                         : s,
