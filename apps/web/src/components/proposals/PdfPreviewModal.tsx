@@ -118,9 +118,9 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     useCORS: true,
                     allowTaint: true,
                     backgroundColor: '#ffffff',
-                    width: 816,
-                    height: PAGE_HEIGHT,
-                    windowWidth: 816,
+                    width: el.offsetWidth,
+                    height: el.offsetHeight,
+                    windowWidth: document.documentElement.offsetWidth,
                 });
 
                 const imgData = canvas.toDataURL('image/jpeg', 0.92);
