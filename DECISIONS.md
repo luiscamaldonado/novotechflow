@@ -1060,7 +1060,7 @@ Se introduce un módulo puro `apps/web/src/lib/consolidateTechnicalItems.ts` que
 ## ADR-027 — Paginación de la propuesta económica en el PDF
 
 **Fecha:** 2026-05-11
-**Estado:** Cerrado
+**Estado:** Cerrado (superseded por ADR-029)
 
 ### Contexto
 El PDF se genera client-side con html2canvas-pro + jsPDF en `PdfPreviewModal.tsx`, capturando cada `[data-pdf-page]` (1056px de alto, `overflow: hidden`) como imagen. `EconomicProposalTable` renderizaba todos los `visibleItems` de un escenario más el bloque de totales en una sola hoja, y cuando los items no cabían, el contenido se recortaba visualmente sin emitir nuevas páginas (html2canvas no maneja paginación nativa).
@@ -1087,7 +1087,7 @@ Introducir paginación lógica en el DOM: el escenario se parte en N slices ante
 
 ### Pendientes
 - Validar contra propuestas con muchos items (>30) en producción.
-- Considerar medición dinámica de altura si los valores fijos generan desperdicio notorio.
+- ~~Considerar medición dinámica de altura si los valores fijos generan desperdicio notorio.~~ Resuelto en ADR-029.
 ## ADR-028 — Persistencia de `unitPriceOverride` para evitar round-trip de precisión
 
 **Estado:** Aceptada e implementada
@@ -1149,3 +1149,42 @@ Cablear `unitPriceOverride` end-to-end. Cuando el usuario edita el precio unitar
 - **Convertir `unitPriceOverride` al cambiar moneda en lugar de limpiarlo**: introduce ambigüedad sobre qué TRM usar para la conversión y des-conversión. Si la TRM del día cambia, el número persistido pierde significado. Descartado.
 - **Persistir `unitPriceOverrideCurrency` junto al override**: viable pero pesado (migración + propagación end-to-end). No hay caso de uso documentado que lo justifique hoy. Diferido.
 - **Eliminar `marginPctOverride`**: rompe la aplicación de margen global y la edición de margen ítem por ítem. Descartado.
+
+## ADR-029 — Paginación height-aware de la propuesta económica en el PDF
+
+**Fecha:** 2026-05-14
+**Estado:** Cerrado
+**Supersede:** ADR-027 (enfoque de paginación por conteo fijo)
+
+### Contexto
+ADR-027 paginó la propuesta económica cortando los slices por conteo fijo de items (`ECONOMIC_PDF_PAGINATION`, 7/10/12/7). El supuesto de altura uniforme por fila no se sostiene: nombres de item largos envuelven en varias líneas y la descripción rápida + U.M varían la altura real del `<tr>`. Un slice válido por conteo podía renderizar más alto que los 1056px del `[data-pdf-page]`, y html2canvas lo recortaba. Síntoma: el preview web se veía completo pero el PDF descargado se cortaba al final, perdiendo filas y/o el bloque de totales.
+
+### Intento fallido previo (registrado para no repetirlo)
+Antes del fix definitivo se intentó (commit `c453a77`, revertido en `d96c405`) cambiar las opciones de html2canvas en `generatePdf` para usar `el.offsetWidth` / `el.offsetHeight` y `windowWidth` apuntando al viewport real, en vez de los valores hardcoded 816 / `PAGE_HEIGHT`. Resultado: el PDF salió sin estilos Tailwind (sin header oscuro, sin bordes, sin zebra). Causa: `windowWidth` apuntando al viewport real impide que el clon interno de html2canvas resuelva el CSS. Conclusión: las dimensiones de captura de html2canvas deben quedar fijas; el problema de desborde se resuelve en la paginación, no en la captura.
+
+### Decisión
+Hacer `paginateEconomicProposal` height-aware: medir la altura real de cada fila en el DOM y cortar las hojas por altura acumulada, no por conteo.
+
+- Nueva firma: `paginateEconomicProposal(scenario, rowHeights: Map<string, number>)`. Sigue siendo helper puro de presentación; no va al pricing-engine.
+- Medición: `PdfPreviewModal` monta un contenedor oculto (`economicMeasureRef`) que renderiza un `EconomicProposalTable` por escenario con un slice de medición (todos los `visibleItems`, `showTotals: false`). Cada `<tr>` lleva `data-measure-row={scenarioItem.id}`. Un `useEffect` lee las alturas reales con `getBoundingClientRect()` y las pasa a estado (`rowHeights`); `buildVisualPages` depende de `rowHeights` y se redispara cuando la medición está lista.
+- Algoritmo de dos pasadas: (1) empaquetar filas por altura acumulada contra el budget de la hoja — una fila sola siempre entra aunque exceda, para evitar loop infinito; (2) acomodar el bloque de totales en la última hoja, empujando filas a una hoja nueva si no cabe, con corte de seguridad a 1 fila.
+- Bloques fijos (headers, `<thead>`, bloque de totales) no se miden: se estiman con constantes `ECONOMIC_PDF_HEIGHTS` en constants.ts. `ECONOMIC_PDF_PAGINATION` se eliminó.
+- Las constantes se recalibraron con alturas reales medidas en el DOM tras detectar que los valores iniciales estimados causaban corte (header de continuación y `<thead>` subestimados) y hojas de una sola fila (bloque de totales sobreestimado). Valores finales: `USABLE_HEIGHT` 928, `FIRST_SLICE_HEADER_HEIGHT` 88, `CONTINUATION_HEADER_HEIGHT` 88, `TABLE_HEAD_HEIGHT` 80 (incluye margen inferior de la tabla), `TOTALS_BLOCK_HEIGHT` 256, `FALLBACK_ROW_HEIGHT` 80.
+
+### Consecuencias
+- Positivas: los slices respetan la altura real de página; el corte en el PDF desaparece. El reparto se ajusta solo a contenido de filas variable.
+- Negativas: los bloques fijos siguen estimados, no medidos; si su diseño cambia (tipografía, padding del header o del bloque de totales) hay que recalibrar `ECONOMIC_PDF_HEIGHTS`. La medición agrega un render oculto extra por escenario.
+- Patrón: la medición en contenedor oculto + helper puro de slicing es reutilizable si otra sección tabular del PDF desborda.
+
+### Archivos
+- `apps/web/src/lib/paginateEconomicProposal.ts` (reescrito: firma + algoritmo height-aware)
+- `apps/web/src/components/proposals/PdfPreviewModal.tsx` (contenedor de medición, estado `rowHeights`, wiring)
+- `apps/web/src/components/proposals/EconomicProposalTable.tsx` (atributo `data-measure-row`)
+- `apps/web/src/lib/constants.ts` (+`ECONOMIC_PDF_HEIGHTS`, −`ECONOMIC_PDF_PAGINATION`)
+
+### Commits
+- `7be02f1` — paginación height-aware (algoritmo + medición)
+- `1417fd6` — recalibración de `ECONOMIC_PDF_HEIGHTS` con valores medidos
+
+### Pendientes
+- Validar contra propuestas con muchos items (>30) en producción.
