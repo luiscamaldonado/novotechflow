@@ -207,13 +207,13 @@ export const ECONOMIC_PDF_HEIGHTS = {
     /** Alto util de la hoja: PAGE_HEIGHT (1056) - padding vertical (64x2) */
     USABLE_HEIGHT: 928,
     /** Header grande indigo de la primera hoja del escenario */
-    FIRST_SLICE_HEADER_HEIGHT: 96,
+    FIRST_SLICE_HEADER_HEIGHT: 88,
     /** Header reducido de las hojas de continuacion */
-    CONTINUATION_HEADER_HEIGHT: 52,
-    /** Fila <thead> de la tabla de items */
-    TABLE_HEAD_HEIGHT: 40,
+    CONTINUATION_HEADER_HEIGHT: 88,
+    /** Fila <thead> de la tabla de items + margen inferior de la tabla */
+    TABLE_HEAD_HEIGHT: 80,
     /** Bloque de totales al pie (5 filas + total), solo ultima hoja */
-    TOTALS_BLOCK_HEIGHT: 290,
+    TOTALS_BLOCK_HEIGHT: 256,
     /** Altura de fallback por fila si la medicion falla */
-    FALLBACK_ROW_HEIGHT: 64,
+    FALLBACK_ROW_HEIGHT: 80,
 } as const;
