@@ -91,9 +91,11 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
     };
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
+    const economicMeasureRef = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [exportingExcel, setExportingExcel] = useState(false);
+    const [rowHeights, setRowHeights] = useState<Map<string, number>>(new Map());
     const consolidation = useMemo(
         () => consolidateTechnicalItems(processedScenarios),
         [processedScenarios],
@@ -223,7 +225,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
                 // Inject virtual ECONOMIC PROPOSAL pages after tech specs (paginated)
                 for (const scenario of processedScenarios) {
-                    const slices = paginateEconomicProposal(scenario);
+                    const slices = paginateEconomicProposal(scenario, rowHeights);
                     for (const slice of slices) {
                         result.push({
                             id: `economic-${scenario.id}-${slice.sliceIndex}`,
@@ -373,7 +375,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
         setVisualPages(result);
         setReady(true);
-    }, [pages, apiBase, proposalVars, processedScenarios, consolidation]);
+    }, [pages, apiBase, proposalVars, processedScenarios, consolidation, rowHeights]);
 
     useEffect(() => {
         // Wait for DOM to be ready
@@ -390,6 +392,29 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
         }
     }, [buildVisualPages]);
 
+    // Measure economic table row heights in a hidden container
+    useEffect(() => {
+        if (processedScenarios.length === 0) return;
+
+        const timer = setTimeout(() => {
+            const container = economicMeasureRef.current;
+            if (!container) return;
+
+            const measured = new Map<string, number>();
+            const rows = container.querySelectorAll<HTMLElement>('[data-measure-row]');
+            rows.forEach((el) => {
+                const id = el.getAttribute('data-measure-row');
+                if (id) {
+                    measured.set(id, el.getBoundingClientRect().height);
+                }
+            });
+
+            setRowHeights(measured);
+        }, 200);
+
+        return () => clearTimeout(timer);
+    }, [processedScenarios]);
+
     const totalPages = ready ? visualPages.length : pages.length;
 
     return (
@@ -399,8 +424,26 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex flex-col bg-slate-900/80 backdrop-blur-md"
         >
-            {/* Hidden measurement container */}
+            {/* Hidden measurement container for content pages */}
             <div ref={measureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: 816, pointerEvents: 'none' }} />
+
+            {/* Hidden measurement container for economic table row heights */}
+            <div ref={economicMeasureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: 816, pointerEvents: 'none' }}>
+                {processedScenarios.map((scenario) => (
+                    <EconomicProposalTable
+                        key={`measure-${scenario.id}`}
+                        scenario={scenario}
+                        variantLabelByScenarioItemId={consolidation.variantLabelByScenarioItemId}
+                        slice={{
+                            items: scenario.visibleItems,
+                            isFirstSlice: false,
+                            showTotals: false,
+                            sliceIndex: 0,
+                            totalSlices: 1,
+                        }}
+                    />
+                ))}
+            </div>
 
             {/* Toolbar */}
             <div className="flex items-center justify-between px-8 py-4 bg-slate-900/90 border-b border-slate-700/50 shrink-0">

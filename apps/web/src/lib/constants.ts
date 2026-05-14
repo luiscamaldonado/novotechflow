@@ -193,19 +193,27 @@ export const INACTIVITY_WARNING_BEFORE_MS = 60 * 1000;
 /** Clave de localStorage para cachear el timeout entre recargas. */
 export const INACTIVITY_TIMEOUT_STORAGE_KEY = 'inactivity_timeout_minutes';
 
-// ── Economic proposal PDF pagination ─────────────────────────
+
+// ── Economic proposal PDF pagination — alturas (height-aware) ─
 
 /**
- * Límites de items por página en el PDF de la propuesta económica.
- * Valores conservadores. Ajustar si se observa desperdicio o cortes.
+ * Alturas estimadas (px) para la paginacion height-aware del PDF
+ * de la propuesta economica. Las filas <tr> se miden en runtime;
+ * estos valores cubren los bloques fijos y el fallback de medicion.
+ * Pagina carta a 96dpi: 1056px de alto, padding vertical 64px x2.
+ * Valores conservadores — ajustar si se observa corte o desperdicio.
  */
-export const ECONOMIC_PDF_PAGINATION = {
-    /** Si items.length <= este valor, todo cabe en 1 página (items + totales) */
-    SINGLE_PAGE_MAX_ITEMS: 7,
-    /** Items en la primera página cuando hay continuaciones (sin totales) */
-    FIRST_PAGE_ITEMS: 10,
-    /** Items en páginas intermedias (sin totales) */
-    MIDDLE_PAGE_ITEMS: 12,
-    /** Items en la última página (con totales al pie) */
-    LAST_PAGE_ITEMS: 7,
+export const ECONOMIC_PDF_HEIGHTS = {
+    /** Alto util de la hoja: PAGE_HEIGHT (1056) - padding vertical (64x2) */
+    USABLE_HEIGHT: 928,
+    /** Header grande indigo de la primera hoja del escenario */
+    FIRST_SLICE_HEADER_HEIGHT: 96,
+    /** Header reducido de las hojas de continuacion */
+    CONTINUATION_HEADER_HEIGHT: 52,
+    /** Fila <thead> de la tabla de items */
+    TABLE_HEAD_HEIGHT: 40,
+    /** Bloque de totales al pie (5 filas + total), solo ultima hoja */
+    TOTALS_BLOCK_HEIGHT: 290,
+    /** Altura de fallback por fila si la medicion falla */
+    FALLBACK_ROW_HEIGHT: 64,
 } as const;
