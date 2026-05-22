@@ -22,7 +22,6 @@ COPY --from=builder /app/apps/api/node_modules ./node_modules
 COPY --from=builder /app/apps/api/prisma ./prisma
 COPY --from=builder /app/apps/api/package.json ./
 COPY --from=builder /app/apps/api/tsconfig.json ./
-COPY --from=builder /app/apps/api/uploads/defaults ./uploads/defaults
 RUN mkdir -p uploads/signatures uploads/templates
 EXPOSE 3000
 RUN npm install prisma ts-node typescript
