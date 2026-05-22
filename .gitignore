@@ -56,3 +56,5 @@ backups/
 # User uploads (track defaults only)
 uploads/*
 !uploads/defaults/
+
+backups/
