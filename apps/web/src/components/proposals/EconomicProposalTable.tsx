@@ -127,6 +127,7 @@ export default function EconomicProposalTable({ scenario, variantLabelByScenario
                         return (
                             <tr
                                 key={vi.scenarioItem.id}
+                                data-measure-row={vi.scenarioItem.id}
                                 className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}
                             >
                                 <td className="px-4 py-3 border border-slate-200">
