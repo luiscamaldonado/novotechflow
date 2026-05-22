@@ -219,7 +219,7 @@ export class TemplatesService {
           {
             id: crypto.randomUUID(),
             blockType: 'IMAGE',
-            content: { url: '/uploads/defaults/portada.png', caption: '', fullPage: true },
+            content: { url: '/defaults/portada.png', caption: '', fullPage: true },
             sortOrder: 1,
           },
         ],

@@ -5,6 +5,7 @@ import { validateImageFile, ACCEPT_IMAGES } from '../../../lib/file-validation';
 import { type PageBlock } from '../../../hooks/useProposalPages';
 import { type ProposalVariables } from '../../../lib/proposalVariables';
 import RichTextEditor from '../../../components/proposals/RichTextEditor';
+import { resolveImageUrl } from '../../../lib/resolveImageUrl';
 
 interface BlockEditorProps {
     block: PageBlock;
@@ -92,7 +93,7 @@ function BlockEditor({ block, index, totalBlocks, isReadOnly, onUpdate, onDelete
                         {imageUrl ? (
                             <div className="rounded-xl overflow-hidden border border-slate-200 bg-white">
                                 <img
-                                    src={`${apiBase}${imageUrl}`}
+                                    src={resolveImageUrl(imageUrl, apiBase)}
                                     alt={captionBuffer || 'Imagen de propuesta'}
                                     className="w-full max-h-[500px] object-contain"
                                 />

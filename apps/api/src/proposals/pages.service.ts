@@ -86,7 +86,7 @@ export class PagesService {
     } else {
       // Fallback: minimal hardcoded defaults
       pageDefs = [
-        { pageType: 'COVER', title: 'Portada', sortOrder: 1, blocks: [{ blockType: 'IMAGE', content: { url: '/uploads/defaults/portada.png', caption: '', fullPage: true } }] },
+        { pageType: 'COVER', title: 'Portada', sortOrder: 1, blocks: [{ blockType: 'IMAGE', content: { url: '/defaults/portada.png', caption: '', fullPage: true } }] },
         { pageType: 'PRESENTATION', title: 'Carta de Presentaci\u00f3n', sortOrder: 2, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentaci\u00f3n' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Contenido de la carta de presentaci\u00f3n.' }] }] } }] },
         { pageType: 'COMPANY_INFO', title: 'Informaci\u00f3n General (1/2)', sortOrder: 3, blocks: [] },
         { pageType: 'COMPANY_INFO', title: 'Informaci\u00f3n General (2/2)', sortOrder: 4, blocks: [] },

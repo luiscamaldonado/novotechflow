@@ -14,6 +14,7 @@ import TechnicalSpecSheet from './TechnicalSpecSheet';
 import EconomicProposalTable from './EconomicProposalTable';
 import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
 import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/paginateEconomicProposal';
+import { resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
@@ -83,11 +84,8 @@ interface VisualPage {
 export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [], enableExcelExport = false }: PdfPreviewModalProps) {
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
-    /** Resuelve la URL de una imagen: data URIs se usan directamente, rutas relativas se prefijan con apiBase */
-    const resolveImageUrl = (url: string): string => {
-        if (url.startsWith('data:')) return url;
-        return `${apiBase}${url}`;
-    };
+    /** Wrapper local que cierra sobre apiBase. Delega en el helper compartido en lib/resolveImageUrl.ts. */
+    const resolveImageUrl = (url: string): string => resolveImageUrlShared(url, apiBase);
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
     const economicMeasureRef = useRef<HTMLDivElement>(null);
