@@ -1,7 +1,7 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
-import UnderlineExt from '@tiptap/extension-underline';
+
 import {
     Bold, Italic, Underline as UnderlineIcon,
     Heading1, Heading2, Heading3,
@@ -30,9 +30,13 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false, pr
     const editorWrapperRef = useRef<HTMLDivElement>(null);
 
 
-    /** Content with µ markers replaced for display purposes */
+    /** Content with µ markers replaced for display purposes.
+     * Si content no es un doc TipTap valido (no tiene type === 'doc'), devuelve un doc vacio
+     * para evitar el RangeError "Unknown node type: undefined" en el editor. */
     const displayContent = useMemo(() => {
-        if (!content || !proposalVars) return content;
+        const EMPTY_DOC: Record<string, unknown> = { type: 'doc', content: [{ type: 'paragraph' }] };
+        if (!content || content.type !== 'doc') return EMPTY_DOC;
+        if (!proposalVars) return content;
         return replaceMarkersInTiptapJson(content, proposalVars) as Record<string, unknown>;
     }, [content, proposalVars]);
 
@@ -42,7 +46,6 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false, pr
                 heading: { levels: [1, 2, 3] },
             }),
             TextAlign.configure({ types: ['heading', 'paragraph'] }),
-            UnderlineExt,
         ],
         content: displayContent as Record<string, unknown> ?? { type: 'doc', content: [{ type: 'paragraph' }] },
         editable: !readOnly,
@@ -52,14 +55,12 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false, pr
             },
         },
         onUpdate: ({ editor: ed }) => {
-            setRenderTick(t => t + 1);
             if (debounceRef.current) clearTimeout(debounceRef.current);
             debounceRef.current = setTimeout(() => {
                 onUpdate(ed.getJSON() as Record<string, unknown>);
             }, 800);
         },
         onSelectionUpdate: () => setRenderTick(t => t + 1),
-        onTransaction: () => setRenderTick(t => t + 1),
         onFocus: () => setIsFocused(true),
         onBlur: () => {
             // Small delay to allow toolbar clicks to register

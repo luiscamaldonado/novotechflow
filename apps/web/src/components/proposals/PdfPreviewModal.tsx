@@ -3,7 +3,7 @@ import { X, FileText, ListOrdered, Download, Loader2, FileSpreadsheet } from 'lu
 import { generateHTML } from '@tiptap/html';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
-import Underline from '@tiptap/extension-underline';
+
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
@@ -29,7 +29,6 @@ const PAGE_TYPE_LABELS: Record<string, string> = {
 const extensions = [
     StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    Underline,
 ];
 
 interface PdfPreviewModalProps {
