@@ -389,3 +389,13 @@ export class ReorderBlocksDto {
     @IsString({ each: true })
     blockIds: string[];
 }
+
+// ── Scenario Items Reorder DTO ───────────────────────────────
+
+/**
+ * DTO para reordenar ítems padre de un escenario.
+ */
+export class ReorderScenarioItemsDto {
+    @IsString({ each: true })
+    itemIds: string[];
+}

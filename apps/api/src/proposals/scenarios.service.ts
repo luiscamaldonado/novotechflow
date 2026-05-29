@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProposalsService } from './proposals.service';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
@@ -9,6 +9,7 @@ import {
     UpdateScenarioDto,
     AddScenarioItemDto,
     UpdateScenarioItemDto,
+    ReorderScenarioItemsDto,
 } from './dto/proposals.dto';
 
 
@@ -278,6 +279,38 @@ export class ScenariosService {
         marginPctOverride: marginPct,
         unitPriceOverride: null,
       }
+    });
+  }
+
+  /**
+   * Reordena los ítems padre de un escenario.
+   */
+  async reorderScenarioItems(scenarioId: string, data: ReorderScenarioItemsDto, user: AuthenticatedUser) {
+    await this.verifyScenarioOwnership(scenarioId, user);
+
+    const count = await this.prisma.scenarioItem.count({
+      where: { id: { in: data.itemIds }, scenarioId, parentId: null },
+    });
+    if (count !== data.itemIds.length) {
+      throw new BadRequestException('IDs de ítems inválidos para este escenario.');
+    }
+
+    await this.prisma.$transaction(
+      data.itemIds.map((id, index) =>
+        this.prisma.scenarioItem.update({
+          where: { id },
+          data: { sortOrder: index + 1 },
+        }),
+      ),
+    );
+
+    return this.prisma.scenarioItem.findMany({
+      where: { scenarioId, parentId: null },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        item: true,
+        children: { include: { item: true } },
+      },
     });
   }
 }

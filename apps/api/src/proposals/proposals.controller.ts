@@ -29,6 +29,7 @@ import {
     CreateBlockDto,
     UpdateBlockDto,
     ReorderBlocksDto,
+    ReorderScenarioItemsDto,
 } from './dto/proposals.dto';
 
 /**
@@ -176,6 +177,12 @@ export class ProposalsController {
     @Delete('scenarios/items/:itemId')
     async removeScenarioItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Request() req: { user: AuthenticatedUser }) {
         return this.scenariosService.removeScenarioItem(itemId, req.user);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch('scenarios/:scenarioId/items/reorder')
+    async reorderScenarioItems(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Body() data: ReorderScenarioItemsDto, @Request() req: { user: AuthenticatedUser }) {
+        return this.scenariosService.reorderScenarioItems(scenarioId, data, req.user);
     }
 
     @UseGuards(JwtAuthGuard)
