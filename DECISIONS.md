@@ -1188,3 +1188,39 @@ Hacer `paginateEconomicProposal` height-aware: medir la altura real de cada fila
 
 ### Pendientes
 - Validar contra propuestas con muchos items (>30) en producción.
+
+## ADR-030 — Campo sortOrder en ScenarioItem para orden estable de items
+
+**Fecha:** 2026-05-29
+**Estado:** En progreso
+
+### Contexto
+El endpoint `GET /proposals/:id/scenarios` devolvía los `scenarioItems` sin orden explícito: el `include` anidado no tenía `orderBy`. La pantalla de cálculos (`useScenarios.ts`) mantiene el orden en memoria de forma estable porque todas sus operaciones usan `.map()`/`.filter()` (nunca reordena), pero el PDF (`useProposalScenarios.ts`) re-consulta el endpoint, y tras un PATCH sobre un item Postgres devolvía las filas en otro orden físico (MVCC: un UPDATE reescribe el tuple). Síntoma: el usuario ordenaba los items en cálculos y en el PDF aparecían en distinto orden.
+
+`ScenarioItem` no tenía ningún campo de orden (ni `sortOrder` ni `createdAt`), por lo que no había forma de expresar "orden de inserción" de forma estable ni de soportar reordenamiento manual.
+
+### Decisión
+Agregar `sortOrder Int @default(0) @map("sort_order")` a `ScenarioItem`, con índice compuesto `@@index([scenarioId, sortOrder])` para que el `orderBy` sea eficiente.
+
+- El orden aplica solo a items padre (`parentId = null`). Los children son sub-items de costo: están atados al padre por `parentId`, suman al landed cost vía el pricing-engine, y no se renderizan como filas propias en el PDF ni se ordenan por `sortOrder`. Al mover un padre, sus children lo siguen por la relación, no por posición.
+- `@default(0)` (no nullable): el `orderBy` siempre necesita un valor presente, y cubre cualquier item creado antes de que el backend asigne el orden real.
+- Backfill embebido en la migración (no script aparte), porque las migraciones de este proyecto corren solas en Railway vía el `CMD` del Dockerfile. El backfill usa `ROW_NUMBER() OVER (PARTITION BY scenario_id ORDER BY id)` filtrando `parent_id IS NULL`.
+
+Alcance de este ADR: solo el campo, el índice y el backfill. La asignación de `sortOrder` al insertar items y el `orderBy` en los fetch son trabajo de backend posterior (mismo esfuerzo, commits separados). El reordenamiento manual (drag-and-drop) queda como fase futura encima de este cimiento.
+
+### Consecuencias
+- Positivas: existe un campo para ordenar items de forma estable y, a futuro, reordenables manualmente. El índice compuesto hace el `orderBy` eficiente sin escaneo.
+- Negativas: el backfill de los registros históricos ordena por `id` (UUID), que no refleja el orden de inserción real — para propuestas viejas el orden queda estable pero arbitrario. Es aceptable: las propuestas nuevas tendrán el orden correcto desde el inicio, y la data histórica no guardó el orden original de ninguna forma recuperable.
+- El campo queda sin uso hasta el trabajo de backend; en ese estado intermedio es inofensivo (default 0, ningún consumidor lo lee aún).
+
+### Archivos
+- `apps/api/prisma/schema.prisma` (+campo `sortOrder`, +`@@index([scenarioId, sortOrder])`)
+- `apps/api/prisma/migrations/20260529000000_add_scenario_item_sort_order/migration.sql` (nuevo: ALTER + CREATE INDEX + backfill con ROW_NUMBER)
+
+### Commits
+- `4b7a6ef` — campo sortOrder + migración con backfill
+
+### Pendientes
+- Backend: asignar `sortOrder` incremental al insertar (`addScenarioItem`, child), `orderBy: { sortOrder: 'asc' }` en el `include` de items (`getScenariosByProposalId`, `cloneScenario`), propagación en el clon.
+- Frontend: verificar que ambos hooks respeten el orden entregado por el backend.
+- Fase futura: endpoint de reorden + UI drag-and-drop de items padre.
