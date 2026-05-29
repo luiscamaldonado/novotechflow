@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { IVA_RATE } from '../lib/constants';
-import { convertCost } from '../lib/pricing-engine';
+import { calculateItemDisplayValues, calculateScenarioTotals } from '../lib/pricing-engine';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -29,6 +29,7 @@ export interface ScenarioItemData {
     parentId?: string | null;
     quantity: number;
     marginPctOverride?: number | null;
+    unitPriceOverride?: number | null;
     isDiluted?: boolean;
     item: ProposalItemData;
     children?: ScenarioItemData[];
@@ -69,111 +70,48 @@ export interface ProcessedScenario {
     totals: ScenarioCalcTotals;
 }
 
-// ── Calculation helpers ─────────────────────────────────────
+// ── Scenario processing (delegates to pricing-engine) ───────
 
 /**
- * Calcula el precio unitario de venta para un item de escenario,
- * replicando exactamente la lógica de ProposalCalculations.tsx.
- */
-export function calculateItemUnitPrice(
-    si: ScenarioItemData,
-    allItems: ScenarioItemData[],
-    scenarioCurrency?: string,
-    conversionTrm?: number | null,
-): number {
-    if (si.isDiluted) return 0;
-
-    const item = si.item;
-    const rawCost = Number(item.unitCost);
-    const cost = convertCost(rawCost, item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
-    const flete = Number(item.internalCosts?.fletePct || 0);
-    const parentLandedCost = cost * (1 + flete / 100);
-
-    // Children costs per unit of parent
-    let childrenCostPerUnit = 0;
-    const children = si.children || [];
-    children.forEach(child => {
-        const cRawCost = Number(child.item.unitCost);
-        const cCost = convertCost(cRawCost, child.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
-        const cFlete = Number(child.item.internalCosts?.fletePct || 0);
-        childrenCostPerUnit += cCost * (1 + cFlete / 100) * child.quantity;
-    });
-    const baseLandedCost = parentLandedCost + (childrenCostPerUnit / si.quantity);
-
-    // Dilution: proportional share of diluted items' cost
-    const dilutedItems = allItems.filter(i => i.isDiluted);
-    const normalItems = allItems.filter(i => !i.isDiluted);
-
-    let totalDilutedCost = 0;
-    dilutedItems.forEach(di => {
-        const diCost = convertCost(Number(di.item.unitCost), di.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
-        totalDilutedCost += diCost * di.quantity;
-    });
-
-    let totalNormalSubtotal = 0;
-    normalItems.forEach(ni => {
-        const niCost = convertCost(Number(ni.item.unitCost), ni.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm ?? null);
-        totalNormalSubtotal += niCost * ni.quantity;
-    });
-
-    let effectiveLandedCost = baseLandedCost;
-    if (totalNormalSubtotal > 0 && totalDilutedCost > 0) {
-        const itemWeight = (cost * si.quantity) / totalNormalSubtotal;
-        const dilutionPerUnit = (itemWeight * totalDilutedCost) / si.quantity;
-        effectiveLandedCost = baseLandedCost + dilutionPerUnit;
-    }
-
-    const margin = si.marginPctOverride !== undefined && si.marginPctOverride !== null
-        ? Number(si.marginPctOverride)
-        : Number(item.marginPct);
-
-    if (margin >= 100) return 0;
-    return effectiveLandedCost / (1 - margin / 100);
-}
-
-/**
- * Procesa un escenario: calcula precios de venta de cada item visible
- * y los totales del escenario.
+ * Procesa un escenario delegando 100 % al pricing-engine.
+ * Respeta unitPriceOverride, dilución, y todos los cálculos del engine.
  */
 function processScenario(scenario: ScenarioData): ProcessedScenario {
     const allItems = scenario.scenarioItems;
     const visibleItems: VisibleItemCalc[] = [];
 
-    let subtotalGravado = 0;
-    let subtotalNoGravado = 0;
-
     for (const si of allItems) {
         if (si.isDiluted) continue;
-
-        const unitSalePrice = calculateItemUnitPrice(si, allItems, scenario.currency, scenario.conversionTrm);
-        const subtotalBeforeVat = unitSalePrice * si.quantity;
+        const display = calculateItemDisplayValues(
+            si, allItems, scenario.currency, scenario.conversionTrm,
+        );
+        const subtotalBeforeVat = display.lineTotal;
         const ivaAmount = si.item.isTaxable ? subtotalBeforeVat * IVA_RATE : 0;
-
         visibleItems.push({
             scenarioItem: si,
-            unitSalePrice,
+            unitSalePrice: display.unitPrice,
             quantity: si.quantity,
             subtotalBeforeVat,
             ivaAmount,
         });
-
-        if (si.item.isTaxable) {
-            subtotalGravado += subtotalBeforeVat;
-        } else {
-            subtotalNoGravado += subtotalBeforeVat;
-        }
     }
 
-    const subtotalBeforeVat = subtotalGravado + subtotalNoGravado;
-    const iva = subtotalGravado * IVA_RATE;
-    const total = subtotalBeforeVat + iva;
+    const t = calculateScenarioTotals(
+        allItems, scenario.currency, scenario.conversionTrm,
+    );
 
     return {
         id: scenario.id,
         name: scenario.name,
         currency: scenario.currency,
         visibleItems,
-        totals: { subtotalGravado, subtotalNoGravado, subtotalBeforeVat, iva, total },
+        totals: {
+            subtotalGravado: t.beforeVat,
+            subtotalNoGravado: t.nonTaxed,
+            subtotalBeforeVat: t.subtotal,
+            iva: t.vat,
+            total: t.total,
+        },
     };
 }
 
