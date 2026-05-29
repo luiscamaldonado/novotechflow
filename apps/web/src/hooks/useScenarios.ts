@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../lib/api';
 import {
     calculateScenarioTotals,
@@ -50,6 +50,9 @@ export interface Scenario {
 
 // Re-export ScenarioTotals from pricing-engine for consumers
 export type { ScenarioTotals };
+
+/** Tiempo de espera (ms) tras el último reordenamiento antes de persistir el orden vía PATCH. Evita una ráfaga de requests al mover varios ítems seguidos. */
+const SCENARIO_REORDER_DEBOUNCE_MS = 700;
 
 // ── Hook ─────────────────────────────────────────────────────
 export function useScenarios(proposalId: string | undefined) {
@@ -340,26 +343,49 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
-    const reorderItems = async (orderedParentIds: string[]) => {
-        if (!activeScenarioId) return;
-        try {
-            await api.patch(`/proposals/scenarios/${activeScenarioId}/items/reorder`, { itemIds: orderedParentIds });
-            setScenarios(prev =>
-                prev.map(s =>
-                    s.id === activeScenarioId
-                        ? {
-                              ...s,
-                              scenarioItems: s.scenarioItems.map(si => {
-                                  const newIndex = orderedParentIds.indexOf(si.id!);
-                                  return newIndex === -1 ? si : { ...si, sortOrder: newIndex + 1 };
-                              }),
-                          }
-                        : s,
-                ),
-            );
-        } catch (error) {
-            console.error(error);
+    const reorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingReorderRef = useRef<{ scenarioId: string; itemIds: string[] } | null>(null);
+
+    const flushReorder = useCallback(() => {
+        if (reorderTimerRef.current !== null) {
+            clearTimeout(reorderTimerRef.current);
+            reorderTimerRef.current = null;
         }
+        const pending = pendingReorderRef.current;
+        if (pending === null) return;
+        pendingReorderRef.current = null;
+        api
+            .patch(`/proposals/scenarios/${pending.scenarioId}/items/reorder`, { itemIds: pending.itemIds })
+            .catch((error: unknown) => console.error(error));
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            flushReorder();
+        };
+    }, [flushReorder]);
+
+    const reorderItems = (orderedParentIds: string[]) => {
+        if (!activeScenarioId) return;
+        const scenarioId = activeScenarioId;
+
+        setScenarios(prev =>
+            prev.map(s =>
+                s.id === scenarioId
+                    ? {
+                          ...s,
+                          scenarioItems: s.scenarioItems.map(si => {
+                              const newIndex = orderedParentIds.indexOf(si.id!);
+                              return newIndex === -1 ? si : { ...si, sortOrder: newIndex + 1 };
+                          }),
+                      }
+                    : s,
+            ),
+        );
+
+        pendingReorderRef.current = { scenarioId, itemIds: orderedParentIds };
+        if (reorderTimerRef.current !== null) clearTimeout(reorderTimerRef.current);
+        reorderTimerRef.current = setTimeout(flushReorder, SCENARIO_REORDER_DEBOUNCE_MS);
     };
 
     const updateMargin = async (siId: string, margin: string) => {

@@ -98,15 +98,12 @@ export default function ProposalCalculations() {
         });
     };
 
-    // ── Reorder helpers for non-diluted parent items ──
-    const visibleParents = activeScenario ? activeScenario.scenarioItems.filter(p => !p.isDiluted) : [];
-    const firstVisibleId = visibleParents[0]?.id;
-    const lastVisibleId = visibleParents[visibleParents.length - 1]?.id;
 
     const moveItem = (si: ScenarioItem, direction: 'up' | 'down') => {
         if (!activeScenario) return;
-        const diluted = activeScenario.scenarioItems.filter(p => p.isDiluted);
-        const visible = activeScenario.scenarioItems.filter(p => !p.isDiluted);
+        const byOrder = (a: ScenarioItem, b: ScenarioItem) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+        const diluted = activeScenario.scenarioItems.filter(p => p.isDiluted).sort(byOrder);
+        const visible = activeScenario.scenarioItems.filter(p => !p.isDiluted).sort(byOrder);
         const pos = visible.findIndex(p => p.id === si.id);
         if (pos === -1) return;
         const target = direction === 'up' ? pos - 1 : pos + 1;
@@ -301,7 +298,7 @@ export default function ProposalCalculations() {
                                                     .sort((a, b) => {
                                                         if (a.isDiluted && !b.isDiluted) return -1;
                                                         if (!a.isDiluted && b.isDiluted) return 1;
-                                                        return 0;
+                                                        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
                                                     })
                                                     .map((si, idx) => {
                                                     const displayValues = calculateItemDisplayValues(si, activeScenario.scenarioItems, activeScenario.currency, effectiveConversionTrm);
@@ -335,8 +332,8 @@ export default function ProposalCalculations() {
                                                             clearUnitPriceOverride={clearUnitPriceOverride}
                                                             setPickingChildrenFor={setPickingChildrenFor}
                                                             proposal={proposal}
-                                                            canMoveUp={!si.isDiluted && si.id !== firstVisibleId}
-                                                            canMoveDown={!si.isDiluted && si.id !== lastVisibleId}
+                                                            canMoveUp={!si.isDiluted}
+                                                            canMoveDown={!si.isDiluted}
                                                             onMoveUp={() => moveItem(si, 'up')}
                                                             onMoveDown={() => moveItem(si, 'down')}
                                                         />

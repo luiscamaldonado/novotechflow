@@ -270,16 +270,14 @@ export default function ScenarioItemRow({
                         <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                                 onClick={onMoveUp}
-                                disabled={!canMoveUp}
-                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30"
+                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                 title="Subir"
                             >
                                 <ChevronUp className="h-3.5 w-3.5" />
                             </button>
                             <button
                                 onClick={onMoveDown}
-                                disabled={!canMoveDown}
-                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30"
+                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                 title="Bajar"
                             >
                                 <ChevronDown className="h-3.5 w-3.5" />
