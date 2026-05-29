@@ -1192,7 +1192,7 @@ Hacer `paginateEconomicProposal` height-aware: medir la altura real de cada fila
 ## ADR-030 — Campo sortOrder en ScenarioItem para orden estable de items
 
 **Fecha:** 2026-05-29
-**Estado:** En progreso
+**Estado:** Cerrado
 
 ### Contexto
 El endpoint `GET /proposals/:id/scenarios` devolvía los `scenarioItems` sin orden explícito: el `include` anidado no tenía `orderBy`. La pantalla de cálculos (`useScenarios.ts`) mantiene el orden en memoria de forma estable porque todas sus operaciones usan `.map()`/`.filter()` (nunca reordena), pero el PDF (`useProposalScenarios.ts`) re-consulta el endpoint, y tras un PATCH sobre un item Postgres devolvía las filas en otro orden físico (MVCC: un UPDATE reescribe el tuple). Síntoma: el usuario ordenaba los items en cálculos y en el PDF aparecían en distinto orden.
@@ -1219,8 +1219,8 @@ Alcance de este ADR: solo el campo, el índice y el backfill. La asignación de 
 
 ### Commits
 - `4b7a6ef` — campo sortOrder + migración con backfill
+- `50935f7` — backend: orderBy en fetch + asignación de sortOrder al insertar
 
 ### Pendientes
-- Backend: asignar `sortOrder` incremental al insertar (`addScenarioItem`, child), `orderBy: { sortOrder: 'asc' }` en el `include` de items (`getScenariosByProposalId`, `cloneScenario`), propagación en el clon.
-- Frontend: verificar que ambos hooks respeten el orden entregado por el backend.
-- Fase futura: endpoint de reorden + UI drag-and-drop de items padre.
+- Frontend: verificado — ambos hooks consumen el endpoint ordenado y ninguno reordena; sin cambios necesarios.
+- Fase futura: endpoint de reorden + UI drag-and-drop de items padre (apoyarse en el patrón /reorder ya existente para páginas y bloques).
