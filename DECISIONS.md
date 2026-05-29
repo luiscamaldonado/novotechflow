@@ -1223,4 +1223,58 @@ Alcance de este ADR: solo el campo, el índice y el backfill. La asignación de 
 
 ### Pendientes
 - Frontend: verificado — ambos hooks consumen el endpoint ordenado y ninguno reordena; sin cambios necesarios.
-- Fase futura: endpoint de reorden + UI drag-and-drop de items padre (apoyarse en el patrón /reorder ya existente para páginas y bloques).
+- Fase futura: endpoint de reorden + UI de items padre — **Resuelto en ADR-031** (se implementó con botones ↑/↓ en lugar de drag-and-drop).
+
+## ADR-031 — Reordenamiento manual de items de escenario con botones ↑/↓
+
+**Fecha:** 2026-05-29
+**Estado:** Cerrado. Supersede la "fase futura" anticipada en ADR-030 (§Pendientes).
+
+### Contexto
+ADR-030 dejó el cimiento (`sortOrder` en `ScenarioItem`, índice, backfill, `orderBy` en los fetch y asignación al insertar) y anticipó como fase futura el reordenamiento manual mediante drag-and-drop, apoyándose en el patrón `/reorder` de páginas y bloques.
+
+Al planear la UI se revisó cómo el doc builder reordena páginas: NO usa drag-and-drop, sino botones discretos ↑/↓ (`movePage` hace swap en el array y llama al endpoint; el `GripVertical` es decorativo y el `motion.div layout` solo anima el cambio de posición). No existía DnD que clonar. Se optó por replicar el patrón de botones por consistencia con la pantalla hermana y menor riesgo (KISS), descartando introducir una librería de DnD que dejaría dos patrones de reorden distintos.
+
+### Decisión
+**Backend** — endpoint `PATCH scenarios/:scenarioId/items/reorder`, clonando `reorderBlocks` (`pages.service.ts`):
+- DTO `ReorderScenarioItemsDto` con `itemIds: string[]` (mismos validadores que `ReorderBlocksDto`).
+- Ownership vía `verifyScenarioOwnership` (gemelo de `verifyPageOwnership`).
+- Guard de pertenencia antes de la transacción: `count` de items que matcheen `{ id in itemIds, scenarioId, parentId: null }` debe igualar `itemIds.length`; si no, `BadRequestException`. Blinda contra IDs de otro escenario, children colados e IDs inexistentes o duplicados (Fail Fast).
+- Transacción que reescribe `sortOrder` 1-based según el índice del array.
+- Seguridad idéntica a los hermanos (`@UseGuards(JwtAuthGuard)`, `@ApiBearerAuth()`, `ParseUUIDPipe` en `scenarioId`).
+
+**Frontend** — botones ↑/↓ en la pantalla de cálculos:
+- Solo items padre NO diluidos. Los diluidos no se renderizan como filas en el PDF (su precio se distribuye en otros items vía el pricing-engine), su orden es irrelevante y no reciben botones.
+- Sin restricción de bordes: ambas flechas siempre activas; un clic en un extremo es inocuo (el guardado vive dentro de `moveItem`). Se descartó deshabilitar flechas en los bordes por preferencia de UX.
+- El render ordena por `sortOrder` dentro de cada grupo de dilución: el comparador del `.sort` en `ProposalCalculations.tsx` mantiene los diluidos arriba y desempata por `sortOrder` (antes devolvía `0`, dejando el orden a merced del orden físico del array).
+
+**Persistencia con debounce** — `reorderItems` en `useScenarios.ts`:
+- Optimismo síncrono e inmediato (la fila se mueve en cada clic); el PATCH se difiere con `setTimeout` (constante local `SCENARIO_REORDER_DEBOUNCE_MS = 700`): una ráfaga de clics cancela los timers previos y dispara un único PATCH con el orden final. `useEffect` de cleanup hace flush al desmontar.
+- Razón: reordenar es una acción "ráfaga"; un PATCH por clic saturaba el rate limit global (30/min, §K) → 429. Se trató la causa (requests redundantes), no el síntoma; no se tocó el rate limit por ser una medida de seguridad real.
+
+### Bugs encontrados y resueltos
+**Bug 1 — `sort_order` duplicados en datos históricos.** El backfill original de ADR-030 (`ROW_NUMBER() ... ORDER BY id`) no garantizaba unicidad mantenida en el tiempo: items con el `@default(0)` de la columna reintrodujeron duplicados (en prod: 4 padres en `sort_order=0` en un escenario, 2 en `sort_order=3` en otro). Con `sort_order` repetido el `.sort` no desempata y el reorden se comporta de forma errática. Solución: re-backfill manual `UPDATE ... ROW_NUMBER() OVER (PARTITION BY scenario_id ORDER BY sort_order, id)` filtrando `parent_id IS NULL`, que renumera 1..N por escenario respetando el orden visible actual. Corrido en local (`prisma db execute`) y en prod (`psql` en transacción manual con verificación previa al `COMMIT`, tras `pg_dump` completo de respaldo). One-shot, sin `.sql` versionado, para evitar que una re-ejecución futura pise el orden manual.
+
+**Bug 2 — `moveItem` operaba sobre el orden físico.** La primera versión filtraba `scenarioItems` en orden físico para calcular la posición del swap, pero el render mostraba la lista ordenada por `sortOrder`; un clic saltaba de posición 1 a 3. Corregido ordenando `visible`/`diluted` por `sortOrder` antes de calcular la posición.
+
+### Consecuencias
+- Positivas: reorden manual persistente reflejado en el PDF; el debounce reduce una ráfaga de clics a un solo request sin debilitar el rate limit; datos con `sort_order` único y consistente por escenario en local y prod.
+- Deuda / supuesto: el reorden depende de que `sort_order` sea secuencia única por escenario. Lo es porque `addScenarioItem` asigna correlativo y `reorderItems` reescribe la secuencia completa; si un path futuro inserta padres sin asignar `sortOrder`, reaparecería el Bug 1. El re-backfill no quedó versionado.
+
+### Archivos
+- `apps/api/src/proposals/dto/proposals.dto.ts` (+`ReorderScenarioItemsDto`)
+- `apps/api/src/proposals/scenarios.service.ts` (+`reorderScenarioItems`)
+- `apps/api/src/proposals/proposals.controller.ts` (+endpoint reorder)
+- `apps/web/src/hooks/useScenarios.ts` (+`reorderItems` con debounce, +`SCENARIO_REORDER_DEBOUNCE_MS`)
+- `apps/web/src/pages/proposals/ProposalCalculations.tsx` (comparador por `sortOrder`, `moveItem`)
+- `apps/web/src/pages/proposals/components/ScenarioItemRow.tsx` (botones ↑/↓)
+
+### Commits
+- `939b4af` — backend: endpoint de reorden de items de escenario
+- `8ea52e0` — frontend: botones ↑/↓ + persistencia con debounce
+
+### Backups
+- `backups/pre-sortorder-backfill-2026-05-29/railway-full.dump` (243 MB, `pg_dump --format=custom` de prod, previo al re-backfill)
+
+### Pendientes
+- Ninguno. Si a futuro se quiere DnD real, migrar ambas pantallas (cálculos y doc builder) juntas para no dejar patrones inconsistentes.
