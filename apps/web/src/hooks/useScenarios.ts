@@ -34,6 +34,7 @@ export interface ScenarioItem {
     marginPctOverride?: number;
     unitPriceOverride?: number | null;
     isDiluted?: boolean;
+    sortOrder: number;
     item: ProposalCalcItem;
     children?: ScenarioItem[];
 }
@@ -339,6 +340,28 @@ export function useScenarios(proposalId: string | undefined) {
         }
     };
 
+    const reorderItems = async (orderedParentIds: string[]) => {
+        if (!activeScenarioId) return;
+        try {
+            await api.patch(`/proposals/scenarios/${activeScenarioId}/items/reorder`, { itemIds: orderedParentIds });
+            setScenarios(prev =>
+                prev.map(s =>
+                    s.id === activeScenarioId
+                        ? {
+                              ...s,
+                              scenarioItems: s.scenarioItems.map(si => {
+                                  const newIndex = orderedParentIds.indexOf(si.id!);
+                                  return newIndex === -1 ? si : { ...si, sortOrder: newIndex + 1 };
+                              }),
+                          }
+                        : s,
+                ),
+            );
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const updateMargin = async (siId: string, margin: string) => {
         const val = parseFloat(margin.replace(',', '.'));
         if (isNaN(val)) return;
@@ -507,5 +530,6 @@ export function useScenarios(proposalId: string | undefined) {
         clearUnitPriceOverride,
         renameScenario,
         cloneScenario,
+        reorderItems,
     };
 }

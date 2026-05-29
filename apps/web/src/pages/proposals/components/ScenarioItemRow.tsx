@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import {
-    Trash2, Plus, Percent, ChevronDown, Layers, Lock, X,
+    Trash2, Plus, Percent, ChevronDown, ChevronUp, Layers, Lock, X,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { ScenarioItem } from '../../../hooks/useScenarios';
@@ -36,6 +36,10 @@ interface ScenarioItemRowProps {
     clearUnitPriceOverride: (siId: string) => void;
     setPickingChildrenFor: (siId: string) => void;
     proposal: { proposalItems: ProposalCalcItem[] };
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
 }
 
 export default function ScenarioItemRow({
@@ -63,6 +67,10 @@ export default function ScenarioItemRow({
     clearUnitPriceOverride,
     setPickingChildrenFor,
     proposal,
+    canMoveUp,
+    canMoveDown,
+    onMoveUp,
+    onMoveDown,
 }: ScenarioItemRowProps) {
     const { childrenCostPerUnit, margin, unitPrice } = displayValues;
     const hasUnitPriceOverride = si.unitPriceOverride !== null && si.unitPriceOverride !== undefined;
@@ -257,14 +265,36 @@ export default function ScenarioItemRow({
                 </button>
             </td>
             <td className="px-8 py-6 text-right">
-                {!isReadOnly && (
-                    <button 
-                        onClick={() => removeItemFromScenario(si.id!)}
-                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </button>
-                )}
+                <div className="flex items-center justify-end gap-1">
+                    {!isReadOnly && (canMoveUp || canMoveDown) && (
+                        <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                                onClick={onMoveUp}
+                                disabled={!canMoveUp}
+                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30"
+                                title="Subir"
+                            >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                onClick={onMoveDown}
+                                disabled={!canMoveDown}
+                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30"
+                                title="Bajar"
+                            >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    )}
+                    {!isReadOnly && (
+                        <button 
+                            onClick={() => removeItemFromScenario(si.id!)}
+                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
             </td>
         </tr>
         {/* Expanded children section */}

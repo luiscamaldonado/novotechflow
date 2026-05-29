@@ -5,7 +5,7 @@ import {
     RotateCcw, Layers, FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useScenarios, type ProposalCalcItem } from '../../hooks/useScenarios';
+import { useScenarios, type ProposalCalcItem, type ScenarioItem } from '../../hooks/useScenarios';
 import ItemPickerModal from '../../components/proposals/ItemPickerModal';
 import ScenarioTotalsCards from '../../components/proposals/ScenarioTotalsCards';
 import { exportToExcel } from '../../lib/exportExcel';
@@ -36,6 +36,7 @@ export default function ProposalCalculations() {
         clearUnitPriceOverride,
         renameScenario,
         cloneScenario,
+        reorderItems,
     } = useScenarios(id);
 
     const { isReadOnly } = useProposalReadOnly(proposal);
@@ -95,6 +96,23 @@ export default function ProposalCalculations() {
             else next.add(siId);
             return next;
         });
+    };
+
+    // ── Reorder helpers for non-diluted parent items ──
+    const visibleParents = activeScenario ? activeScenario.scenarioItems.filter(p => !p.isDiluted) : [];
+    const firstVisibleId = visibleParents[0]?.id;
+    const lastVisibleId = visibleParents[visibleParents.length - 1]?.id;
+
+    const moveItem = (si: ScenarioItem, direction: 'up' | 'down') => {
+        if (!activeScenario) return;
+        const diluted = activeScenario.scenarioItems.filter(p => p.isDiluted);
+        const visible = activeScenario.scenarioItems.filter(p => !p.isDiluted);
+        const pos = visible.findIndex(p => p.id === si.id);
+        if (pos === -1) return;
+        const target = direction === 'up' ? pos - 1 : pos + 1;
+        if (target < 0 || target >= visible.length) return;
+        [visible[pos], visible[target]] = [visible[target], visible[pos]];
+        reorderItems([...diluted, ...visible].map(p => p.id!));
     };
 
     if (loading || !proposal) {
@@ -317,6 +335,10 @@ export default function ProposalCalculations() {
                                                             clearUnitPriceOverride={clearUnitPriceOverride}
                                                             setPickingChildrenFor={setPickingChildrenFor}
                                                             proposal={proposal}
+                                                            canMoveUp={!si.isDiluted && si.id !== firstVisibleId}
+                                                            canMoveDown={!si.isDiluted && si.id !== lastVisibleId}
+                                                            onMoveUp={() => moveItem(si, 'up')}
+                                                            onMoveDown={() => moveItem(si, 'down')}
                                                         />
                                                     );
                                                 })
