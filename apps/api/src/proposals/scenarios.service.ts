@@ -41,6 +41,7 @@ export class ScenariosService {
       include: {
         scenarioItems: {
           where: { parentId: null },
+          orderBy: { sortOrder: 'asc' },
           include: {
             item: true,
             children: {
@@ -162,6 +163,7 @@ export class ScenariosService {
           marginPctOverride: si.marginPctOverride,
           unitPriceOverride: si.unitPriceOverride,
           isDiluted: si.isDiluted,
+          sortOrder: si.sortOrder,
         },
       });
       siIdMap.set(si.id, newSi.id);
@@ -190,6 +192,7 @@ export class ScenariosService {
       include: {
         scenarioItems: {
           where: { parentId: null },
+          orderBy: { sortOrder: 'asc' },
           include: {
             item: true,
             children: { include: { item: true } },
@@ -204,6 +207,17 @@ export class ScenariosService {
    */
   async addScenarioItem(scenarioId: string, data: AddScenarioItemDto, user: AuthenticatedUser) {
     await this.verifyScenarioOwnership(scenarioId, user);
+
+    const isParent = data.parentId === null || data.parentId === undefined;
+    let nextOrder = 0;
+    if (isParent) {
+      const aggregate = await this.prisma.scenarioItem.aggregate({
+        where: { scenarioId, parentId: null },
+        _max: { sortOrder: true },
+      });
+      nextOrder = (aggregate._max.sortOrder || 0) + 1;
+    }
+
     return this.prisma.scenarioItem.create({
       data: {
         scenarioId,
@@ -211,6 +225,7 @@ export class ScenariosService {
         parentId: data.parentId ?? undefined,
         quantity: data.quantity || 1,
         marginPctOverride: data.marginPct ?? undefined,
+        ...(isParent ? { sortOrder: nextOrder } : {}),
       },
       include: {
         item: true,
