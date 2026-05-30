@@ -1317,3 +1317,12 @@ Se descartó **agregar un campo `versionGroupId` a `Proposal`** (+ migración + 
 
 ### Pendientes
 - Ninguno. Migración futura a `versionGroupId` solo si aparecen códigos sin sufijo de versión.
+
+**Addendum (2026-05-30):** En el dashboard, las filas de versiones anteriores
+(`v.id !== group.activeVersion.id`) muestran sus 4 controles de datos editables
+—fecha de cierre, adquisición, estado y fecha de facturación condicional— en
+estado `disabled`: visibles para conservar el valor histórico de un vistazo,
+pero no editables, dado que ya existe una versión vigente. Las acciones
+(edit / clone versión / clone nueva / delete) permanecen habilitadas.
+Implementado con un prop `isActiveVersion` (default `true`, fail-safe) en
+`ProposalVersionRow`. Commit af57572.
