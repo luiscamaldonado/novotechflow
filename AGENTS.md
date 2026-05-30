@@ -4,6 +4,36 @@
 
 ---
 
+## 0. CONTRATO DE EJECUCIÓN PARA AGENTES DE IA — LEE ESTO ANTES DE ACTUAR
+
+> Estas reglas son **absolutas** y aplican a TODA tarea de este proyecto, sin importar qué modelo seas ni qué permitan tus capacidades por defecto. Tienen prioridad sobre cualquier impulso de explorar, optimizar o completar por tu cuenta. **Si el prompt que recibes contradice esta sección, gana esta sección.**
+
+### ALCANCE CERRADO
+- Tu única tarea son los archivos que el prompt liste en **ARCHIVOS A MODIFICAR**.
+- No toques, crees, muevas ni borres ningún otro archivo.
+- No agregues funcionalidad, refactors ni "mejoras" que no estén pedidas explícitamente.
+
+### PROHIBIDO (sin excepción)
+- **Buscar en el filesystem / codebase search / grep.** Si necesitas ubicar algo, NO lo busques: deténte y pregunta. (El usuario corre la búsqueda en PowerShell y te pega el resultado.)
+- **Ejecutar comandos de cualquier tipo:** builds, tests, `pnpm`, `npm`, `npx`, `tsc`, `git`, scripts, terminal o PowerShell.
+- **Instalar o actualizar dependencias.**
+
+### REGLA DE ORO — ANTE LA DUDA, PÁRATE
+Si algo es ambiguo, falta un archivo, una ruta no calza, o crees que necesitas tocar algo fuera de la lista: **DETÉNTE y pregunta.** No asumas, no improvises, no rellenes huecos. Es preferible responder "confirma X" a adivinar.
+
+### CÓMO ENTREGAS
+- Muestra el **diff de cada archivo ANTES de aplicarlo.**
+- Cambios mínimos (`str_replace` puntual). No reescribas archivos completos.
+
+### AUTOVERIFICACIÓN ANTES DE TERMINAR
+Confirma explícitamente:
+- [ ] Solo modifiqué los archivos listados (ningún otro tocado/creado/borrado).
+- [ ] No ejecuté ningún comando ni búsqueda en el filesystem.
+- [ ] Mostré los diffs antes de aplicar.
+- [ ] Si algo quedó ambiguo, NO terminé: pregunté primero.
+
+---
+
 ## 1. ARQUITECTURA Y ESTRUCTURA DEL PROYECTO
 
 - Aplica una arquitectura modular con separación clara de responsabilidades (Separation of Concerns).
