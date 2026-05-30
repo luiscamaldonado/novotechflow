@@ -282,6 +282,8 @@ export default function Dashboard() {
                                 <th className="px-4 py-3">Cliente / Asunto</th>
                                 {user?.role === 'ADMIN' && <th className="px-4 py-3 text-center">Asesor</th>}
                                 <th className="px-4 py-3 text-center">F. Cierre</th>
+                                <th className="px-4 py-3 text-center">F. Emisión</th>
+                                <th className="px-4 py-3 text-center">F. Vigencia</th>
                                 <th className="px-4 py-3 text-center">Actualización</th>
                                 <th className="px-4 py-3 text-right">Subtotal Min.</th>
                                 <th className="px-4 py-3 text-right">USD Est.</th>
@@ -293,7 +295,7 @@ export default function Dashboard() {
                         <tbody className="divide-y divide-gray-50">
                             {proposalGroups.length === 0 && filteredProjectionRows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'ADMIN' ? 10 : 9} className="px-6 py-16 text-center text-gray-400">
+                                    <td colSpan={user?.role === 'ADMIN' ? 12 : 11} className="px-6 py-16 text-center text-gray-400">
                                         No hay propuestas que coincidan con los filtros.
                                     </td>
                                 </tr>
@@ -374,6 +376,12 @@ export default function Dashboard() {
                                                         </span>
                                                     </td>
                                                 )}
+                                                <td className="px-4 py-4 text-center">
+                                                    <span className="text-[10px] text-gray-300">—</span>
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    <span className="text-[10px] text-gray-300">—</span>
+                                                </td>
                                                 <td className="px-4 py-4 text-center">
                                                     <span className="text-[10px] text-gray-300">—</span>
                                                 </td>

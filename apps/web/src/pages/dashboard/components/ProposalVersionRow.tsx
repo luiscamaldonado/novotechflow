@@ -7,6 +7,7 @@ import {
 } from '../../../lib/constants';
 import type { ProposalStatus, AcquisitionType, UserRole } from '../../../lib/types';
 import type { DashboardRow } from '../../../hooks/useDashboard';
+import { formatDashboardDate, isValidityExpired } from '../../../lib/dashboardDates';
 
 /** Format a subtotal with its currency label (COP or USD). */
 function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
@@ -77,6 +78,18 @@ export default function ProposalVersionRow({
                     disabled={!isActiveVersion}
                     className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
                 />
+            </td>
+            <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
+                {formatDashboardDate(p.issueDate)}
+            </td>
+            <td className="px-4 py-4 text-center text-[10px] font-semibold">
+                {p.validityDate ? (
+                    <span className={isValidityExpired(p.validityDate) ? 'text-red-600' : 'text-gray-400'}>
+                        {formatDashboardDate(p.validityDate)}
+                    </span>
+                ) : (
+                    <span className="text-gray-300">—</span>
+                )}
             </td>
             <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
                 {new Date(p.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
