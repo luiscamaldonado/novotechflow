@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
 import { TRM_API_URL } from '../lib/constants';
 import { getDashboardAmount, type MinSubtotalResult } from '../lib/pricing-engine';
+import { groupProposalRows, type ProposalVersionGroup } from '../lib/proposalGrouping';
 import { getTrmMonthlyAverage } from '../lib/trm-service';
 import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType, ItemType } from '../lib/types';
 import type { DateRange } from '../pages/dashboard/DashboardFilters';
@@ -395,18 +396,34 @@ export function useDashboard() {
         subtotalUsdMin, subtotalUsdMax, acquisitionFilter, userFilter, trmRate,
     ]);
 
-    // â”€â”€ Billing summary cards per acquisition type (from filtered rows, in USD) â”€â”€
+    // ── Version grouping: only active version per proposal counts for cards/pipeline ──
+    const proposalGroups: ProposalVersionGroup<DashboardRow>[] = useMemo(
+        () => groupProposalRows(filtered.filter(r => !r.isProjection)),
+        [filtered],
+    );
+
+    const filteredProjectionRows: DashboardRow[] = useMemo(
+        () => filtered.filter(r => r.isProjection),
+        [filtered],
+    );
+
+    const activeRows: DashboardRow[] = useMemo(
+        () => [...proposalGroups.map(g => g.activeVersion), ...filteredProjectionRows],
+        [proposalGroups, filteredProjectionRows],
+    );
+
+    // ── Billing summary cards per acquisition type (from active rows, in USD) ──
     const billingCardsVenta: BillingCards = useMemo(
-        () => computeBillingCards(filtered, 'VENTA', trmRate),
-        [filtered, trmRate],
+        () => computeBillingCards(activeRows, 'VENTA', trmRate),
+        [activeRows, trmRate],
     );
 
     const billingCardsDaas: BillingCards = useMemo(
-        () => computeBillingCards(filtered, 'DAAS', trmRate),
-        [filtered, trmRate],
+        () => computeBillingCards(activeRows, 'DAAS', trmRate),
+        [activeRows, trmRate],
     );
 
-    // â”€â”€ Pipeline cards per status + forecast (from filtered rows, in USD) â”€â”€
+    // â”€â”€ Pipeline cards per status + forecast (from active rows, in USD) â”€â”€
     const { pipelineCards, forecastCurrentQuarter, forecastNextQuarter } = useMemo(() => {
         const { currentQ, currentQYear, nextQ, nextQYear } = resolveCurrentAndNextQuarter();
 
@@ -414,7 +431,7 @@ export function useDashboard() {
             let currentQuarterSum = 0;
             let nextQuarterSum = 0;
 
-            for (const row of filtered) {
+            for (const row of activeRows) {
                 if (row.status !== status || !row.closeDate) continue;
                 const usd = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate) ?? 0;
                 const { quarter, year } = getQuarter(row.closeDate);
@@ -435,7 +452,7 @@ export function useDashboard() {
             forecastCurrentQuarter: fcCurrentQ,
             forecastNextQuarter: fcNextQ,
         };
-    }, [filtered, trmRate]);
+    }, [activeRows, trmRate]);
 
     // â”€â”€ Actions â”€â”€
     const handleStatusChange = async (id: string, newStatus: ProposalStatus) => {
@@ -551,6 +568,8 @@ export function useDashboard() {
         loading,
         proposals,
         filtered,
+        proposalGroups,
+        filteredProjectionRows,
         billingCardsVenta,
         billingCardsDaas,
         pipelineCards,

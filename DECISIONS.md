@@ -1278,3 +1278,42 @@ Al planear la UI se revisó cómo el doc builder reordena páginas: NO usa drag-
 
 ### Pendientes
 - Ninguno. Si a futuro se quiere DnD real, migrar ambas pantallas (cálculos y doc builder) juntas para no dejar patrones inconsistentes.
+
+## ADR-032 — Agrupación de propuestas por versión en el dashboard
+
+**Fecha:** 2026-05-30
+**Estado:** Cerrado
+
+### Contexto
+Las versiones de una misma cotización (`COT-LMA05003-1`, `COT-LMA05003-2`) son registros `Proposal` separados. No existe campo de grupo en el schema (`proposal_code` es `@unique`; `current_version` y la relación `ProposalVersion[]` con `snapshot_data` son un mecanismo distinto, para snapshots/PDF de UNA propuesta, sin relación con este versionado). El único vínculo entre versiones de una cotización es el prefijo del `proposalCode`.
+
+El dashboard las listaba como filas independientes, cuando conceptualmente son la misma cotización. Además, `computeBillingCards` y el bloque de pipeline en `useDashboard.ts` sumaban sobre `filtered` (TODAS las versiones), produciendo doble conteo latente de una misma cotización cuando dos versiones tenían estado + fecha que contaban. Hoy no se manifestaba porque las versiones de prueba estaban en ELABORACION sin `closeDate` (el pipeline exige `closeDate`), pero era una regresión esperando ocurrir.
+
+### Decisión
+Agrupar las propuestas por código base derivado del `proposalCode`, en la capa de derivación y presentación, sin tocar backend ni schema.
+
+- **Helper puro** `apps/web/src/lib/proposalGrouping.ts`: `parseProposalCode(code)` (regex `/^(.+)-(\d+)$/`, con guard defensivo: si no matchea, `baseCode = code` y `version = 1`); `groupProposalRows<T extends { code: string }>(rows)` genérico, que preserva el orden de primera aparición de cada grupo (via `Map`) y ordena las versiones desc por número. Tipos co-localizados (`ParsedProposalCode`, `ProposalVersionGroup<T>`), no en `types.ts` (precedente: `MinSubtotalResult` en pricing-engine). NO va al pricing-engine (sección J): no calcula landed cost, dilución, margen ni precio, solo agrupa y ordena registros.
+- **Versión activa** de un grupo = la de mayor sufijo `-N`. Justificación de negocio: las cotizaciones tienen vigencia corta, por lo que al nacer una versión nueva la anterior ya venció y se considera superada; no hay riesgo real de ocultar una venta ganada en una versión vieja.
+- **Valor del grupo**: el de su versión activa, que sigue siendo el mínimo entre sus escenarios vía `getDashboardAmount` (sin cambios). La agrupación elige *qué* propuesta representa al grupo; el "mínimo de escenarios" ya estaba resuelto. No se introdujo cálculo financiero nuevo.
+- **Derivación en `useDashboard.ts`**: `proposalGroups` (de `filtered` sin proyecciones), `filteredProjectionRows` (proyecciones de `filtered`), y `activeRows` = versión activa de cada grupo + proyecciones. `billingCardsVenta/Daas` y el pipeline pasan a consumir `activeRows` en vez de `filtered` (el interior de `computeBillingCards` no cambió, solo su argumento). Filtrar ocurre antes de agrupar.
+- **UI** (`Dashboard.tsx` + dos componentes nuevos en `pages/dashboard/components/`): grupos de 1 versión → fila directa con acciones; grupos de 2+ → cabecera colapsable de solo lectura (`ProposalGroupHeaderRow`) con los datos de la versión activa y badge/conteo, que al expandir muestra cada versión (`ProposalVersionRow`, prop `isChild` para indentación) con sus acciones. Estado de expansión (`expandedGroups: Set<string>`) es estado de UI local en `Dashboard.tsx`. Los componentes no importan `api`; reciben callbacks por props (sección B). Las proyecciones NO se agrupan.
+
+Se descartó **agregar un campo `versionGroupId` a `Proposal`** (+ migración + backfill de existentes): más robusto, pero cruza backend/DB/frontend y deja de ser render-only. El parseo del prefijo es suficiente mientras todos los `proposalCode` terminen en `-<versión>` (confirmado por el dueño del proyecto, incluidos los de origen `MANUAL`). Se descartó también **agrupar en el backend** (endpoint anidado) por over-engineering: no hay datos que el frontend no pueda derivar.
+
+### Consecuencias
+- Positivas: tabla y cards/pipeline quedan coherentes por construcción (ambos miran la versión activa de cada grupo); se corrige el doble conteo latente. Sin cambios de schema, backend ni pricing-engine: todo vive en derivación (`useDashboard`) y presentación.
+- Negativas: cambia la semántica de los totales del dashboard — en escenarios con múltiples versiones contables las cifras de cards/pipeline pueden bajar respecto a antes. Es el comportamiento correcto, no una regresión, pero altera números que un usuario podría haber estado observando.
+- Deuda / supuesto: dependencia frágil del formato de `proposalCode`. Si a futuro se introdujeran códigos sin sufijo `-N`, el guard los trata como grupo propio de versión 1 (no rompe el render, pero no agrupa). Si esto se vuelve problema, migrar al campo `versionGroupId` con su propio ADR.
+
+### Archivos
+- `apps/web/src/lib/proposalGrouping.ts` (nuevo: `parseProposalCode`, `groupProposalRows`, tipos `ParsedProposalCode` y `ProposalVersionGroup<T>`)
+- `apps/web/src/hooks/useDashboard.ts` (+`proposalGroups`, `filteredProjectionRows`, `activeRows`; cards/pipeline consumen `activeRows`)
+- `apps/web/src/pages/Dashboard.tsx` (estado `expandedGroups` + `toggleGroup`; `<tbody>` itera `proposalGroups` + `filteredProjectionRows`)
+- `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` (nuevo: fila de propuesta extraída, prop `isChild`)
+- `apps/web/src/pages/dashboard/components/ProposalGroupHeaderRow.tsx` (nuevo: cabecera colapsable de solo lectura)
+
+### Commits
+- `<completar con el hash tras el commit>` — feat(dashboard): agrupar propuestas por versión con cabecera colapsable
+
+### Pendientes
+- Ninguno. Migración futura a `versionGroupId` solo si aparecen códigos sin sufijo de versión.

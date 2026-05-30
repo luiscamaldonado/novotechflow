@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     PlusCircle, Trash2, Edit2, Loader2,
-    Copy, Search, Filter, X, Receipt, FileSpreadsheet,
+    Search, Filter, X, Receipt, FileSpreadsheet,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
@@ -10,7 +10,7 @@ import { useProjections } from '../hooks/useProjections';
 import { useNotifications } from '../hooks/useNotifications';
 import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, formatCOP, formatUSD } from '../lib/constants';
 import { exportDashboardToExcel } from '../lib/exportDashboard';
-import type { ProposalStatus, AcquisitionType } from '../lib/types';
+import type { ProposalStatus, AcquisitionType, UserRole } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import PipelineCards from './dashboard/PipelineCards';
 import ProjectionModal from './dashboard/ProjectionModal';
@@ -18,6 +18,8 @@ import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
 import NotificationBells from './dashboard/NotificationBells';
 import NotificationPanel from './dashboard/NotificationPanel';
+import ProposalVersionRow from './dashboard/components/ProposalVersionRow';
+import ProposalGroupHeaderRow from './dashboard/components/ProposalGroupHeaderRow';
 
 /** Format a subtotal with its currency label (COP or USD). */
 function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
@@ -29,6 +31,18 @@ export default function Dashboard() {
     const navigate = useNavigate();
     const { user } = useAuthStore();
     const [isExporting, setIsExporting] = useState(false);
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+    const toggleGroup = (baseCode: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(baseCode)) next.delete(baseCode);
+            else next.add(baseCode);
+            return next;
+        });
+    };
+
+    const handleEdit = (id: string) => navigate(`/proposals/${id}/builder`);
 
     const handleExportExcel = async () => {
         setIsExporting(true);
@@ -46,7 +60,8 @@ export default function Dashboard() {
     };
 
     const {
-        loading, proposals, filtered, billingCardsVenta, billingCardsDaas,
+        loading, proposals, filtered, proposalGroups, filteredProjectionRows,
+        billingCardsVenta, billingCardsDaas,
         pipelineCards, forecastCurrentQuarter, forecastNextQuarter,
         cloning, setProjections,
         trmRate, setTrmRate,
@@ -68,6 +83,8 @@ export default function Dashboard() {
         handleProjectionStatusChange, handleProjectionDateChange,
         toggleStatusFilter, clearFilters,
     } = useDashboard();
+
+    const userRole: UserRole = user?.role === 'ADMIN' ? 'ADMIN' : 'COMMERCIAL';
 
     const {
         showProjectionModal, setShowProjectionModal,
@@ -274,20 +291,69 @@ export default function Dashboard() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {filtered.length === 0 ? (
+                            {proposalGroups.length === 0 && filteredProjectionRows.length === 0 ? (
                                 <tr>
                                     <td colSpan={user?.role === 'ADMIN' ? 10 : 9} className="px-6 py-16 text-center text-gray-400">
                                         No hay propuestas que coincidan con los filtros.
                                     </td>
                                 </tr>
                             ) : (
-                                filtered.map((row) => {
-                                    const usdEst = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate);
+                                <>
+                                    {/* ── Proposal groups (version-grouped) ── */}
+                                    {proposalGroups.map(group => {
+                                        if (group.versions.length === 1) {
+                                            return (
+                                                <ProposalVersionRow
+                                                    key={group.activeVersion.id}
+                                                    row={group.activeVersion}
+                                                    userRole={userRole}
+                                                    trmRate={trmRate}
+                                                    cloning={cloning}
+                                                    onStatusChange={handleStatusChange}
+                                                    onDateChange={handleDateChange}
+                                                    onAcquisitionChange={handleAcquisitionChange}
+                                                    onClone={handleClone}
+                                                    onDelete={handleDelete}
+                                                    onEdit={handleEdit}
+                                                />
+                                            );
+                                        }
 
-                                    if (row.isProjection) {
-                                        // ── Projection Row ──
+                                        const isExpanded = expandedGroups.has(group.baseCode);
+                                        return (
+                                            <Fragment key={`grp-${group.baseCode}`}>
+                                                <ProposalGroupHeaderRow
+                                                    group={group}
+                                                    isExpanded={isExpanded}
+                                                    onToggle={() => toggleGroup(group.baseCode)}
+                                                    userRole={userRole}
+                                                    trmRate={trmRate}
+                                                />
+                                                {isExpanded && group.versions.map(v => (
+                                                    <ProposalVersionRow
+                                                        key={v.id}
+                                                        row={v}
+                                                        userRole={userRole}
+                                                        trmRate={trmRate}
+                                                        cloning={cloning}
+                                                        isChild
+                                                        onStatusChange={handleStatusChange}
+                                                        onDateChange={handleDateChange}
+                                                        onAcquisitionChange={handleAcquisitionChange}
+                                                        onClone={handleClone}
+                                                        onDelete={handleDelete}
+                                                        onEdit={handleEdit}
+                                                    />
+                                                ))}
+                                            </Fragment>
+                                        );
+                                    })}
+
+                                    {/* ── Projection rows (unchanged) ── */}
+                                    {filteredProjectionRows.map(row => {
                                         const pr = row.originalProjection!;
                                         const cfg = STATUS_CONFIG[row.status];
+                                        const usdEst = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate);
                                         return (
                                             <tr key={`proj-${row.id}`} className="hover:bg-violet-50/30 transition-colors group bg-violet-50/10">
                                                 <td className="px-5 py-4">
@@ -380,137 +446,8 @@ export default function Dashboard() {
                                                 </td>
                                             </tr>
                                         );
-                                    }
-
-                                    // ── Proposal Row (original logic) ──
-                                    const p = row.originalProposal!;
-                                    const cfg = STATUS_CONFIG[p.status];
-                                    const needsBillingDate = p.status === 'PENDIENTE_FACTURAR' || p.status === 'FACTURADA';
-
-                                    return (
-                                        <tr key={p.id} className="hover:bg-gray-50/50 transition-colors group">
-                                            <td className="px-5 py-4">
-                                                <span className="font-mono font-black text-indigo-600 text-xs">{p.proposalCode}</span>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <p className="font-bold text-gray-900 text-sm">{p.clientName}</p>
-                                                <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-1" title={p.subject}>{p.subject}</p>
-                                            </td>
-                                            {user?.role === 'ADMIN' && (
-                                                <td className="px-4 py-4 text-center">
-                                                    <span className="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
-                                                        {p.user?.nomenclature || '??'} - {p.user?.name?.split(' ')[0]}
-                                                    </span>
-                                                </td>
-                                            )}
-                                            <td className="px-4 py-4 text-center">
-                                                <input
-                                                    type="date"
-                                                    value={p.closeDate ? new Date(p.closeDate).toISOString().split('T')[0] : ''}
-                                                    onChange={(e) => handleDateChange(p.id, 'closeDate', e.target.value)}
-                                                    className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-[120px]"
-                                                />
-
-                                            </td>
-                                            <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
-                                                {new Date(p.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
-                                            </td>
-                                            <td className="px-4 py-4 text-right">
-                                                {row.minSubtotal !== null ? (
-                                                    <span className="font-mono font-black text-xs text-emerald-700 inline-flex items-center gap-1">
-                                                        {row.isManual && (
-                                                            <span
-                                                                className="text-gray-400 font-normal"
-                                                                title="Monto estimado inicial. Sin ítems cargados aún."
-                                                            >~</span>
-                                                        )}
-                                                        {formatSubtotalWithCurrency(row.minSubtotal, row.minSubtotalCurrency)}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-[10px] text-gray-300">Sin escenario</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-4 text-right">
-                                                {usdEst !== null ? (
-                                                    <span className="font-mono font-black text-xs text-blue-700">USD {formatUSD(usdEst)}</span>
-                                                ) : (
-                                                    <span className="text-[10px] text-gray-300">—</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <select
-                                                    value={p.acquisitionType || ''}
-                                                    onChange={(e) => handleAcquisitionChange(p.id, e.target.value as AcquisitionType)}
-                                                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 ${
-                                                        p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType]
-                                                            ? `${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`
-                                                            : 'bg-gray-50 text-gray-400 border-gray-200'
-                                                    }`}
-                                                >
-                                                    <option value="">— Seleccionar —</option>
-                                                    <option value="VENTA">Venta</option>
-                                                    <option value="DAAS">DaaS</option>
-                                                </select>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <select
-                                                    value={p.status}
-                                                    onChange={(e) => handleStatusChange(p.id, e.target.value as ProposalStatus)}
-                                                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-indigo-600/20`}
-                                                >
-                                                    {ALL_STATUSES.map(s => (
-                                                        <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                                                    ))}
-                                                </select>
-                                                {needsBillingDate && (
-                                                    <div className="mt-2">
-                                                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-0.5">Fecha de facturación</span>
-                                                        <input
-                                                            type="date"
-                                                            value={p.billingDate ? new Date(p.billingDate).toISOString().split('T')[0] : ''}
-                                                            onChange={(e) => handleDateChange(p.id, 'billingDate', e.target.value)}
-                                                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px]"
-                                                        />
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <div className="flex items-center justify-center space-x-1">
-                                                    <button
-                                                        onClick={() => navigate(`/proposals/${p.id}/builder`)}
-                                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                                        title="Editar"
-                                                    >
-                                                        <Edit2 className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleClone(p.id, 'NEW_VERSION')}
-                                                        disabled={cloning === p.id}
-                                                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                        title="Clonar versión"
-                                                    >
-                                                        <Copy className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleClone(p.id, 'NEW_PROPOSAL')}
-                                                        disabled={cloning === p.id}
-                                                        className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
-                                                        title="Clonar como nueva propuesta"
-                                                    >
-                                                        <PlusCircle className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(p.id, p.proposalCode || '')}
-                                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                        title="Eliminar"
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
+                                    })}
+                                </>
                             )}
                         </tbody>
                     </table>
