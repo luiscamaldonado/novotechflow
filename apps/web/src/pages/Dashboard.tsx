@@ -337,6 +337,7 @@ export default function Dashboard() {
                                                         trmRate={trmRate}
                                                         cloning={cloning}
                                                         isChild
+                                                        isActiveVersion={v.id === group.activeVersion.id}
                                                         onStatusChange={handleStatusChange}
                                                         onDateChange={handleDateChange}
                                                         onAcquisitionChange={handleAcquisitionChange}

@@ -21,6 +21,8 @@ interface ProposalVersionRowProps {
     cloning: string | null;
     /** When true, indents the code cell to signal a child version inside an expanded group. */
     isChild?: boolean;
+    /** When false, disables editable data controls (dates, status, acquisition) for previous versions. */
+    isActiveVersion?: boolean;
     onStatusChange: (id: string, status: ProposalStatus) => void;
     onDateChange: (id: string, field: 'closeDate' | 'billingDate', value: string) => void;
     onAcquisitionChange: (id: string, value: AcquisitionType) => void;
@@ -35,6 +37,7 @@ export default function ProposalVersionRow({
     trmRate,
     cloning,
     isChild = false,
+    isActiveVersion = true,
     onStatusChange,
     onDateChange,
     onAcquisitionChange,
@@ -71,7 +74,8 @@ export default function ProposalVersionRow({
                     type="date"
                     value={p.closeDate ? new Date(p.closeDate).toISOString().split('T')[0] : ''}
                     onChange={(e) => onDateChange(p.id, 'closeDate', e.target.value)}
-                    className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-[120px]"
+                    disabled={!isActiveVersion}
+                    className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
                 />
             </td>
             <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
@@ -103,7 +107,8 @@ export default function ProposalVersionRow({
                 <select
                     value={p.acquisitionType || ''}
                     onChange={(e) => onAcquisitionChange(p.id, e.target.value as AcquisitionType)}
-                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 ${
+                    disabled={!isActiveVersion}
+                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 disabled:opacity-50 disabled:cursor-not-allowed ${
                         p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType]
                             ? `${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`
                             : 'bg-gray-50 text-gray-400 border-gray-200'
@@ -118,7 +123,8 @@ export default function ProposalVersionRow({
                 <select
                     value={p.status}
                     onChange={(e) => onStatusChange(p.id, e.target.value as ProposalStatus)}
-                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-indigo-600/20`}
+                    disabled={!isActiveVersion}
+                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                     {ALL_STATUSES.map(s => (
                         <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
@@ -131,7 +137,8 @@ export default function ProposalVersionRow({
                             type="date"
                             value={p.billingDate ? new Date(p.billingDate).toISOString().split('T')[0] : ''}
                             onChange={(e) => onDateChange(p.id, 'billingDate', e.target.value)}
-                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px]"
+                            disabled={!isActiveVersion}
+                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px] disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                     </div>
                 )}
