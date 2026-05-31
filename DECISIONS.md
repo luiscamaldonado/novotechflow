@@ -1326,3 +1326,41 @@ pero no editables, dado que ya existe una versión vigente. Las acciones
 (edit / clone versión / clone nueva / delete) permanecen habilitadas.
 Implementado con un prop `isActiveVersion` (default `true`, fail-safe) en
 `ProposalVersionRow`. Commit af57572.
+
+## ADR-033 — Consolidación de columnas del dashboard en celdas compuestas (fechas y valores)
+
+**Fecha:** 2026-05-31
+**Estado:** Cerrado
+
+### Contexto
+La tabla del dashboard (construida en ADR-032) tenía 12 columnas (admin) / 11 (comercial). El usuario dependía del scroll horizontal para ver las columnas, en particular la de acciones, que estaba al final. Tres tipos de fila comparten la misma grilla del `<thead>`: `ProposalVersionRow`, `ProposalGroupHeaderRow` (ambos de ADR-032) y la fila inline de proyección en `Dashboard.tsx`; cualquier cambio de estructura toca las tres o desalinea la tabla.
+
+`formatSubtotalWithCurrency` estaba triplicado (Dashboard + las dos filas), violando DRY (§2). No existía ordenamiento por columna (los `<th>` son texto plano sin `onClick` ni estado de sort), por lo que fusionar columnas no elimina ninguna capacidad de ordenamiento.
+
+### Decisión
+Dos celdas presentacionales puras reutilizables en `pages/dashboard/components/` (§B), consumidas por las tres filas: `ProposalDatesCell` (grid 2×2 de cierre/emisión/vigencia/actualización) y `ProposalValueCell` (stack vertical de subtotal + USD). No importan `useDashboard`, `DashboardRow` ni calculan nada financiero: reciben todo por props, y el caller pasa `usdEstimate` ya calculado con `getSubtotalUsd`. NO van al pricing-engine (§J): no calculan landed cost, dilución, margen ni precio, solo presentan.
+
+- Consolidación de columnas: 4 de fecha → 1, 2 de valores → 1; columna de acciones movida al inicio. Resultado: 8 columnas (admin) / 7 (comercial).
+- `ProposalDatesCell` modela cierre editable vs. solo lectura según la presencia del callback `onCloseDateChange` (data-driven, §B): `ProposalVersionRow` lo pasa, con `closeDateDisabled={!isActiveVersion}` reutilizando el mecanismo del addendum de ADR-032; `ProposalGroupHeaderRow` y la fila de proyección no lo pasan → cierre solo lectura. Las props de fecha son nullable (`closeDate?/issueDate?/validityDate?: string | null`) para que la misma celda sirva a proyecciones, que no tienen esas fechas (→ guion).
+- `formatSubtotalWithCurrency` deduplicado: única copia en `ProposalValueCell`; las tres copias previas eliminadas.
+- `billingDate` (fecha de facturación naranja) permanece bajo la columna Estado, intacta — no entra a la celda de fechas.
+
+Se descartó **sticky-left** de la columna de identidad (Código/Cliente): bajar de 12 a 8 columnas se estimó suficiente para eliminar el scroll, y sticky agrega complejidad real (z-index, fondos, interacción con `overflow-x-auto`) sin beneficio confirmado; se evalúa solo si el scroll persiste. Se descartó también reemplazar el **ordenamiento por columna** con un selector de orden: no existía sort por columna, no se perdió nada al fusionar.
+
+### Consecuencias
+- Positivas: la tabla pasa de 12/11 a 8/7 columnas, eliminando el scroll horizontal; queda establecido el patrón de celda compuesta reutilizable para futuras filas de la tabla; helper deduplicado (DRY). Sin cambios en `useDashboard.ts`, pricing-engine ni backend: todo vive en presentación.
+- Negativas / deuda: las tres filas quedan acopladas por construcción al orden de columnas del `<thead>` de `Dashboard.tsx`; deben mantenerse sincronizadas. Una cuarta fila futura en esta tabla debe consumir las mismas celdas y respetar el mismo orden.
+- La fila de proyección pasa `null` en cierre/emisión/vigencia y omite `isManual` (no aplica) → guiones e indicador `~` ausente, idéntico al comportamiento previo.
+
+### Archivos
+- `apps/web/src/pages/dashboard/components/ProposalDatesCell.tsx` (nuevo: celda grid 2×2 de fechas)
+- `apps/web/src/pages/dashboard/components/ProposalValueCell.tsx` (nuevo: celda stack subtotal + USD; única copia de `formatSubtotalWithCurrency`)
+- `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` (consume ambas celdas; acciones al inicio; −helper local; imports limpiados)
+- `apps/web/src/pages/dashboard/components/ProposalGroupHeaderRow.tsx` (consume ambas celdas; acciones al inicio; −helper local; imports limpiados)
+- `apps/web/src/pages/Dashboard.tsx` (`<thead>` reordenado a 8/7; fila de proyección refactorizada; `colSpan` 8/7; −helper)
+
+### Commits
+- `<completar con el hash tras el commit>` — feat(dashboard): consolidate table columns into composite date and value cells
+
+### Pendientes
+- Sticky-left de la columna de identidad: solo si el scroll horizontal persiste tras la reducción a 8/7.
