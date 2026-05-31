@@ -3,17 +3,14 @@ import {
 } from 'lucide-react';
 import { getSubtotalUsd } from '../../../hooks/useDashboard';
 import {
-    STATUS_CONFIG, ALL_STATUSES, ACQUISITION_CONFIG, formatCOP, formatUSD,
+    STATUS_CONFIG, ALL_STATUSES, ACQUISITION_CONFIG,
 } from '../../../lib/constants';
 import type { ProposalStatus, AcquisitionType, UserRole } from '../../../lib/types';
 import type { DashboardRow } from '../../../hooks/useDashboard';
-import { formatDashboardDate, isValidityExpired } from '../../../lib/dashboardDates';
+import ProposalDatesCell from './ProposalDatesCell';
+import ProposalValueCell from './ProposalValueCell';
 
-/** Format a subtotal with its currency label (COP or USD). */
-function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
-    if (currency === 'USD') return `USD ${formatUSD(value)}`;
-    return `COP ${formatCOP(value)}`;
-}
+
 
 interface ProposalVersionRowProps {
     row: DashboardRow;
@@ -53,6 +50,40 @@ export default function ProposalVersionRow({
 
     return (
         <tr className={`hover:bg-gray-50/50 transition-colors group ${isChild ? 'bg-indigo-50/20' : ''}`}>
+            <td className="px-4 py-4 text-center">
+                <div className="flex items-center justify-center space-x-1">
+                    <button
+                        onClick={() => onEdit(p.id)}
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Editar"
+                    >
+                        <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                        onClick={() => onClone(p.id, 'NEW_VERSION')}
+                        disabled={cloning === p.id}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        title="Clonar versión"
+                    >
+                        <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                        onClick={() => onClone(p.id, 'NEW_PROPOSAL')}
+                        disabled={cloning === p.id}
+                        className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                        title="Clonar como nueva propuesta"
+                    >
+                        <PlusCircle className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                        onClick={() => onDelete(p.id, p.proposalCode || '')}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Eliminar"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            </td>
             <td className="px-5 py-4" style={isChild ? { paddingLeft: '2.5rem' } : undefined}>
                 <div className="flex items-center gap-1.5">
                     {isChild && <span className="text-gray-300 text-xs select-none">┗</span>}
@@ -70,52 +101,20 @@ export default function ProposalVersionRow({
                     </span>
                 </td>
             )}
-            <td className="px-4 py-4 text-center">
-                <input
-                    type="date"
-                    value={p.closeDate ? new Date(p.closeDate).toISOString().split('T')[0] : ''}
-                    onChange={(e) => onDateChange(p.id, 'closeDate', e.target.value)}
-                    disabled={!isActiveVersion}
-                    className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-[120px] disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-            </td>
-            <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
-                {formatDashboardDate(p.issueDate)}
-            </td>
-            <td className="px-4 py-4 text-center text-[10px] font-semibold">
-                {p.validityDate ? (
-                    <span className={isValidityExpired(p.validityDate) ? 'text-red-600' : 'text-gray-400'}>
-                        {formatDashboardDate(p.validityDate)}
-                    </span>
-                ) : (
-                    <span className="text-gray-300">—</span>
-                )}
-            </td>
-            <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
-                {new Date(p.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
-            </td>
-            <td className="px-4 py-4 text-right">
-                {row.minSubtotal !== null ? (
-                    <span className="font-mono font-black text-xs text-emerald-700 inline-flex items-center gap-1">
-                        {row.isManual && (
-                            <span
-                                className="text-gray-400 font-normal"
-                                title="Monto estimado inicial. Sin ítems cargados aún."
-                            >~</span>
-                        )}
-                        {formatSubtotalWithCurrency(row.minSubtotal, row.minSubtotalCurrency)}
-                    </span>
-                ) : (
-                    <span className="text-[10px] text-gray-300">Sin escenario</span>
-                )}
-            </td>
-            <td className="px-4 py-4 text-right">
-                {usdEst !== null ? (
-                    <span className="font-mono font-black text-xs text-blue-700">USD {formatUSD(usdEst)}</span>
-                ) : (
-                    <span className="text-[10px] text-gray-300">—</span>
-                )}
-            </td>
+            <ProposalDatesCell
+                closeDate={p.closeDate}
+                issueDate={p.issueDate}
+                validityDate={p.validityDate}
+                updatedAt={p.updatedAt}
+                onCloseDateChange={(value) => onDateChange(p.id, 'closeDate', value)}
+                closeDateDisabled={!isActiveVersion}
+            />
+            <ProposalValueCell
+                subtotal={row.minSubtotal}
+                currency={row.minSubtotalCurrency}
+                isManual={row.isManual}
+                usdEstimate={usdEst}
+            />
             <td className="px-4 py-4 text-center">
                 <select
                     value={p.acquisitionType || ''}
@@ -155,40 +154,6 @@ export default function ProposalVersionRow({
                         />
                     </div>
                 )}
-            </td>
-            <td className="px-4 py-4 text-center">
-                <div className="flex items-center justify-center space-x-1">
-                    <button
-                        onClick={() => onEdit(p.id)}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                        title="Editar"
-                    >
-                        <Edit2 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        onClick={() => onClone(p.id, 'NEW_VERSION')}
-                        disabled={cloning === p.id}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        title="Clonar versión"
-                    >
-                        <Copy className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        onClick={() => onClone(p.id, 'NEW_PROPOSAL')}
-                        disabled={cloning === p.id}
-                        className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
-                        title="Clonar como nueva propuesta"
-                    >
-                        <PlusCircle className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        onClick={() => onDelete(p.id, p.proposalCode || '')}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title="Eliminar"
-                    >
-                        <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                </div>
             </td>
         </tr>
     );

@@ -1,17 +1,14 @@
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { getSubtotalUsd } from '../../../hooks/useDashboard';
-import { STATUS_CONFIG, ACQUISITION_CONFIG, formatCOP, formatUSD } from '../../../lib/constants';
+import { STATUS_CONFIG, ACQUISITION_CONFIG } from '../../../lib/constants';
 import { parseProposalCode } from '../../../lib/proposalGrouping';
 import type { ProposalVersionGroup } from '../../../lib/proposalGrouping';
 import type { UserRole } from '../../../lib/types';
 import type { DashboardRow } from '../../../hooks/useDashboard';
-import { formatDashboardDate, isValidityExpired } from '../../../lib/dashboardDates';
+import ProposalDatesCell from './ProposalDatesCell';
+import ProposalValueCell from './ProposalValueCell';
 
-/** Format a subtotal with its currency label (COP or USD). */
-function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
-    if (currency === 'USD') return `USD ${formatUSD(value)}`;
-    return `COP ${formatCOP(value)}`;
-}
+
 
 interface ProposalGroupHeaderRowProps {
     group: ProposalVersionGroup<DashboardRow>;
@@ -37,6 +34,9 @@ export default function ProposalGroupHeaderRow({
 
     return (
         <tr className="hover:bg-indigo-50/30 transition-colors cursor-pointer bg-indigo-50/10 border-l-2 border-indigo-300">
+            <td className="px-4 py-4 text-center">
+                <span className="text-[10px] text-gray-300">—</span>
+            </td>
             <td className="px-5 py-4">
                 <div className="flex items-center gap-2">
                     <button
@@ -66,50 +66,18 @@ export default function ProposalGroupHeaderRow({
                     </span>
                 </td>
             )}
-            <td className="px-4 py-4 text-center">
-                {p.closeDate ? (
-                    <span className="text-[10px] text-gray-400 font-semibold">{formatDashboardDate(p.closeDate)}</span>
-                ) : (
-                    <span className="text-[10px] text-gray-300">—</span>
-                )}
-            </td>
-            <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
-                {formatDashboardDate(p.issueDate)}
-            </td>
-            <td className="px-4 py-4 text-center text-[10px] font-semibold">
-                {p.validityDate ? (
-                    <span className={isValidityExpired(p.validityDate) ? 'text-red-600' : 'text-gray-400'}>
-                        {formatDashboardDate(p.validityDate)}
-                    </span>
-                ) : (
-                    <span className="text-gray-300">—</span>
-                )}
-            </td>
-            <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
-                {new Date(av.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
-            </td>
-            <td className="px-4 py-4 text-right">
-                {av.minSubtotal !== null ? (
-                    <span className="font-mono font-black text-xs text-emerald-700 inline-flex items-center gap-1">
-                        {av.isManual && (
-                            <span
-                                className="text-gray-400 font-normal"
-                                title="Monto estimado inicial. Sin ítems cargados aún."
-                            >~</span>
-                        )}
-                        {formatSubtotalWithCurrency(av.minSubtotal, av.minSubtotalCurrency)}
-                    </span>
-                ) : (
-                    <span className="text-[10px] text-gray-300">Sin escenario</span>
-                )}
-            </td>
-            <td className="px-4 py-4 text-right">
-                {usdEst !== null ? (
-                    <span className="font-mono font-black text-xs text-blue-700">USD {formatUSD(usdEst)}</span>
-                ) : (
-                    <span className="text-[10px] text-gray-300">—</span>
-                )}
-            </td>
+            <ProposalDatesCell
+                closeDate={p.closeDate}
+                issueDate={p.issueDate}
+                validityDate={p.validityDate}
+                updatedAt={av.updatedAt}
+            />
+            <ProposalValueCell
+                subtotal={av.minSubtotal}
+                currency={av.minSubtotalCurrency}
+                isManual={av.isManual}
+                usdEstimate={usdEst}
+            />
             <td className="px-4 py-4 text-center">
                 {av.acquisitionType && ACQUISITION_CONFIG[av.acquisitionType] ? (
                     <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${ACQUISITION_CONFIG[av.acquisitionType].bg} ${ACQUISITION_CONFIG[av.acquisitionType].text} ${ACQUISITION_CONFIG[av.acquisitionType].border}`}>
@@ -123,9 +91,6 @@ export default function ProposalGroupHeaderRow({
                 <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
                     {cfg.label}
                 </span>
-            </td>
-            <td className="px-4 py-4 text-center">
-                <span className="text-[10px] text-gray-300">—</span>
             </td>
         </tr>
     );

@@ -8,7 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
 import { useProjections } from '../hooks/useProjections';
 import { useNotifications } from '../hooks/useNotifications';
-import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG, formatCOP, formatUSD } from '../lib/constants';
+import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG } from '../lib/constants';
 import { exportDashboardToExcel } from '../lib/exportDashboard';
 import type { ProposalStatus, AcquisitionType, UserRole } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
@@ -20,12 +20,10 @@ import NotificationBells from './dashboard/NotificationBells';
 import NotificationPanel from './dashboard/NotificationPanel';
 import ProposalVersionRow from './dashboard/components/ProposalVersionRow';
 import ProposalGroupHeaderRow from './dashboard/components/ProposalGroupHeaderRow';
+import ProposalDatesCell from './dashboard/components/ProposalDatesCell';
+import ProposalValueCell from './dashboard/components/ProposalValueCell';
 
-/** Format a subtotal with its currency label (COP or USD). */
-function formatSubtotalWithCurrency(value: number, currency: 'COP' | 'USD' | null): string {
-    if (currency === 'USD') return `USD ${formatUSD(value)}`;
-    return `COP ${formatCOP(value)}`;
-}
+
 
 export default function Dashboard() {
     const navigate = useNavigate();
@@ -278,24 +276,20 @@ export default function Dashboard() {
                     <table className="w-full text-left text-sm text-gray-600">
                         <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 font-bold tracking-wider border-b border-gray-100">
                             <tr>
+                                <th className="px-4 py-3 text-center">Acciones</th>
                                 <th className="px-5 py-3">Código</th>
                                 <th className="px-4 py-3">Cliente / Asunto</th>
                                 {user?.role === 'ADMIN' && <th className="px-4 py-3 text-center">Asesor</th>}
-                                <th className="px-4 py-3 text-center">F. Cierre</th>
-                                <th className="px-4 py-3 text-center">F. Emisión</th>
-                                <th className="px-4 py-3 text-center">F. Vigencia</th>
-                                <th className="px-4 py-3 text-center">Actualización</th>
-                                <th className="px-4 py-3 text-right">Subtotal Min.</th>
-                                <th className="px-4 py-3 text-right">USD Est.</th>
+                                <th className="px-4 py-3">Fechas</th>
+                                <th className="px-4 py-3 text-right">Valores (COP / USD)</th>
                                 <th className="px-4 py-3 text-center">Adquisición</th>
                                 <th className="px-4 py-3 text-center">Estado</th>
-                                <th className="px-4 py-3 text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {proposalGroups.length === 0 && filteredProjectionRows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'ADMIN' ? 12 : 11} className="px-6 py-16 text-center text-gray-400">
+                                    <td colSpan={user?.role === 'ADMIN' ? 8 : 7} className="px-6 py-16 text-center text-gray-400">
                                         No hay propuestas que coincidan con los filtros.
                                     </td>
                                 </tr>
@@ -359,6 +353,24 @@ export default function Dashboard() {
                                         const usdEst = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate);
                                         return (
                                             <tr key={`proj-${row.id}`} className="hover:bg-violet-50/30 transition-colors group bg-violet-50/10">
+                                                <td className="px-4 py-4 text-center">
+                                                    <div className="flex items-center justify-center space-x-1">
+                                                        <button
+                                                            onClick={() => openEditProjectionModal(pr)}
+                                                            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                                                            title="Editar proyección"
+                                                        >
+                                                            <Edit2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteProjection(row.id, row.code)}
+                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                            title="Eliminar proyección"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </td>
                                                 <td className="px-5 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-mono font-black text-violet-600 text-xs">{row.code}</span>
@@ -376,30 +388,17 @@ export default function Dashboard() {
                                                         </span>
                                                     </td>
                                                 )}
-                                                <td className="px-4 py-4 text-center">
-                                                    <span className="text-[10px] text-gray-300">—</span>
-                                                </td>
-                                                <td className="px-4 py-4 text-center">
-                                                    <span className="text-[10px] text-gray-300">—</span>
-                                                </td>
-                                                <td className="px-4 py-4 text-center">
-                                                    <span className="text-[10px] text-gray-300">—</span>
-                                                </td>
-                                                <td className="px-4 py-4 text-center text-[10px] text-gray-400 font-semibold">
-                                                    {new Date(row.updatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' })}
-                                                </td>
-                                                <td className="px-4 py-4 text-right">
-                                                    <span className="font-mono font-black text-xs text-emerald-700">
-                                                        {formatSubtotalWithCurrency(Number(pr.subtotal), row.minSubtotalCurrency)}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-4 text-right">
-                                                    {usdEst !== null ? (
-                                                        <span className="font-mono font-black text-xs text-blue-700">USD {formatUSD(usdEst)}</span>
-                                                    ) : (
-                                                        <span className="text-[10px] text-gray-300">—</span>
-                                                    )}
-                                                </td>
+                                                <ProposalDatesCell
+                                                    closeDate={null}
+                                                    issueDate={null}
+                                                    validityDate={null}
+                                                    updatedAt={row.updatedAt}
+                                                />
+                                                <ProposalValueCell
+                                                    subtotal={Number(pr.subtotal)}
+                                                    currency={row.minSubtotalCurrency}
+                                                    usdEstimate={usdEst}
+                                                />
                                                 <td className="px-4 py-4 text-center">
                                                     <select
                                                         value={pr.acquisitionType || ''}
@@ -433,24 +432,6 @@ export default function Dashboard() {
                                                             onChange={(e) => handleProjectionDateChange(row.id, e.target.value)}
                                                             className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px]"
                                                         />
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-4 text-center">
-                                                    <div className="flex items-center justify-center space-x-1">
-                                                        <button
-                                                            onClick={() => openEditProjectionModal(pr)}
-                                                            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
-                                                            title="Editar proyección"
-                                                        >
-                                                            <Edit2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteProjection(row.id, row.code)}
-                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                            title="Eliminar proyección"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
