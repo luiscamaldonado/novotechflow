@@ -64,7 +64,7 @@ export default function Dashboard() {
         cloning, setProjections,
         trmRate, setTrmRate,
         trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
-        showFilters, setShowFilters, searchTerm, setSearchTerm,
+        showFilters, setShowFilters, codeFilter, setCodeFilter, clientFilter, setClientFilter, subjectFilter, setSubjectFilter,
         statusFilters,
         hasActiveFilters,
         closeDateRange, setCloseDateRange,
@@ -177,31 +177,55 @@ export default function Dashboard() {
                 forecastNextQuarter={forecastNextQuarter}
             />
 
-            {/* Filter Toggle + Search */}
-            <div className="flex items-center gap-3">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar por código, cliente o asunto..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-300"
-                    />
+            {/* Search fields (code / client / subject) + filter toggle */}
+            <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Código (separa con ;)"
+                            value={codeFilter}
+                            onChange={(e) => setCodeFilter(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-300"
+                        />
+                    </div>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Cliente (ej: SURA; ARGOS)"
+                            value={clientFilter}
+                            onChange={(e) => setClientFilter(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-300"
+                        />
+                    </div>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Asunto (separa con ;)"
+                            value={subjectFilter}
+                            onChange={(e) => setSubjectFilter(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-300"
+                        />
+                    </div>
                 </div>
-                <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${showFilters || hasActiveFilters ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                >
-                    <Filter className="h-4 w-4" />
-                    <span>Filtros</span>
-                    {hasActiveFilters && <span className="h-2 w-2 bg-indigo-500 rounded-full" />}
-                </button>
-                {hasActiveFilters && (
-                    <button onClick={clearFilters} className="p-2.5 text-gray-400 hover:text-red-500 transition-colors">
-                        <X className="h-4 w-4" />
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${showFilters || hasActiveFilters ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                        <Filter className="h-4 w-4" />
+                        <span>Filtros</span>
+                        {hasActiveFilters && <span className="h-2 w-2 bg-indigo-500 rounded-full" />}
                     </button>
-                )}
+                    {hasActiveFilters && (
+                        <button onClick={clearFilters} className="p-2.5 text-gray-400 hover:text-red-500 transition-colors">
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Collapsible Filters */}

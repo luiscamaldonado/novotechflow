@@ -256,7 +256,7 @@ function UserFilter({ value, onChange }: {
                 type="text"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                placeholder="Filtrar por nombre..."
+                placeholder="Filtrar por nombre (separa con ;)"
                 className={INPUT_CLASSES}
             />
         </div>

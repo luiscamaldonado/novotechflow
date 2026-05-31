@@ -114,6 +114,8 @@ export const VIRTUAL_ECONOMIC_ID = '__virtual_economic__';
 
 // ── Dashboard constants ──────────────────────────────────────
 
+/** Separador para inputs de filtro multivalor del dashboard (ej: "SURA; ARGOS"). */
+export const MULTI_VALUE_FILTER_SEPARATOR = ';';
 
 /** Status badge configuration for Dashboard rows. */
 export const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; text: string; border: string }> = {

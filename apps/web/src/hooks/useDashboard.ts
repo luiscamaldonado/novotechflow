@@ -4,6 +4,7 @@ import { TRM_API_URL } from '../lib/constants';
 import { getDashboardAmount, type MinSubtotalResult } from '../lib/pricing-engine';
 import { groupProposalRows, type ProposalVersionGroup } from '../lib/proposalGrouping';
 import { getTrmMonthlyAverage } from '../lib/trm-service';
+import { parseMultiValueFilter, matchesAnyTerm } from '../lib/filter-utils';
 import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType, ItemType } from '../lib/types';
 import type { DateRange } from '../pages/dashboard/DashboardFilters';
 
@@ -168,7 +169,9 @@ export function useDashboard() {
 
     // Filter state
     const [showFilters, setShowFilters] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [codeFilter, setCodeFilter] = useState('');
+    const [clientFilter, setClientFilter] = useState('');
+    const [subjectFilter, setSubjectFilter] = useState('');
     const [statusFilters, setStatusFilters] = useState<Set<ProposalStatus>>(new Set());
 
 
@@ -314,15 +317,16 @@ export function useDashboard() {
     }, [proposals]);
 
     const filtered = useMemo(() => {
+        const codeTerms = parseMultiValueFilter(codeFilter);
+        const clientTerms = parseMultiValueFilter(clientFilter);
+        const subjectTerms = parseMultiValueFilter(subjectFilter);
+        const userTerms = parseMultiValueFilter(userFilter);
+
         return allRows.filter(row => {
-            // Search term
-            if (searchTerm) {
-                const term = searchTerm.toLowerCase();
-                const isMatch = row.code?.toLowerCase().includes(term) ||
-                    row.clientName.toLowerCase().includes(term) ||
-                    row.subject.toLowerCase().includes(term);
-                if (!isMatch) return false;
-            }
+            // Independent multi-value text filters (OR within field, AND across fields)
+            if (!matchesAnyTerm(row.code ?? '', codeTerms)) return false;
+            if (!matchesAnyTerm(row.clientName, clientTerms)) return false;
+            if (!matchesAnyTerm(row.subject, subjectTerms)) return false;
 
             // Status
             if (statusFilters.size > 0 && !statusFilters.has(row.status)) return false;
@@ -381,17 +385,13 @@ export function useDashboard() {
             // Acquisition type
             if (acquisitionFilter !== 'ALL' && row.acquisitionType !== acquisitionFilter) return false;
 
-            // User (commercial advisor)
-            if (userFilter) {
-                const term = userFilter.toLowerCase();
-                const userName = (row.user?.name || '').toLowerCase();
-                if (!userName.includes(term)) return false;
-            }
+            // User (commercial advisor) - multi-value
+            if (!matchesAnyTerm(row.user?.name ?? '', userTerms)) return false;
 
             return true;
         });
     }, [
-        allRows, searchTerm, statusFilters,
+        allRows, codeFilter, clientFilter, subjectFilter, statusFilters,
         closeDateRange, billingDateRange, categoryFilter, manufacturerFilter,
         subtotalUsdMin, subtotalUsdMax, acquisitionFilter, userFilter, trmRate,
     ]);
@@ -544,7 +544,9 @@ export function useDashboard() {
     };
 
     const clearFilters = () => {
-        setSearchTerm('');
+        setCodeFilter('');
+        setClientFilter('');
+        setSubjectFilter('');
         setStatusFilters(new Set());
         setCloseDateRange({ from: '', to: '' });
         setBillingDateRange({ from: '', to: '' });
@@ -556,7 +558,7 @@ export function useDashboard() {
         setUserFilter('');
     };
 
-    const hasActiveFilters = searchTerm || statusFilters.size > 0
+    const hasActiveFilters = codeFilter || clientFilter || subjectFilter || statusFilters.size > 0
         || closeDateRange.from || closeDateRange.to
         || billingDateRange.from || billingDateRange.to
         || categoryFilter.size > 0 || manufacturerFilter
@@ -586,8 +588,12 @@ export function useDashboard() {
         // Filter state
         showFilters,
         setShowFilters,
-        searchTerm,
-        setSearchTerm,
+        codeFilter,
+        setCodeFilter,
+        clientFilter,
+        setClientFilter,
+        subjectFilter,
+        setSubjectFilter,
         statusFilters,
         hasActiveFilters,
 
