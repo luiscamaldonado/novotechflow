@@ -4,6 +4,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AppSettingsService } from './app-settings.service';
 import { UpdateInactivityTimeoutDto } from './dto/update-inactivity-timeout.dto';
+import { UpdateMaintenanceBannerDto } from './dto/update-maintenance-banner.dto';
+import type { MaintenanceBanner } from './app-settings.service';
 
 /** Typed request after JWT authentication — mirrors the pattern in users.controller.ts */
 interface AuthenticatedRequest {
@@ -42,5 +44,25 @@ export class AppSettingsController {
       req.user.id,
     );
     return { minutes };
+  }
+
+  @Get('maintenance-banner')
+  @ApiOperation({ summary: 'Obtener el banner de mantenimiento' })
+  async getMaintenanceBanner(): Promise<MaintenanceBanner> {
+    return this.appSettingsService.getMaintenanceBanner();
+  }
+
+  @Patch('maintenance-banner')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Actualizar el banner de mantenimiento (solo admin)' })
+  async updateMaintenanceBanner(
+    @Body() dto: UpdateMaintenanceBannerDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<MaintenanceBanner> {
+    return this.appSettingsService.updateMaintenanceBanner(
+      dto.message,
+      dto.active,
+      req.user.id,
+    );
   }
 }
