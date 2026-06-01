@@ -46,7 +46,7 @@ export default function Dashboard() {
         setIsExporting(true);
         try {
             await exportDashboardToExcel({
-                rows: filtered,
+                rows: [...proposalGroups.map(g => g.activeVersion), ...filteredProjectionRows],
                 trmRate,
                 userName: user?.name ?? 'Usuario',
             });

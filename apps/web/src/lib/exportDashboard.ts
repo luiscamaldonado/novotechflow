@@ -77,6 +77,8 @@ const COLUMNS: { header: string; width: number; key: string }[] = [
     { header: 'Asunto',              width: 34, key: 'subject' },
     { header: 'Estado',              width: 18, key: 'status' },
     { header: 'Adquisici\u00f3n',         width: 14, key: 'acquisition' },
+    { header: 'Fecha Emisi\u00f3n',       width: 14, key: 'issueDate' },
+    { header: 'Fecha Vigencia',      width: 14, key: 'validityDate' },
     { header: 'Fecha Cierre',        width: 14, key: 'closeDate' },
     { header: 'Fecha Facturaci\u00f3n',   width: 16, key: 'billingDate' },
     { header: 'Moneda',              width: 10, key: 'currency' },
@@ -87,7 +89,7 @@ const COLUMNS: { header: string; width: number; key: string }[] = [
 ];
 
 /** Numeric column indices (1-based) that should be right-aligned with thousands format. */
-const NUMERIC_COLUMNS = new Set([10, 11]);
+const NUMERIC_COLUMNS = new Set([12, 13]);
 
 // ── Main export ────────────────────────────────────────────
 
@@ -153,6 +155,8 @@ export async function exportDashboardToExcel(opts: DashboardExportOptions): Prom
             row.subject || '—',
             statusLabel,
             acqLabel,
+            formatDateDDMMYYYY(row.originalProposal?.issueDate),
+            formatDateDDMMYYYY(row.originalProposal?.validityDate),
             formatDateDDMMYYYY(row.closeDate),
             formatDateDDMMYYYY(row.billingDate),
             row.minSubtotalCurrency || '—',
@@ -201,7 +205,7 @@ export async function exportDashboardToExcel(opts: DashboardExportOptions): Prom
     // ── Summary row ──
     if (rows.length > 0) {
         const summaryRow = ws.addRow([
-            '', '', '', '', '', '', '', '',
+            '', '', '', '', '', '', '', '', '', '',
             'TOTALES',
             subtotalSum,
             usdSum,
@@ -220,7 +224,7 @@ export async function exportDashboardToExcel(opts: DashboardExportOptions): Prom
             }
         });
 
-        const labelCell = summaryRow.getCell(9);
+        const labelCell = summaryRow.getCell(11);
         labelCell.alignment = { vertical: 'middle', horizontal: 'right' };
         labelCell.font = { bold: true, size: 11, color: { argb: INDIGO_HEADER } };
     }
