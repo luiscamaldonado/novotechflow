@@ -1364,3 +1364,46 @@ Se descartó **sticky-left** de la columna de identidad (Código/Cliente): bajar
 
 ### Pendientes
 - Sticky-left de la columna de identidad: solo si el scroll horizontal persiste tras la reducción a 8/7.
+
+## ADR-034 — Presencia de usuarios por heartbeat y banner de mantenimiento
+
+**Fecha:** 2026-06-01
+**Estado:** Cerrado
+
+### Contexto
+Antes de desplegar a Railway (servicios web y api separados, auto-deploy en push a `master`), no había forma de saber si algún usuario estaba trabajando, ni de avisarle de una actualización inminente para que guardara su trabajo. El timeout de inactividad (ADR-026) ya desconecta sesiones idle, pero no expone presencia ni comunica nada al usuario.
+
+### Decisión — Presencia
+- Heartbeat, no actividad pasiva. Se descartó inferir presencia desde el último request HTTP: un usuario leyendo o tipeando sin guardar no genera requests y figuraría inactivo —justo a quien no hay que interrumpir—. El front emite `POST /presence/heartbeat` cada 30s mientras `AppLayout` está montado (toda la app autenticada), persistiendo `User.lastSeenAt`.
+- El umbral de "activo" (2 min) vive en el backend (`getActiveUsers` filtra `lastSeenAt >= now − umbral`), no en el front: el endpoint responde "quién está activo ahora"; el front solo pinta. 30s de intervalo da ~2 latidos de tolerancia frente al throttling de tabs en segundo plano (~1/min) y red inestable.
+- Heartbeat ortogonal a la inactividad: es un intervalo puro, no escucha mouse/teclado ni toca `useInactivityTimeout`. Un usuario idle sigue siendo desconectado por inactividad aunque el heartbeat lata; el ping para solo al desmontarse el layout (logout).
+- Módulo `presence` propio (SRP), no dentro de `users`. `GET /presence/active` restringido a admin (`AdminGuard`); `POST /presence/heartbeat` solo `JwtAuthGuard`, toca únicamente la fila del propio usuario (sin IDOR, sin params).
+
+### Decisión — Banner
+- Dos keys en `AppSetting` (`maintenance_banner_message`, `maintenance_banner_active`), reutilizando el patrón key-value escalar de ADR-026: el flag booleano se persiste como `'true'`/`'false'` en `value` (VarChar), parseado al leer. No se tocó el schema.
+- `GET /app-settings/maintenance-banner` legible por cualquier autenticado; `PATCH` solo admin (`AdminGuard`, DTO `class-validator`). El front poll-ea el GET cada 60s → los usuarios ven el cambio sin recargar.
+- Entrega del banner desacoplada del heartbeat (dos polls independientes), no fusionada en una sola respuesta: mantiene los módulos separados y una única fuente de verdad por dato (principio de menor sorpresa). Costo despreciable a la escala del equipo (~7 usuarios).
+- Banner global montado en `AppLayout` (visible en toda la app, no solo el dashboard); estilo de advertencia (ámbar), sin botón de cerrar (reaparecería en el siguiente poll). Control de edición solo-admin en el dashboard.
+
+### Consecuencias
+- Positivas: el admin ve sesiones activas antes de pushear y puede avisar al equipo; ambas piezas reutilizan patrones existentes (key-value de ADR-026, hooks de negocio, gating por rol). Migración `lastSeenAt` aditiva y nullable, sin downtime.
+- Negativas / deuda: heartbeat (2/min) + poll de banner (1/min) + poll de sesiones del admin suman requests sobre el throttler global (30/min por IP); si el equipo trabaja tras una sola IP de oficina podrían aparecer 429s. Mitigación pendiente si ocurre: `@SkipThrottle()` en heartbeat y los GET de poll. Todos los polls son best-effort (un fallo conserva el último estado, no rompe la vista).
+- El umbral de 2 min no es garantía dura de "seguro para desplegar": alguien activo hace 2.5 min no aparece. El empty state es factual ("Nadie con sesión activa en este momento"), sin prometer que es seguro pushear.
+
+### Archivos
+- `apps/api/prisma/schema.prisma` (campo `lastSeenAt` en `User`) + migración `20260601182717_add_user_last_seen_at`
+- `apps/api/src/presence/` (`presence.module.ts`, `presence.controller.ts`, `presence.service.ts`)
+- `apps/api/src/app.module.ts` (registro de `PresenceModule`)
+- `apps/api/src/app-settings/app-settings.service.ts` + `app-settings.controller.ts` + `dto/update-maintenance-banner.dto.ts`
+- `apps/web/src/hooks/usePresenceHeartbeat.ts`, `useActiveUsers.ts`, `useMaintenanceBanner.ts`
+- `apps/web/src/components/MaintenanceBanner.tsx`
+- `apps/web/src/pages/dashboard/components/ActiveUsersPanel.tsx`, `MaintenanceBannerControl.tsx`
+- `apps/web/src/layouts/AppLayout.tsx`, `apps/web/src/pages/Dashboard.tsx`
+
+### Commits
+- `df72eaf` — feat(api): add user presence heartbeat and maintenance banner settings
+- `6808bd0` — feat(dashboard): show active sessions and maintenance banner with admin controls
+
+### Pendientes
+- `@SkipThrottle()` en `/presence/heartbeat` y en los GET de poll si aparecen 429s tras desplegar con el equipo trabajando.
+- "Programar" el banner (fecha/hora de inicio/fin automáticos) quedó fuera de alcance; hoy es on/off manual.
