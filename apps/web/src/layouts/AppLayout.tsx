@@ -4,12 +4,15 @@ import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout';
+import { usePresenceHeartbeat } from '../hooks/usePresenceHeartbeat';
+import MaintenanceBanner from '../components/MaintenanceBanner';
 import { InactivityWarningModal } from '../components/InactivityWarningModal';
 
 export default function AppLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const { user } = useAuthStore();
     const { showWarning, secondsLeft, dismissWarning } = useInactivityTimeout();
+    usePresenceHeartbeat();
 
     return (
         <div className="min-h-screen bg-novo-light flex">
@@ -18,6 +21,8 @@ export default function AppLayout() {
 
             {/* Main Content Wrapper */}
             <div className="flex-1 flex flex-col min-w-0 lg:pl-64 transition-all duration-300">
+
+                <MaintenanceBanner />
 
                 {/* Top Navbar */}
                 <header className="h-20 bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-10 flex items-center justify-between px-4 sm:px-8">

@@ -19,6 +19,8 @@ import DashboardFilters from './dashboard/DashboardFilters';
 import NotificationBells from './dashboard/NotificationBells';
 import NotificationPanel from './dashboard/NotificationPanel';
 import ProposalVersionRow from './dashboard/components/ProposalVersionRow';
+import ActiveUsersPanel from './dashboard/components/ActiveUsersPanel';
+import MaintenanceBannerControl from './dashboard/components/MaintenanceBannerControl';
 import ProposalGroupHeaderRow from './dashboard/components/ProposalGroupHeaderRow';
 import ProposalDatesCell from './dashboard/components/ProposalDatesCell';
 import ProposalValueCell from './dashboard/components/ProposalValueCell';
@@ -158,6 +160,9 @@ export default function Dashboard() {
                     </button>
                 </div>
             </div>
+
+            {user?.role === 'ADMIN' && <ActiveUsersPanel />}
+            {user?.role === 'ADMIN' && <MaintenanceBannerControl />}
 
             {/* TRM Cards */}
             <TrmCards
