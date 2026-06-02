@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Megaphone, Loader2, Check } from 'lucide-react';
 import { useMaintenanceBanner } from '../../../hooks/useMaintenanceBanner';
 
@@ -21,10 +21,13 @@ export default function MaintenanceBannerControl() {
   const [savedMsg, setSavedMsg] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const hasHydrated = useRef(false);
+
   useEffect(() => {
-    if (banner) {
+    if (banner && !hasHydrated.current) {
       setMessage(banner.message);
       setActive(banner.active);
+      hasHydrated.current = true;
     }
   }, [banner]);
 
