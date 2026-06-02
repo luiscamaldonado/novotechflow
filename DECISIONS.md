@@ -1390,6 +1390,8 @@ Antes de desplegar a Railway (servicios web y api separados, auto-deploy en push
 - Negativas / deuda: heartbeat (2/min) + poll de banner (1/min) + poll de sesiones del admin suman requests sobre el throttler global (30/min por IP); si el equipo trabaja tras una sola IP de oficina podrían aparecer 429s. Mitigación pendiente si ocurre: `@SkipThrottle()` en heartbeat y los GET de poll. Todos los polls son best-effort (un fallo conserva el último estado, no rompe la vista).
 - El umbral de 2 min no es garantía dura de "seguro para desplegar": alguien activo hace 2.5 min no aparece. El empty state es factual ("Nadie con sesión activa en este momento"), sin prometer que es seguro pushear.
 
+**Adenda (2026-06-02):** El riesgo de 429 por throttler compartido (descrito en Consecuencias) se mitigó preventivamente al confirmarse que todo el equipo trabaja tras una sola IP de oficina. Se aplicó `@SkipThrottle()` a los tres endpoints de fondo —`POST /presence/heartbeat`, `GET /presence/active`, `GET /app-settings/maintenance-banner`— siguiendo el patrón ya presente en `proposals.controller.ts`. El `PATCH` del banner conserva el throttler (acción puntual del admin, no poll), y el `@Throttle` estricto del login queda intacto. `@SkipThrottle()` solo desactiva el rate-limit; los guards y ownership (§K) no se ven afectados. Commit `2c274d2`.
+
 ### Archivos
 - `apps/api/prisma/schema.prisma` (campo `lastSeenAt` en `User`) + migración `20260601182717_add_user_last_seen_at`
 - `apps/api/src/presence/` (`presence.module.ts`, `presence.controller.ts`, `presence.service.ts`)
@@ -1405,5 +1407,5 @@ Antes de desplegar a Railway (servicios web y api separados, auto-deploy en push
 - `6808bd0` — feat(dashboard): show active sessions and maintenance banner with admin controls
 
 ### Pendientes
-- `@SkipThrottle()` en `/presence/heartbeat` y en los GET de poll si aparecen 429s tras desplegar con el equipo trabajando.
+- ~~`@SkipThrottle()` en `/presence/heartbeat` y en los GET de poll si aparecen 429s tras desplegar con el equipo trabajando.~~ Resuelto preventivamente (ver Adenda 2026-06-02, commit `2c274d2`).
 - "Programar" el banner (fecha/hora de inicio/fin automáticos) quedó fuera de alcance; hoy es on/off manual.
