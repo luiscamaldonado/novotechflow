@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Req, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { PresenceService, type ActiveUser } from './presence.service';
@@ -17,6 +18,7 @@ export class PresenceController {
   constructor(private readonly presenceService: PresenceService) {}
 
   @Post('heartbeat')
+  @SkipThrottle()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Registrar actividad del usuario (heartbeat)' })
   async heartbeat(@Req() req: AuthenticatedRequest): Promise<void> {
@@ -24,6 +26,7 @@ export class PresenceController {
   }
 
   @Get('active')
+  @SkipThrottle()
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Listar usuarios con sesi\u00f3n activa (solo admin)' })
   async getActive(): Promise<ActiveUser[]> {

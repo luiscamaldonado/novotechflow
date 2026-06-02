@@ -1,5 +1,6 @@
 import { Controller, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AppSettingsService } from './app-settings.service';
@@ -47,6 +48,7 @@ export class AppSettingsController {
   }
 
   @Get('maintenance-banner')
+  @SkipThrottle()
   @ApiOperation({ summary: 'Obtener el banner de mantenimiento' })
   async getMaintenanceBanner(): Promise<MaintenanceBanner> {
     return this.appSettingsService.getMaintenanceBanner();
