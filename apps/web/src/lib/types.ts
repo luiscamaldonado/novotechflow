@@ -44,6 +44,7 @@ export interface ProposalSummary {
     manualAmount?: string | null;
     acquisitionType?: AcquisitionType | null;
     updatedAt: string;
+    createdAt: string;
     user?: { name: string; nomenclature: string };
     scenarios?: Array<{
         id: string;
