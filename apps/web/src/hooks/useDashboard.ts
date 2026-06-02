@@ -5,6 +5,7 @@ import { getDashboardAmount, type MinSubtotalResult } from '../lib/pricing-engin
 import { groupProposalRows, type ProposalVersionGroup } from '../lib/proposalGrouping';
 import { getTrmMonthlyAverage } from '../lib/trm-service';
 import { parseMultiValueFilter, matchesAnyTerm } from '../lib/filter-utils';
+import { findBoardHygieneIssues, type ProposalHygieneInput, type ProposalHygieneIssues } from '../lib/dashboardValidation';
 import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType, ItemType } from '../lib/types';
 import type { DateRange } from '../pages/dashboard/DashboardFilters';
 
@@ -33,6 +34,7 @@ export interface DashboardRow {
     billingDate?: string | null;
     acquisitionType?: AcquisitionType | null;
     updatedAt: string;
+    createdAt?: string;
     user?: { name: string; nomenclature: string };
     isProjection: boolean;
     originalProposal?: ProposalWithSubtotal;
@@ -277,6 +279,7 @@ export function useDashboard() {
             billingDate: p.billingDate,
             acquisitionType: p.acquisitionType,
             updatedAt: p.updatedAt,
+            createdAt: p.createdAt,
             user: p.user,
             isProjection: false,
             originalProposal: p,
@@ -402,6 +405,11 @@ export function useDashboard() {
         [filtered],
     );
 
+    const allProposalGroups: ProposalVersionGroup<DashboardRow>[] = useMemo(
+        () => groupProposalRows(allRows.filter(r => !r.isProjection)),
+        [allRows],
+    );
+
     const filteredProjectionRows: DashboardRow[] = useMemo(
         () => filtered.filter(r => r.isProjection),
         [filtered],
@@ -484,6 +492,22 @@ export function useDashboard() {
         } finally {
             setCloning(null);
         }
+    };
+
+    const getBoardHygieneIssues = (): ProposalHygieneIssues[] => {
+        const activeProposals: ProposalHygieneInput[] = allProposalGroups
+            .map(group => group.activeVersion.originalProposal)
+            .filter((proposal): proposal is ProposalWithSubtotal => Boolean(proposal))
+            .map(proposal => ({
+                id: proposal.id,
+                proposalCode: proposal.proposalCode,
+                status: proposal.status,
+                closeDate: proposal.closeDate ?? null,
+                billingDate: proposal.billingDate ?? null,
+                acquisitionType: proposal.acquisitionType ?? null,
+                createdAt: proposal.createdAt,
+            }));
+        return findBoardHygieneIssues(activeProposals);
     };
 
     const handleDelete = async (id: string, code: string) => {
@@ -620,6 +644,7 @@ export function useDashboard() {
         handleStatusChange,
         handleDateChange,
         handleClone,
+        getBoardHygieneIssues,
         handleDelete,
         handleAcquisitionChange,
         handleProjectionAcquisitionChange,

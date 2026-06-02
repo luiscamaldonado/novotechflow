@@ -14,6 +14,8 @@ import type { ProposalStatus, AcquisitionType, UserRole } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import PipelineCards from './dashboard/PipelineCards';
 import ProjectionModal from './dashboard/ProjectionModal';
+import DataHygieneModal from './dashboard/DataHygieneModal';
+import type { HygieneIssue } from '../lib/dashboardValidation';
 import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
 import NotificationBells from './dashboard/NotificationBells';
@@ -41,8 +43,6 @@ export default function Dashboard() {
             return next;
         });
     };
-
-    const handleEdit = (id: string) => navigate(`/proposals/${id}/builder`);
 
     const handleExportExcel = async () => {
         setIsExporting(true);
@@ -78,7 +78,7 @@ export default function Dashboard() {
         acquisitionFilter, setAcquisitionFilter,
         userFilter, setUserFilter,
         manufacturerSuggestions,
-        handleStatusChange, handleDateChange, handleClone, handleDelete,
+        handleStatusChange, handleDateChange, handleClone, handleDelete, getBoardHygieneIssues,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
         handleProjectionStatusChange, handleProjectionDateChange,
         toggleStatusFilter, clearFilters,
@@ -99,6 +99,34 @@ export default function Dashboard() {
     } = useNotifications(proposals, trmRate);
 
     const [showAllNotifications, setShowAllNotifications] = useState(false);
+
+    const [hygieneModalOpen, setHygieneModalOpen] = useState(false);
+    const [hygieneProposalCode, setHygieneProposalCode] = useState<string | null>(null);
+    const [hygieneIssues, setHygieneIssues] = useState<HygieneIssue[]>([]);
+    const [hygieneRemainingCount, setHygieneRemainingCount] = useState(0);
+
+    const runWithCleanBoard = (action: () => void) => {
+        if (user?.role === 'ADMIN') {
+            action();
+            return;
+        }
+        const dirty = getBoardHygieneIssues();
+        if (dirty.length === 0) {
+            action();
+            return;
+        }
+        const first = dirty[0];
+        setHygieneProposalCode(first.proposalCode);
+        setHygieneIssues(first.issues);
+        setHygieneRemainingCount(dirty.length);
+        setHygieneModalOpen(true);
+    };
+
+    const handleEdit = (id: string) =>
+        runWithCleanBoard(() => navigate(`/proposals/${id}/builder`));
+
+    const handleCloneGated = (id: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') =>
+        runWithCleanBoard(() => handleClone(id, cloneType));
 
     if (loading) {
         return (
@@ -152,7 +180,7 @@ export default function Dashboard() {
                         <span>Proyección de Facturación</span>
                     </button>
                     <button
-                        onClick={() => navigate('/proposals/new')}
+                        onClick={() => runWithCleanBoard(() => navigate('/proposals/new'))}
                         className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/25"
                     >
                         <PlusCircle className="h-5 w-5" />
@@ -337,7 +365,7 @@ export default function Dashboard() {
                                                     onStatusChange={handleStatusChange}
                                                     onDateChange={handleDateChange}
                                                     onAcquisitionChange={handleAcquisitionChange}
-                                                    onClone={handleClone}
+                                                    onClone={handleCloneGated}
                                                     onDelete={handleDelete}
                                                     onEdit={handleEdit}
                                                 />
@@ -366,7 +394,7 @@ export default function Dashboard() {
                                                         onStatusChange={handleStatusChange}
                                                         onDateChange={handleDateChange}
                                                         onAcquisitionChange={handleAcquisitionChange}
-                                                        onClone={handleClone}
+                                                        onClone={handleCloneGated}
                                                         onDelete={handleDelete}
                                                         onEdit={handleEdit}
                                                     />
@@ -484,6 +512,15 @@ export default function Dashboard() {
                     onClose={() => setShowProjectionModal(false)}
                 />
             )}
+
+            <DataHygieneModal
+                isOpen={hygieneModalOpen}
+                proposalCode={hygieneProposalCode}
+                issues={hygieneIssues}
+                remainingCount={hygieneRemainingCount}
+                onClose={() => setHygieneModalOpen(false)}
+                onGoToFix={() => setHygieneModalOpen(false)}
+            />
 
             {/* Notification Panel */}
             {showAllNotifications && (
