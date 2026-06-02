@@ -1409,3 +1409,58 @@ Antes de desplegar a Railway (servicios web y api separados, auto-deploy en push
 ### Pendientes
 - ~~`@SkipThrottle()` en `/presence/heartbeat` y en los GET de poll si aparecen 429s tras desplegar con el equipo trabajando.~~ Resuelto preventivamente (ver Adenda 2026-06-02, commit `2c274d2`).
 - "Programar" el banner (fecha/hora de inicio/fin automáticos) quedó fuera de alcance; hoy es on/off manual.
+
+---
+
+## ADR-035 - Validación de higiene de datos del tablero con gate de acciones para comerciales
+
+**Fecha:** 2026-06-02
+**Estado:** Cerrado
+
+### Contexto
+El tablero de oportunidades acumulaba propuestas con campos sin diligenciar (fecha de cierre, tipo de adquisición, fecha de facturación) y propuestas estancadas en ELABORACIÓN o con fecha de cierre vencida. Esto restaba fiabilidad a la información para la toma de decisiones. Se buscó forzar al usuario comercial a mantener su tablero al día, sin afectar al ADMIN (que ve el resumen global del equipo y quedaría bloqueado por datos sucios ajenos).
+
+### Decisión - Reglas de higiene (R1-R5)
+Cinco reglas puras en `apps/web/src/lib/dashboardValidation.ts`. NO viven en pricing-engine (CONVENTIONS §J): no son cálculo financiero sino validación de completitud de datos, por eso su propio archivo en `lib/`.
+- **R1 - Fecha de cierre requerida:** en TODOS los estados, incluida ELABORACIÓN (decisión explícita: el cierre debe existir desde el inicio). Regla universal sin condición de estado.
+- **R2 - Adquisición requerida:** `acquisitionType` (Venta o DaaS) obligatorio salvo en ELABORACIÓN (el primer borrador puede no tenerlo definido).
+- **R3 - Fecha de facturación requerida:** en estados PENDIENTE_FACTURAR y FACTURADA (reutiliza `PROJECTION_STATUSES` de `constants.ts`).
+- **R4 - Elaboración estancada:** ELABORACIÓN con más de 5 días desde `createdAt` obliga a cambiar de estado.
+- **R5 - Cierre vencido:** fecha de cierre vencida y estado fuera de {GANADA, PERDIDA, PENDIENTE_FACTURAR, FACTURADA} obliga a extender el cierre o cambiar de estado. Reutiliza `isValidityExpired` de `dashboardDates.ts` (UTC-safe). Consecuencia consciente: una propuesta vieja en ELABORACIÓN con cierre vencido puede disparar R4 y R5 a la vez; el modal las agrupa bajo la misma propuesta, un solo paso.
+
+Helper nuevo `daysSince(isoDate)` en `dashboardDates.ts` (días calendario UTC-safe, mismo criterio que `isValidityExpired` para evitar el desfase de -1 día en UTC-5).
+
+### Decisión - Gate de acciones
+- Crear, editar y clonar (NEW_VERSION y NEW_PROPOSAL) quedan bloqueados si el comercial tiene CUALQUIER propuesta con issues. El gate evalúa el TABLERO COMPLETO, no la propuesta objetivo (decisión del usuario: quiere todo el tablero al día, no solo la propuesta que va a tocar).
+- Se evalúan SOLO las versiones activas de cada propuesta (`allProposalGroups`, agrupación sobre la lista cruda), porque las versiones históricas tienen los controles deshabilitados (ADR-024) y no podrían corregirse inline: incluirlas crearía un deadlock.
+- La evaluación ignora los filtros de UI: opera sobre `allRows` (lista cruda), no sobre la lista filtrada. "Tablero al día" significa el universo del comercial, no lo que está viendo.
+- ADMIN exento, centralizado en el gate (`runWithCleanBoard` en `Dashboard.tsx`): si el rol es ADMIN, la acción se ejecuta sin chequeo. Necesario porque el admin ve el tablero global y gatearlo lo bloquearía con datos del equipo.
+- Los controles inline (estado, fecha de cierre, fecha de facturación, adquisición), la acción de borrar y los handlers de proyección NUNCA se gatean: son la vía de resolución. Así una propuesta sin cierre se corrige en su propia fila aunque el tablero esté sucio, sin deadlock.
+
+### Decisión - UX
+- El cálculo (`getBoardHygieneIssues`) se expone desde `useDashboard` como función on-demand (no `useMemo`): se evalúa al intentar la acción, no en cada render. El estado del modal vive en el componente (`Dashboard.tsx`), no en el hook (CONVENTIONS §A: los modals son estado de UI del componente).
+- El modal (`DataHygieneModal.tsx`) muestra UNA propuesta a la vez: la más vieja con issues (orden `createdAt` ascendente en `findBoardHygieneIssues`), con sus razones agrupadas y un contador "(N propuestas requieren atención)". Se descartó campo-por-campo (3 ciclos de bloqueo sobre la misma fila = puro roce) y el listón completo (abrumador). Resuelta una, el siguiente intento muestra la siguiente.
+- Componente controlado puro (patrón `ProjectionModal`: overlay fixed, stopPropagation en el panel, props isOpen/onClose). Header y botón primario en rojo (`red-600`, consistente con `STATUS_CONFIG.PERDIDA`), por ser advertencia de bloqueo y no un formulario.
+
+### Consecuencias
+- Positivas: el tablero del comercial se mantiene al día por construcción; la capa de validación es pura y reutilizable; cero cambios de schema o backend (`createdAt` ya viajaba en la respuesta de `GET /proposals`, solo faltaba declararlo en el tipo `ProposalSummary`); el admin nunca queda bloqueado por datos del equipo.
+- Negativas / deuda: las reglas viven en el frontend. Un comercial podría saltarlas llamando la API directamente — esto es higiene de UX, no un constraint de backend. La feature siguiente (campos obligatorios en la creación) endurece el camino de creación. `ProposalHygieneInput` asume las fechas como `string | null` (consistente con `dashboardDates.ts`).
+- Al desplegar, toda propuesta existente sin fecha de cierre (R1 universal) o vieja en ELABORACIÓN bloquea de inmediato a su comercial. Es el efecto buscado de la feature, no un bug; se omitió la medición previa de cuántas propuestas afecta.
+- Decisión consciente sobre testing: se probó directamente en PRODUCCIÓN. El 2FA por Resend bloquea el login en entorno local y no existe un modo dev que omita el envío del código (verificado en el módulo `auth`: no hay flag de entorno ni rama condicional). El rollback quedó disponible vía Redeploy del deploy anterior en Railway (servicio web). El cambio es frontend puro sin migraciones, lo que acota el riesgo.
+
+### Archivos
+- `apps/web/src/lib/dashboardValidation.ts` (nuevo: reglas R1-R5, tipos `HygieneRuleId`/`HygieneIssue`/`ProposalHygieneInput`/`ProposalHygieneIssues`, `getProposalHygieneIssues`, `findBoardHygieneIssues`)
+- `apps/web/src/lib/dashboardDates.ts` (helper nuevo `daysSince`, UTC-safe)
+- `apps/web/src/lib/types.ts` (campo `createdAt: string` en `ProposalSummary`)
+- `apps/web/src/hooks/useDashboard.ts` (`createdAt` en `DashboardRow` y su mapeo; `allProposalGroups` sobre lista cruda; `getBoardHygieneIssues` on-demand)
+- `apps/web/src/pages/dashboard/DataHygieneModal.tsx` (nuevo: modal controlado, una propuesta a la vez, header rojo)
+- `apps/web/src/pages/Dashboard.tsx` (estado del modal, `runWithCleanBoard` con exención de admin, envoltura de crear/editar/clonar, render del modal)
+
+### Commits
+- `5e606da` - feat(dashboard): add data hygiene validation rules (R1-R5)
+- `0082538` - feat(dashboard): gate create/edit/clone on incomplete proposals
+
+### Pendientes
+- Redirect con scroll + resaltado a la fila desde el botón "Ir a corregir" (hoy solo cierra el modal; la corrección es manual). Requiere `clearFilters()` previo, porque la fila objetivo puede no estar montada bajo los filtros activos, y tocaría `ProposalVersionRow.tsx` y posiblemente `ProposalGroupHeaderRow.tsx`.
+- Feature siguiente (otro chat): campos obligatorios en la creación de una nueva propuesta, que endurece el camino de creación (backend/formulario) y no solo el tablero.
+- Modo dev para el código OTP sin Resend (loguear el código a consola solo fuera de producción), para desbloquear el testing local futuro. Descrito y descartado por ahora; requiere blindar que jamás se ejecute en producción.
