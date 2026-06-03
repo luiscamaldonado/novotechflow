@@ -30,6 +30,7 @@ export interface DashboardRow {
     minSubtotalCurrency: CurrencyCode | null;
     isManual?: boolean;
     status: ProposalStatus;
+    isLocked?: boolean;
     closeDate?: string | null;
     billingDate?: string | null;
     acquisitionType?: AcquisitionType | null;
@@ -275,6 +276,7 @@ export function useDashboard() {
             minSubtotalCurrency: p.currency,
             isManual: p.isManual,
             status: p.status,
+            isLocked: p.isLocked,
             closeDate: p.closeDate,
             billingDate: p.billingDate,
             acquisitionType: p.acquisitionType,
@@ -498,6 +500,7 @@ export function useDashboard() {
         const activeProposals: ProposalHygieneInput[] = allProposalGroups
             .map(group => group.activeVersion.originalProposal)
             .filter((proposal): proposal is ProposalWithSubtotal => Boolean(proposal))
+            .filter(proposal => !proposal.isLocked)
             .map(proposal => ({
                 id: proposal.id,
                 proposalCode: proposal.proposalCode,

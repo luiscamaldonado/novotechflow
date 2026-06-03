@@ -39,6 +39,7 @@ export interface ProposalSummary {
     validityDays: number;
     validityDate: string;
     status: ProposalStatus;
+    isLocked: boolean;
     closeDate?: string | null;
     billingDate?: string | null;
     manualAmount?: string | null;
