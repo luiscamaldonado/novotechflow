@@ -501,11 +501,13 @@ export class ProposalsService {
         ? original.consecutiveSource
         : ConsecutiveSource.AUTO;
 
+      const ownerUserId = cloneType === 'NEW_VERSION' ? original.userId : userId;
+
       const cloned = await tx.proposal.create({
         data: {
           proposalCode: newCode,
           consecutiveSource: clonedConsecutiveSource,
-          userId,
+          userId: ownerUserId,
           clientId: original.clientId,
           clientName: original.clientName,
           subject: original.subject,
