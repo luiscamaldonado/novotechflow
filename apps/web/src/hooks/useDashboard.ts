@@ -514,7 +514,7 @@ export function useDashboard() {
     };
 
     const handleDelete = async (id: string, code: string) => {
-        if (!window.confirm(`âš ï¸ Â¿EstÃ¡s seguro de que deseas eliminar permanentemente la propuesta ${code}?\n\nEsta acciÃ³n no se puede deshacer. Se eliminarÃ¡n todos los Ã­tems, escenarios y datos asociados.`)) return;
+        if (!window.confirm(`\u00bfEliminar la propuesta ${code}?`)) return;
 
         try {
             await api.delete(`/proposals/${id}`);
