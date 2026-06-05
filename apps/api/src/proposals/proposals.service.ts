@@ -39,6 +39,7 @@ export class ProposalsService {
     if (user.role !== 'ADMIN' && proposal.userId !== user.id) {
       throw new ForbiddenException('No tienes acceso a esta propuesta.');
     }
+    if (proposal.deletedAt) throw new NotFoundException('Propuesta no encontrada.');
     return proposal;
   }
 
@@ -67,6 +68,7 @@ export class ProposalsService {
           { subject: { contains: normalizedQuery, mode: 'insensitive' } }
         ],
         createdAt: { gte: oneYearAgo },
+        deletedAt: null,
       },
       include: {
         user: { select: { name: true } },
@@ -429,7 +431,7 @@ export class ProposalsService {
     const accessFilter = user.role === 'ADMIN' ? {} : { userId: user.id };
 
     return this.prisma.proposal.findMany({
-      where: accessFilter,
+      where: { ...accessFilter, deletedAt: null },
       include: {
         user: { select: { name: true, nomenclature: true } },
         scenarios: {
@@ -596,15 +598,50 @@ export class ProposalsService {
   }
 
   /**
-   * Elimina una propuesta completa y sus dependencias.
-   * Las cascadas en el schema (onDelete: Cascade) eliminan automáticamente:
-   * pages, blocks, items, scenarios, scenarioItems, versions, emailLogs.
-   * SyncedFiles se desvinculan (onDelete: SetNull).
+   * Soft delete: marca deletedAt en lugar de borrar fisicamente.
+   * La propuesta queda inaccesible (verifyProposalOwnership la rechaza) y se
+   * recupera desde la papelera con restoreProposal. No toca dependencias.
+   * El candado isLocked solo aplica a COMMERCIAL; ADMIN elimina cualquier
+   * version, incluidas las historicas bloqueadas (ADR-034).
    */
   async deleteProposal(id: string, user: AuthenticatedUser) {
     const proposal = await this.verifyProposalOwnership(id, user);
-    assertProposalNotLocked(proposal);
-    return this.prisma.proposal.delete({ where: { id } });
+    if (user.role !== 'ADMIN') assertProposalNotLocked(proposal);
+    return this.prisma.proposal.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  /**
+   * Lista las propuestas eliminadas (papelera). Solo ADMIN.
+   * Sin filtro de owner: el admin recupera cualquier propuesta.
+   */
+  async findDeleted() {
+    return this.prisma.proposal.findMany({
+      where: { deletedAt: { not: null } },
+      include: {
+        user: { select: { name: true, nomenclature: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Restaura una propuesta eliminada (deletedAt -> null). Solo ADMIN.
+   * Query directo: verifyProposalOwnership rechazaria una eliminada.
+   * Conserva isLocked. Falla si no existe o si no estaba eliminada.
+   */
+  async restoreProposal(id: string) {
+    const proposal = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!proposal) throw new NotFoundException('Propuesta no encontrada.');
+    if (!proposal.deletedAt) {
+      throw new BadRequestException('La propuesta no est\u00e1 eliminada.');
+    }
+    return this.prisma.proposal.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
   }
 
   /**

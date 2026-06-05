@@ -9,6 +9,7 @@ import { ScenariosService } from './scenarios.service';
 import { PagesService } from './pages.service';
 import { TrmService } from './trm.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../common/guards/admin.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -81,6 +82,13 @@ export class ProposalsController {
         return this.proposalsService.createProposal(req.user.id, createProposalDto);
     }
 
+    @UseGuards(AdminGuard)
+    @Get('deleted')
+    @ApiOperation({ summary: 'Lista las propuestas eliminadas (papelera). Solo ADMIN.' })
+    async findDeleted() {
+        return this.proposalsService.findDeleted();
+    }
+
     @UseGuards(JwtAuthGuard)
     @Get(':id')
     async getById(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
@@ -121,6 +129,13 @@ export class ProposalsController {
     @Delete(':id')
     async delete(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
         return this.proposalsService.deleteProposal(id, req.user);
+    }
+
+    @UseGuards(AdminGuard)
+    @Patch(':id/restore')
+    @ApiOperation({ summary: 'Restaura una propuesta eliminada. Solo ADMIN.' })
+    async restore(@Param('id', ParseUUIDPipe) id: string) {
+        return this.proposalsService.restoreProposal(id);
     }
 
     @UseGuards(JwtAuthGuard)
