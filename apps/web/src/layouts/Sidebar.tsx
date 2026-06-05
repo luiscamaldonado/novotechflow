@@ -8,7 +8,8 @@ import {
     X,
     PlusCircle,
     BookOpen,
-    Database
+    Database,
+    Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
@@ -38,6 +39,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { icon: BookOpen, label: 'Plantillas', path: '/admin/templates' },
         { icon: Users, label: 'Usuarios', path: '/users' },
         { icon: Settings, label: 'Configuración', path: '/admin/settings' },
+        { icon: Trash2, label: 'Papelera', path: '/admin/papelera' },
     ];
 
     const isAdmin = user?.role === 'ADMIN';
