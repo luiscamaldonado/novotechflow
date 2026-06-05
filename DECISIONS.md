@@ -1464,3 +1464,51 @@ Helper nuevo `daysSince(isoDate)` en `dashboardDates.ts` (días calendario UTC-s
 - Redirect con scroll + resaltado a la fila desde el botón "Ir a corregir" (hoy solo cierra el modal; la corrección es manual). Requiere `clearFilters()` previo, porque la fila objetivo puede no estar montada bajo los filtros activos, y tocaría `ProposalVersionRow.tsx` y posiblemente `ProposalGroupHeaderRow.tsx`.
 - Feature siguiente (otro chat): campos obligatorios en la creación de una nueva propuesta, que endurece el camino de creación (backend/formulario) y no solo el tablero.
 - Modo dev para el código OTP sin Resend (loguear el código a consola solo fuera de producción), para desbloquear el testing local futuro. Descrito y descartado por ahora; requiere blindar que jamás se ejecute en producción.
+
+## ADR-036 — Soft delete de propuestas con papelera (admin-only)
+
+**Fecha:** 2026-06-05
+**Estado:** Cerrado
+
+### Nota de numeración
+Los tres commits de esta feature (`f8c9532`, `b02fad0`, `139146d`) quedaron etiquetados en su mensaje como `(ADR-034)` por un desfase: la memoria de trabajo tenía ADR-033 como último, sin ver que ADR-034 (presencia por heartbeat) y ADR-035 (higiene de datos) ya existían. El número correcto de esta decisión es **ADR-036**; los commits no se reescribieron (evitar reescritura de historia ya publicada localmente). Esta entrada es la fuente de verdad de la feature.
+
+### Contexto
+El borrado de propuestas era físico (`prisma.proposal.delete`, apoyado en las cascadas de ADR-021) y no había forma de recuperar una propuesta eliminada por error. El administrador necesitaba poder borrar cualquier propuesta/versión y recuperar las eliminadas.
+
+### Decisión
+Soft delete vía campo nullable `Proposal.deletedAt` (`DateTime?`). En vez de borrar, `deleteProposal` marca `deletedAt = now()`.
+
+- `verifyProposalOwnership` rechaza con `NotFoundException` toda propuesta con `deletedAt` no nulo. Como ese helper lo reusan `ScenariosService` y `PagesService`, una propuesta eliminada queda inaccesible en cadena para todos los flujos (abrir, editar, items, escenarios, páginas, clonar) sin tener que tocar método por método. Blast radius controlado: ningún flujo legítimo carga una eliminada por esa vía.
+- `findAll` y `findPotentialConflicts` filtran `deletedAt: null` (las eliminadas no aparecen en el dashboard ni como cruce de cuenta).
+- Dos endpoints nuevos bajo `AdminGuard`: `GET /proposals/deleted` (lista la papelera, sin filtro de owner — el admin ve todas) y `PATCH /proposals/:id/restore` (`deletedAt -> null`; usa query directo, NO `verifyProposalOwnership`, que rechazaría una eliminada). `GET /proposals/deleted` se declara antes de `GET /proposals/:id` en el controller para que Nest no lo matchee como `:id` y reviente el `ParseUUIDPipe`.
+- UI en `/admin/papelera`: página `PapeleraAdmin.tsx` + hook `usePapeleraAdmin.ts`, enrutada bajo `AdminRoute` y enlazada en la sección admin del sidebar. Lista plana (sin agrupación por versión, que no aplica a eliminadas) con acción Restaurar por fila.
+- El admin se salta el candado `isLocked` de ADR-024 al borrar: `assertProposalNotLocked` solo se aplica a COMMERCIAL. El admin puede borrar y restaurar cualquier versión, incluidas las históricas bloqueadas.
+- **Invisible para COMMERCIAL a propósito:** los comerciales NO ven la papelera ni la opción de restaurar. El borrado se les presenta como definitivo (confirm seco, sin mencionar permanencia ni recuperación). La papelera es exclusivamente una herramienta de administración. NO exponer una papelera por-usuario a comerciales en el futuro: rompería esta decisión de producto.
+- **Los hijos no se tocan:** escenarios, páginas, items y bloques cuelgan de la propuesta; al quedar oculta la propuesta, quedan ocultos con ella, y al restaurar vuelven intactos. La cascada física de ADR-021 solo aplicaría a un futuro borrado permanente (no implementado).
+
+### Consecuencias
+- Positivas: el borrado deja de ser destructivo y se recupera desde la papelera. El rechazo en `verifyProposalOwnership` cubre todos los flujos de lectura/mutación en un solo punto. La migración solo agrega una columna nullable: cero impacto en filas existentes (todas quedan con `deletedAt = NULL`).
+- Negativas / deuda: los registros eliminados se acumulan en la tabla `proposals` sin purga (no hay borrado permanente). Un comercial que clickee Eliminar en una versión bloqueada sigue recibiendo 403 → `alert` (comportamiento de ADR-024, sin cambios); ocultarle el botón en filas locked queda como mejora opcional.
+- El mensaje del `window.confirm` de `handleDelete` se actualizó: antes decía "eliminar permanentemente / no se puede deshacer" (falso tras el soft delete), ahora es seco (`¿Eliminar la propuesta {code}?`).
+
+### Archivos
+- `apps/api/prisma/schema.prisma` (campo `deletedAt` en `Proposal`)
+- `apps/api/prisma/migrations/20260605160307_add_proposal_soft_delete/migration.sql` (nuevo; agrega columna `deleted_at`)
+- `apps/api/src/proposals/proposals.service.ts` (rechazo en `verifyProposalOwnership`; filtros en `findAll` y `findPotentialConflicts`; `deleteProposal` a soft delete; nuevos `findDeleted` y `restoreProposal`)
+- `apps/api/src/proposals/proposals.controller.ts` (import de `AdminGuard`; `GET /proposals/deleted` y `PATCH /proposals/:id/restore`)
+- `apps/web/src/hooks/usePapeleraAdmin.ts` (nuevo)
+- `apps/web/src/pages/admin/PapeleraAdmin.tsx` (nuevo)
+- `apps/web/src/App.tsx` (lazy import + ruta `/admin/papelera` bajo `AdminRoute`)
+- `apps/web/src/layouts/Sidebar.tsx` (item "Papelera" en la sección admin)
+- `apps/web/src/hooks/useDashboard.ts` (texto del `window.confirm` de `handleDelete`)
+
+### Commits
+- `f8c9532` — feat(api): soft delete + papelera y restauración (backend)
+- `b02fad0` — feat(web): página de papelera con restauración (frontend)
+- `139146d` — fix(web): mensaje de confirmación de borrado acorde a soft delete
+
+### Pendientes
+- Borrado permanente desde la papelera (purga real, reusando la cascada física de ADR-021). No implementado.
+- Ocultar el botón Eliminar a comerciales en filas bloqueadas (hoy produce 403 → alert). Opcional.
+- Mostrar el monto en la papelera: hoy `GET /proposals/deleted` no incluye escenarios, así que no hay valor. Requiere agregar el `include` y calcular vía pricing-engine si se quiere.
