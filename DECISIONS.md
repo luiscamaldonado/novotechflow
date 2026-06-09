@@ -1512,3 +1512,45 @@ Soft delete vía campo nullable `Proposal.deletedAt` (`DateTime?`). En vez de bo
 - Borrado permanente desde la papelera (purga real, reusando la cascada física de ADR-021). No implementado.
 - Ocultar el botón Eliminar a comerciales en filas bloqueadas (hoy produce 403 → alert). Opcional.
 - Mostrar el monto en la papelera: hoy `GET /proposals/deleted` no incluye escenarios, así que no hay valor. Requiere agregar el `include` y calcular vía pricing-engine si se quiere.
+
+
+## ADR-037 — Reporte de proyección de facturación en Excel (client-side, consolidado por comercial)
+
+**Fecha:** 2026-06-09
+**Estado:** Cerrado
+
+### Contexto
+El dashboard ya gestiona proyecciones de facturación (`BillingProjection`) y exporta un forecast plano por fila vía `exportDashboard.ts`. Faltaba un informe consolidado por comercial que respondiera la pregunta de negocio "¿cómo quedan los trimestres?": cuánto se facturó y cuánto queda pendiente, segmentado por modalidad de adquisición. El modelo `BillingProjection` ya contenía todo lo necesario (`subtotal`, `currency`, `status`, `billingDate`, `acquisitionType`, `user`), por lo que no se requería tocar el backend.
+
+### Decisión
+Se agrega un reporte Excel generado 100% en el cliente, accesible para comerciales y administradores desde un botón nuevo "Reporte de Proyección" en la barra de la tabla del dashboard (distinto del botón "Proyección de Facturación", que crea proyecciones, y del "Exportar Excel", que vuelca el forecast plano).
+
+- **Fuente de datos y RBAC heredado:** el reporte consume el array `projections` crudo que ya carga `useDashboard` desde `GET /billing-projections`. El filtrado por rol lo resuelve el backend (`accessFilter = role === 'ADMIN' ? {} : { userId }`): el comercial ve solo sus cifras, el admin las de todos. No se creó endpoint, guard, DTO ni migración.
+- **Una sola hoja con tres tablas apiladas:** VENTAS (`acquisitionType === 'VENTA'`), DaaS (`=== 'DAAS'`) y VENTAS + DaaS (suma de ambas; excluye proyecciones sin tipo). Cada tabla consolida una fila por comercial con seis columnas en USD: facturado mes anterior, facturado mes actual, pendiente mes actual, pendiente mes siguiente, pendiente trimestre actual, pendiente trimestre siguiente.
+- **Buckets temporales con solapamiento intencional:** "Facturado" = estado `FACTURADA`; "Pend. Facturar" = `PENDIENTE_FACTURAR`; el período se determina por `billingDate`. El mes actual también suma en el trimestre actual (y el mes siguiente en el trimestre que le corresponda) a propósito: el reporte es la foto de cómo queda cada trimestre, no columnas excluyentes. Trimestre = calendario (Q1 ene-mar, etc.); el trimestre actual es el que contiene el mes actual.
+- **Cálculo financiero sin duplicación (CONVENTIONS §J):** la conversión COP→USD reutiliza `getSubtotalUsd` importado desde `useDashboard` (mismo precedente que `exportDashboard.ts`). USD se toma directo; COP se divide por la TRM actual del dashboard. Se agrega un guard `Number.isFinite(raw) ? raw : 0` para blindar contra `subtotal` corrupto que `?? 0` dejaría pasar como `NaN`.
+- **Clasificación de fechas sin shift UTC:** `billingDate` (`@db.Date`) se parsea por componentes del string `YYYY-MM-DD` a `(año, mes)` numéricos, nunca con `new Date()`, evitando el corrimiento a UTC que reubicaría facturaciones de borde de mes.
+- **Universo de filas:** todos los comerciales con al menos una proyección de cualquier tipo aparecen en las tres tablas; los que solo tienen proyecciones sin `acquisitionType` salen con todo en cero. Las proyecciones con `billingDate` null o fuera de los cuatro períodos no suman en ninguna columna.
+- **Gate de generación:** el botón se deshabilita si no hay TRM (`!trmRate || trmRate <= 0`) o no hay proyecciones, evitando un Excel en ceros. El reporte ignora a propósito los filtros activos del dashboard (a diferencia de "Exportar Excel"): siempre consolida el universo completo accesible al usuario.
+- **Estética:** se clona el patrón ExcelJS de `exportDashboard.ts` (paleta indigo/slate/emerald de la app, bordes, filas alternadas, fila TOTAL, freeze, `saveAs`). Títulos de tabla en sky-600 (VENTAS), pink-600 (DaaS) e indigo-600 (VENTAS + DaaS), reutilizando la semántica de color de adquisición ya existente.
+
+### Consecuencias
+- Comerciales y administradores obtienen un consolidado trimestral sin intervención del backend.
+- Los buckets solapados implican que la suma de las seis columnas no es un gran total (un mismo monto puede contarse en mes y trimestre); es deliberado y debe leerse como proyección por período, no como total único.
+- Al ignorar los filtros del dashboard, el Reporte y el "Exportar Excel" tienen comportamientos distintos a propósito; documentarlo evita confusión futura.
+- La lógica vive en `lib/projectionReport.ts` (pura, testeable, con `referenceDate` inyectable) separada del pintado en `lib/exportProjectionReport.ts`, siguiendo la separación de capas del proyecto.
+
+### Archivos
+- `apps/web/src/lib/projectionReport.ts` (nuevo: lógica pura de agregación, buckets temporales y consolidación por comercial; `buildProjectionReport`)
+- `apps/web/src/lib/exportProjectionReport.ts` (nuevo: pintado Excel de una hoja con tres tablas; `exportProjectionReportToExcel`)
+- `apps/web/src/hooks/useDashboard.ts` (expone `projections` crudo en el return; antes solo exponía `setProjections`)
+- `apps/web/src/pages/Dashboard.tsx` (import de la capa lib y de `FileBarChart`, estado `isGeneratingReport`, handler `handleProjectionReport`, botón "Reporte de Proyección" junto a "Exportar Excel")
+
+### Commits
+- `ef22cf4` — feat(dashboard): logica y exportador del reporte de proyeccion de facturacion
+- `d3c154a` — feat(dashboard): boton reporte de proyeccion de facturacion
+
+### Pendientes
+- Tests unitarios de `buildProjectionReport` aprovechando `referenceDate` inyectable: borde de año (diciembre → mes/trim siguiente en año +1), solapamiento mes/trimestre, proyección sin tipo (fila en cero), `billingDate` null o fuera de período.
+- `wb.created` no se setea en `exportProjectionReport.ts` (el hermano sí); cosmético.
+- Eventual server-side si el volumen de proyecciones crece y la agregación en cliente deja de ser viable (hoy no es problema).
