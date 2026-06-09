@@ -103,7 +103,7 @@ function resolveCurrentAndNextQuarter(): {
 }
 
 /** Compute billing cards from already-filtered DashboardRows for one acquisition type. */
-function computeBillingCards(
+export function computeBillingCards(
     rows: DashboardRow[],
     acqType: AcquisitionType,
     trmRate: number | null,
@@ -144,11 +144,6 @@ function computeBillingCards(
             if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
             if (month === thisMonth && year === thisYear) pendFactMesActual += sub;
             if (month === nextMonth && year === nextMonthYear) pendFactMesSiguiente += sub;
-        }
-
-        if (row.status === 'GANADA' && row.closeDate) {
-            const { month, year } = parseDate(row.closeDate);
-            if (Math.floor(month / 3) === nextQuarter && year === nextQuarterYear) proyeccionTrimestreSiguiente += sub;
         }
     }
 
@@ -443,6 +438,15 @@ export function useDashboard() {
         [proposalGroups, filteredProjectionRows],
     );
 
+    // ── Active rows WITHOUT UI filters (for reports that ignore filters) ──
+    const activeRowsUnfiltered: DashboardRow[] = useMemo(
+        () => [
+            ...allProposalGroups.map(g => g.activeVersion),
+            ...allRows.filter(r => r.isProjection),
+        ],
+        [allProposalGroups, allRows],
+    );
+
     // ── Billing summary cards per acquisition type (from active rows, in USD) ──
     const billingCardsVenta: BillingCards = useMemo(
         () => computeBillingCards(activeRows, 'VENTA', trmRate),
@@ -623,6 +627,7 @@ export function useDashboard() {
         filtered,
         proposalGroups,
         filteredProjectionRows,
+        activeRowsUnfiltered,
         billingCardsVenta,
         billingCardsDaas,
         pipelineCards,
