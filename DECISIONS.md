@@ -1519,36 +1519,42 @@ Soft delete vía campo nullable `Proposal.deletedAt` (`DateTime?`). En vez de bo
 **Fecha:** 2026-06-09
 **Estado:** Cerrado
 
+### Nota de corrección (2026-06-09)
+La primera implementación de este reporte calculaba los importes con lógica propia sobre `BillingProjection` únicamente, por lo que NO cuadraba con las tarjetas de facturación del dashboard (faltaban las propuestas; difería en trimestre actual y trimestre siguiente). Se corrigió para que el reporte delegue en la misma función que alimenta las tarjetas (`computeBillingCards`) sobre el mismo universo de filas (propuestas en versión activa + proyecciones), garantizando cuadre por construcción. Las secciones Decisión, Archivos y Commits de abajo reflejan la versión corregida.
+
 ### Contexto
 El dashboard ya gestiona proyecciones de facturación (`BillingProjection`) y exporta un forecast plano por fila vía `exportDashboard.ts`. Faltaba un informe consolidado por comercial que respondiera la pregunta de negocio "¿cómo quedan los trimestres?": cuánto se facturó y cuánto queda pendiente, segmentado por modalidad de adquisición. El modelo `BillingProjection` ya contenía todo lo necesario (`subtotal`, `currency`, `status`, `billingDate`, `acquisitionType`, `user`), por lo que no se requería tocar el backend.
 
 ### Decisión
-Se agrega un reporte Excel generado 100% en el cliente, accesible para comerciales y administradores desde un botón nuevo "Reporte de Proyección" en la barra de la tabla del dashboard (distinto del botón "Proyección de Facturación", que crea proyecciones, y del "Exportar Excel", que vuelca el forecast plano).
+Se agrega un reporte Excel generado 100% en el cliente, accesible para comerciales y administradores desde un botón "Reporte de Proyección" en la barra de la tabla del dashboard (distinto del botón "Proyección de Facturación", que crea proyecciones, y del "Exportar Excel", que vuelca el forecast plano).
 
-- **Fuente de datos y RBAC heredado:** el reporte consume el array `projections` crudo que ya carga `useDashboard` desde `GET /billing-projections`. El filtrado por rol lo resuelve el backend (`accessFilter = role === 'ADMIN' ? {} : { userId }`): el comercial ve solo sus cifras, el admin las de todos. No se creó endpoint, guard, DTO ni migración.
-- **Una sola hoja con tres tablas apiladas:** VENTAS (`acquisitionType === 'VENTA'`), DaaS (`=== 'DAAS'`) y VENTAS + DaaS (suma de ambas; excluye proyecciones sin tipo). Cada tabla consolida una fila por comercial con seis columnas en USD: facturado mes anterior, facturado mes actual, pendiente mes actual, pendiente mes siguiente, pendiente trimestre actual, pendiente trimestre siguiente.
-- **Buckets temporales con solapamiento intencional:** "Facturado" = estado `FACTURADA`; "Pend. Facturar" = `PENDIENTE_FACTURAR`; el período se determina por `billingDate`. El mes actual también suma en el trimestre actual (y el mes siguiente en el trimestre que le corresponda) a propósito: el reporte es la foto de cómo queda cada trimestre, no columnas excluyentes. Trimestre = calendario (Q1 ene-mar, etc.); el trimestre actual es el que contiene el mes actual.
-- **Cálculo financiero sin duplicación (CONVENTIONS §J):** la conversión COP→USD reutiliza `getSubtotalUsd` importado desde `useDashboard` (mismo precedente que `exportDashboard.ts`). USD se toma directo; COP se divide por la TRM actual del dashboard. Se agrega un guard `Number.isFinite(raw) ? raw : 0` para blindar contra `subtotal` corrupto que `?? 0` dejaría pasar como `NaN`.
-- **Clasificación de fechas sin shift UTC:** `billingDate` (`@db.Date`) se parsea por componentes del string `YYYY-MM-DD` a `(año, mes)` numéricos, nunca con `new Date()`, evitando el corrimiento a UTC que reubicaría facturaciones de borde de mes.
-- **Universo de filas:** todos los comerciales con al menos una proyección de cualquier tipo aparecen en las tres tablas; los que solo tienen proyecciones sin `acquisitionType` salen con todo en cero. Las proyecciones con `billingDate` null o fuera de los cuatro períodos no suman en ninguna columna.
-- **Gate de generación:** el botón se deshabilita si no hay TRM (`!trmRate || trmRate <= 0`) o no hay proyecciones, evitando un Excel en ceros. El reporte ignora a propósito los filtros activos del dashboard (a diferencia de "Exportar Excel"): siempre consolida el universo completo accesible al usuario.
-- **Estética:** se clona el patrón ExcelJS de `exportDashboard.ts` (paleta indigo/slate/emerald de la app, bordes, filas alternadas, fila TOTAL, freeze, `saveAs`). Títulos de tabla en sky-600 (VENTAS), pink-600 (DaaS) e indigo-600 (VENTAS + DaaS), reutilizando la semántica de color de adquisición ya existente.
+- **Una sola fuente de verdad (CONVENTIONS §J):** el reporte NO calcula importes ni buckets por su cuenta. Delega en `computeBillingCards(rows, acqType, trmRate)` de `useDashboard` — la MISMA función que alimenta las tarjetas de facturación que pinta `<BillingCards>`. Así el reporte cuadra con las tarjetas por construcción. `computeBillingCards` se hizo pública para poder reutilizarla.
+- **Mismo universo que las tarjetas:** propuestas en versión activa (agrupadas por versión) MÁS proyecciones de facturación. El monto en USD de cada propuesta lo resuelve `getDashboardAmount`/pricing-engine (escenarios o `manualAmount`), idéntico al que muestra la tabla del dashboard. Antes el reporte usaba solo `BillingProjection`, por eso no incluía las propuestas y no cuadraba.
+- **Ignora los filtros de UI:** el reporte consume `activeRowsUnfiltered` (gemelo de `activeRows` construido desde `allRows`/`allProposalGroups`, sin los filtros del tablero). Siempre consolida el universo completo accesible al usuario; el RBAC lo hereda del backend (comercial = sus filas, admin = todas), sin endpoint nuevo, guard, DTO ni migración.
+- **GANADA fuera del cálculo de facturación:** se eliminó de `computeBillingCards` la suma de propuestas en estado GANADA (por `closeDate`) que antes alimentaba "proyección trimestre siguiente". GANADA no tiene fecha de facturación; su lugar son las tarjetas de pipeline por estado (lógica aparte, no tocada). Este cambio afecta también a la tarjeta "Proy. Trim. Sig." del dashboard, de forma deseada.
+- **Tres tablas apiladas, una fila por comercial:** VENTAS (`computeBillingCards(..., 'VENTA')`), DaaS (`computeBillingCards(..., 'DAAS')`) y VENTAS + DaaS (suma campo a campo de ambas). Las seis columnas son exactamente las seis tarjetas, en orden: facturado mes anterior, facturado mes actual, pendiente facturar mes actual, pendiente facturar mes siguiente, trimestre actual (FACTURADA + PENDIENTE del trimestre) y proyección trimestre siguiente (pendientes del próximo trimestre). Los textos de encabezado de las dos últimas columnas se conservan como "Pend. Facturar trimestre actual/siguiente" por decisión de presentación, aunque su contenido sigue la semántica de las tarjetas.
+- **Universo de filas:** todos los comerciales presentes en las filas aparecen en las tres tablas; un comercial sin importes en una modalidad sale en cero. Las clasificaciones temporales (mes/trimestre, manejo de `billingDate`, sin shift UTC) viven dentro de `computeBillingCards`, no en el reporte.
+- **Gate de generación:** el botón se deshabilita si no hay TRM (`!trmRate || trmRate <= 0`) o no hay proyecciones cargadas, evitando un Excel vacío.
+- **Estética (sin cambios):** se clona el patrón ExcelJS de `exportDashboard.ts` (paleta indigo/slate/emerald, bordes, filas alternadas, fila TOTAL, freeze, `saveAs`). Títulos de tabla en sky-600 (VENTAS), pink-600 (DaaS) e indigo-600 (VENTAS + DaaS).
 
 ### Consecuencias
 - Comerciales y administradores obtienen un consolidado trimestral sin intervención del backend.
-- Los buckets solapados implican que la suma de las seis columnas no es un gran total (un mismo monto puede contarse en mes y trimestre); es deliberado y debe leerse como proyección por período, no como total único.
-- Al ignorar los filtros del dashboard, el Reporte y el "Exportar Excel" tienen comportamientos distintos a propósito; documentarlo evita confusión futura.
+- Las columnas "trimestre actual" y "proyección trimestre siguiente" se solapan con las columnas de mes (un mismo importe puede contarse en mes y en su trimestre); es deliberado y debe leerse como proyección por período, no como total único.
+- Al delegar en `computeBillingCards`, el reporte y las tarjetas del dashboard quedan atados a la misma lógica: cualquier cambio futuro en esa función afecta a ambos por igual (ventaja de consistencia, a tener en cuenta al modificarla).
+- El reporte ignora los filtros de UI mientras que "Exportar Excel" sí los respeta; comportamiento distinto a propósito, documentarlo evita confusión.
 - La lógica vive en `lib/projectionReport.ts` (pura, testeable, con `referenceDate` inyectable) separada del pintado en `lib/exportProjectionReport.ts`, siguiendo la separación de capas del proyecto.
 
 ### Archivos
-- `apps/web/src/lib/projectionReport.ts` (nuevo: lógica pura de agregación, buckets temporales y consolidación por comercial; `buildProjectionReport`)
-- `apps/web/src/lib/exportProjectionReport.ts` (nuevo: pintado Excel de una hoja con tres tablas; `exportProjectionReportToExcel`)
-- `apps/web/src/hooks/useDashboard.ts` (expone `projections` crudo en el return; antes solo exponía `setProjections`)
-- `apps/web/src/pages/Dashboard.tsx` (import de la capa lib y de `FileBarChart`, estado `isGeneratingReport`, handler `handleProjectionReport`, botón "Reporte de Proyección" junto a "Exportar Excel")
+- `apps/web/src/hooks/useDashboard.ts` (hace pública `computeBillingCards`; elimina la suma de GANADA en ella; expone `projections` y `activeRowsUnfiltered` en el return)
+- `apps/web/src/lib/projectionReport.ts` (agrupa por comercial y delega en `computeBillingCards`; `ProjectionReportRow extends BillingCards`; tabla VENTAS+DaaS = suma de ambas modalidades; `buildProjectionReport(rows: DashboardRow[], trmRate, referenceDate?)`)
+- `apps/web/src/lib/exportProjectionReport.ts` (pintado Excel de una hoja con tres tablas; `getRowValues` lee los seis campos de `BillingCards`; encabezados sin cambios; `exportProjectionReportToExcel`)
+- `apps/web/src/pages/Dashboard.tsx` (import de la capa lib y de `FileBarChart`, estado `isGeneratingReport`, handler `handleProjectionReport` alimentado por `activeRowsUnfiltered`, botón "Reporte de Proyección" junto a "Exportar Excel")
 
 ### Commits
 - `ef22cf4` — feat(dashboard): logica y exportador del reporte de proyeccion de facturacion
 - `d3c154a` — feat(dashboard): boton reporte de proyeccion de facturacion
+- `75d6f7b` — refactor(dashboard): export computeBillingCards, drop GANADA, expose unfiltered rows
+- `07d3f78` — fix(dashboard): align projection report with billing cards source and logic
 
 ### Pendientes
 - Tests unitarios de `buildProjectionReport` aprovechando `referenceDate` inyectable: borde de año (diciembre → mes/trim siguiente en año +1), solapamiento mes/trimestre, proyección sin tipo (fila en cero), `billingDate` null o fuera de período.
