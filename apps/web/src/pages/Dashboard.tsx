@@ -2,7 +2,7 @@ import { useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     PlusCircle, Trash2, Edit2, Loader2,
-    Search, Filter, X, Receipt, FileSpreadsheet,
+    Search, Filter, X, Receipt, FileSpreadsheet, FileBarChart,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
@@ -10,6 +10,8 @@ import { useProjections } from '../hooks/useProjections';
 import { useNotifications } from '../hooks/useNotifications';
 import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG } from '../lib/constants';
 import { exportDashboardToExcel } from '../lib/exportDashboard';
+import { buildProjectionReport } from '../lib/projectionReport';
+import { exportProjectionReportToExcel } from '../lib/exportProjectionReport';
 import type { ProposalStatus, AcquisitionType, UserRole } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import PipelineCards from './dashboard/PipelineCards';
@@ -33,6 +35,7 @@ export default function Dashboard() {
     const navigate = useNavigate();
     const { user } = useAuthStore();
     const [isExporting, setIsExporting] = useState(false);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     const toggleGroup = (baseCode: string) => {
@@ -59,11 +62,23 @@ export default function Dashboard() {
         }
     };
 
+    const handleProjectionReport = async () => {
+        setIsGeneratingReport(true);
+        try {
+            const report = buildProjectionReport(projections, trmRate);
+            await exportProjectionReportToExcel({ report, userName: user?.name ?? 'Usuario' });
+        } catch (error) {
+            console.error('Error generando reporte de proyección:', error);
+        } finally {
+            setIsGeneratingReport(false);
+        }
+    };
+
     const {
         loading, proposals, filtered, proposalGroups, filteredProjectionRows,
         billingCardsVenta, billingCardsDaas,
         pipelineCards, forecastCurrentQuarter, forecastNextQuarter,
-        cloning, setProjections,
+        cloning, projections, setProjections,
         trmRate, setTrmRate,
         trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
         showFilters, setShowFilters, codeFilter, setCodeFilter, clientFilter, setClientFilter, subjectFilter, setSubjectFilter,
@@ -322,17 +337,31 @@ export default function Dashboard() {
                     <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
                         {filtered.length} Registro{filtered.length !== 1 ? 's' : ''}
                     </h3>
-                    <button
-                        onClick={handleExportExcel}
-                        disabled={isExporting || filtered.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isExporting
-                            ? <Loader2 className="h-4 w-4 animate-spin" />
-                            : <FileSpreadsheet className="h-4 w-4" />
-                        }
-                        <span>Exportar Excel</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleProjectionReport}
+                            disabled={isGeneratingReport || !trmRate || trmRate <= 0 || projections.length === 0}
+                            title={!trmRate || trmRate <= 0 ? 'Ingresa la TRM para generar el reporte' : projections.length === 0 ? 'No hay proyecciones para reportar' : 'Generar reporte de proyección'}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isGeneratingReport
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <FileBarChart className="h-4 w-4" />
+                            }
+                            <span>Reporte de Proyección</span>
+                        </button>
+                        <button
+                            onClick={handleExportExcel}
+                            disabled={isExporting || filtered.length === 0}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isExporting
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <FileSpreadsheet className="h-4 w-4" />
+                            }
+                            <span>Exportar Excel</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">

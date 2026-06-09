@@ -629,6 +629,7 @@ export function useDashboard() {
         forecastCurrentQuarter,
         forecastNextQuarter,
         cloning,
+        projections,
         setProjections,
         trmRate,
         setTrmRate,
