@@ -65,7 +65,7 @@ export default function Dashboard() {
     const handleProjectionReport = async () => {
         setIsGeneratingReport(true);
         try {
-            const report = buildProjectionReport(projections, trmRate);
+            const report = buildProjectionReport(activeRowsUnfiltered, trmRate);
             await exportProjectionReportToExcel({ report, userName: user?.name ?? 'Usuario' });
         } catch (error) {
             console.error('Error generando reporte de proyección:', error);
@@ -78,7 +78,7 @@ export default function Dashboard() {
         loading, proposals, filtered, proposalGroups, filteredProjectionRows,
         billingCardsVenta, billingCardsDaas,
         pipelineCards, forecastCurrentQuarter, forecastNextQuarter,
-        cloning, projections, setProjections,
+        cloning, projections, activeRowsUnfiltered, setProjections,
         trmRate, setTrmRate,
         trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
         showFilters, setShowFilters, codeFilter, setCodeFilter, clientFilter, setClientFilter, subjectFilter, setSubjectFilter,

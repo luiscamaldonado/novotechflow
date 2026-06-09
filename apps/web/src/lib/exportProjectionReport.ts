@@ -60,12 +60,12 @@ function buildTimestamp(): string {
 function getRowValues(row: ProjectionReportRow): (string | number)[] {
   return [
     row.userName,
-    row.billedPrevMonthUsd,
-    row.billedCurrentMonthUsd,
-    row.pendingCurrentMonthUsd,
-    row.pendingNextMonthUsd,
-    row.pendingCurrentQuarterUsd,
-    row.pendingNextQuarterUsd,
+    row.facturadoMesAnterior,
+    row.facturadoMesActual,
+    row.pendFactMesActual,
+    row.pendFactMesSiguiente,
+    row.facturadoTrimestreActual,
+    row.proyeccionTrimestreSiguiente,
   ];
 }
 
