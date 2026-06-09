@@ -77,6 +77,8 @@ export default function Dashboard() {
         subtotalUsdMax, setSubtotalUsdMax,
         acquisitionFilter, setAcquisitionFilter,
         userFilter, setUserFilter,
+        closeMonthFilter, setCloseMonthFilter,
+        billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
         handleStatusChange, handleDateChange, handleClone, handleDelete, getBoardHygieneIssues,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
@@ -305,6 +307,10 @@ export default function Dashboard() {
                         onAcquisitionFilterChange={setAcquisitionFilter}
                         userFilter={userFilter}
                         onUserFilterChange={setUserFilter}
+                        closeMonthFilter={closeMonthFilter}
+                        onCloseMonthFilterChange={setCloseMonthFilter}
+                        billingMonthFilter={billingMonthFilter}
+                        onBillingMonthFilterChange={setBillingMonthFilter}
                         onClearAll={clearFilters}
                     />
                 </div>

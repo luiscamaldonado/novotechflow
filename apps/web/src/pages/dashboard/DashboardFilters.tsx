@@ -1,5 +1,5 @@
 import { Calendar, Tag, Factory, DollarSign, ShoppingCart, User, X } from 'lucide-react';
-import { ITEM_TYPE_LABELS, ACQUISITION_CONFIG } from '../../lib/constants';
+import { ITEM_TYPE_LABELS, ACQUISITION_CONFIG, MONTH_NAMES_ES } from '../../lib/constants';
 import { formatNumberWithThousands, parseFormattedNumber } from '../../lib/format-utils';
 import type { ItemType, AcquisitionType } from '../../lib/types';
 
@@ -28,6 +28,10 @@ export interface DashboardFiltersProps {
     onAcquisitionFilterChange: (value: AcquisitionType | 'ALL') => void;
     userFilter: string;
     onUserFilterChange: (value: string) => void;
+    closeMonthFilter: Set<number>;
+    onCloseMonthFilterChange: (months: Set<number>) => void;
+    billingMonthFilter: Set<number>;
+    onBillingMonthFilterChange: (months: Set<number>) => void;
     onClearAll: () => void;
 }
 
@@ -57,11 +61,47 @@ const QUARTER_BUTTONS = [1, 2, 3, 4] as const;
 
 // ── Sub-components ───────────────────────────────────────────
 
-function DateRangeFilter({ label, icon: Icon, range, onChange }: {
+function MonthFilter({ selected, onChange }: {
+    selected: Set<number>;
+    onChange: (months: Set<number>) => void;
+}) {
+    const toggleMonth = (month: number) => {
+        const next = new Set(selected);
+        if (next.has(month)) next.delete(month);
+        else next.add(month);
+        onChange(next);
+    };
+
+    return (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+            {MONTH_NAMES_ES.slice(1).map((name, i) => {
+                const month = i + 1;
+                const isActive = selected.has(month);
+                return (
+                    <button
+                        key={month}
+                        onClick={() => toggleMonth(month)}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${
+                            isActive
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'
+                        }`}
+                    >
+                        {name}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function DateRangeFilter({ label, icon: Icon, range, onChange, selectedMonths, onMonthsChange }: {
     label: string;
     icon: typeof Calendar;
     range: DateRange;
     onChange: (range: DateRange) => void;
+    selectedMonths?: Set<number>;
+    onMonthsChange?: (months: Set<number>) => void;
 }) {
     return (
         <div>
@@ -96,6 +136,9 @@ function DateRangeFilter({ label, icon: Icon, range, onChange }: {
                     </button>
                 ))}
             </div>
+            {selectedMonths && onMonthsChange && (
+                <MonthFilter selected={selectedMonths} onChange={onMonthsChange} />
+            )}
         </div>
     );
 }
@@ -288,12 +331,16 @@ export default function DashboardFilters(props: DashboardFiltersProps) {
                     icon={Calendar}
                     range={props.closeDateRange}
                     onChange={props.onCloseDateRangeChange}
+                    selectedMonths={props.closeMonthFilter}
+                    onMonthsChange={props.onCloseMonthFilterChange}
                 />
                 <DateRangeFilter
                     label="Fecha de facturación"
                     icon={Calendar}
                     range={props.billingDateRange}
                     onChange={props.onBillingDateRangeChange}
+                    selectedMonths={props.billingMonthFilter}
+                    onMonthsChange={props.onBillingMonthFilterChange}
                 />
 
                 {/* USD Subtotal Range */}

@@ -187,6 +187,8 @@ export function useDashboard() {
     const [subtotalUsdMax, setSubtotalUsdMax] = useState('');
     const [acquisitionFilter, setAcquisitionFilter] = useState<AcquisitionType | 'ALL'>('ALL');
     const [userFilter, setUserFilter] = useState('');
+    const [closeMonthFilter, setCloseMonthFilter] = useState<Set<number>>(new Set());
+    const [billingMonthFilter, setBillingMonthFilter] = useState<Set<number>>(new Set());
 
     // Clone action state
     const [cloning, setCloning] = useState<string | null>(null);
@@ -326,6 +328,7 @@ export function useDashboard() {
         const clientTerms = parseMultiValueFilter(clientFilter);
         const subjectTerms = parseMultiValueFilter(subjectFilter);
         const userTerms = parseMultiValueFilter(userFilter);
+        const currentYear = new Date().getFullYear();
 
         return allRows.filter(row => {
             // Independent multi-value text filters (OR within field, AND across fields)
@@ -347,6 +350,15 @@ export function useDashboard() {
                 if (closeDateRange.to && dateStr > closeDateRange.to) return false;
             }
 
+            // Close month — solo año en curso. Se extrae del string ISO (sin new Date) para evitar desfase de timezone.
+            if (closeMonthFilter.size > 0) {
+                const raw = row.closeDate;
+                if (!raw) return false;
+                const dateStr = raw.split('T')[0];
+                if (Number(dateStr.slice(0, 4)) !== currentYear) return false;
+                if (!closeMonthFilter.has(Number(dateStr.slice(5, 7)))) return false;
+            }
+
             // Billing date range
             if (billingDateRange.from || billingDateRange.to) {
                 const raw = row.billingDate;
@@ -354,6 +366,15 @@ export function useDashboard() {
                 const dateStr = raw.split('T')[0];
                 if (billingDateRange.from && dateStr < billingDateRange.from) return false;
                 if (billingDateRange.to && dateStr > billingDateRange.to) return false;
+            }
+
+            // Billing month — solo año en curso
+            if (billingMonthFilter.size > 0) {
+                const raw = row.billingDate;
+                if (!raw) return false;
+                const dateStr = raw.split('T')[0];
+                if (Number(dateStr.slice(0, 4)) !== currentYear) return false;
+                if (!billingMonthFilter.has(Number(dateStr.slice(5, 7)))) return false;
             }
 
             // Category filter
@@ -397,7 +418,7 @@ export function useDashboard() {
         });
     }, [
         allRows, codeFilter, clientFilter, subjectFilter, statusFilters,
-        closeDateRange, billingDateRange, categoryFilter, manufacturerFilter,
+        closeDateRange, billingDateRange, closeMonthFilter, billingMonthFilter, categoryFilter, manufacturerFilter,
         subtotalUsdMin, subtotalUsdMax, acquisitionFilter, userFilter, trmRate,
     ]);
 
@@ -583,6 +604,8 @@ export function useDashboard() {
         setSubtotalUsdMax('');
         setAcquisitionFilter('ALL');
         setUserFilter('');
+        setCloseMonthFilter(new Set());
+        setBillingMonthFilter(new Set());
     };
 
     const hasActiveFilters = codeFilter || clientFilter || subjectFilter || statusFilters.size > 0
@@ -590,7 +613,8 @@ export function useDashboard() {
         || billingDateRange.from || billingDateRange.to
         || categoryFilter.size > 0 || manufacturerFilter
         || subtotalUsdMin || subtotalUsdMax || acquisitionFilter !== 'ALL'
-        || userFilter;
+        || userFilter
+        || closeMonthFilter.size > 0 || billingMonthFilter.size > 0;
 
     return {
         // State
@@ -641,6 +665,8 @@ export function useDashboard() {
         setAcquisitionFilter,
         userFilter,
         setUserFilter,
+        closeMonthFilter, setCloseMonthFilter,
+        billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
 
         // Actions
