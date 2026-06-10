@@ -902,8 +902,6 @@ NOVOTECHNO está migrando propuestas comerciales del sistema viejo a NovoTechFlo
 - **Editable post-creación** (`consecutiveSource` y/o número manual): descartada para preservar trazabilidad con el cliente final.
 - **Solo validar en el POST**: descartada por UX en un form largo; agregar el endpoint separado `validate-manual` permite feedback temprano sin necesidad de submit.
 
----
-
 ## ADR-024: Bloqueo de versiones históricas de propuestas (mayo 2026)
 
 **Fecha:** Mayo 2026
@@ -1409,8 +1407,6 @@ Antes de desplegar a Railway (servicios web y api separados, auto-deploy en push
 ### Pendientes
 - ~~`@SkipThrottle()` en `/presence/heartbeat` y en los GET de poll si aparecen 429s tras desplegar con el equipo trabajando.~~ Resuelto preventivamente (ver Adenda 2026-06-02, commit `2c274d2`).
 - "Programar" el banner (fecha/hora de inicio/fin automáticos) quedó fuera de alcance; hoy es on/off manual.
-
----
 
 ## ADR-035 - Validación de higiene de datos del tablero con gate de acciones para comerciales
 
