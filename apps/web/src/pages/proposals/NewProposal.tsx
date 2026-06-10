@@ -109,7 +109,7 @@ export default function NewProposal() {
         manualConsecutive: '',
         status: 'ELABORACION',
         acquisitionType: '',
-        closeDate: todayDateStr,
+        closeDate: '',
     });
 
     const [manualValidation, setManualValidation] = useState<ManualConsecutiveValidation | null>(null);
