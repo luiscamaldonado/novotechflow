@@ -1556,3 +1556,40 @@ Se agrega un reporte Excel generado 100% en el cliente, accesible para comercial
 - Tests unitarios de `buildProjectionReport` aprovechando `referenceDate` inyectable: borde de año (diciembre → mes/trim siguiente en año +1), solapamiento mes/trimestre, proyección sin tipo (fila en cero), `billingDate` null o fuera de período.
 - `wb.created` no se setea en `exportProjectionReport.ts` (el hermano sí); cosmético.
 - Eventual server-side si el volumen de proyecciones crece y la agregación en cliente deja de ser viable (hoy no es problema).
+
+## ADR-038 — Control de cache HTTP en nginx: index.html revalidado, assets inmutables
+
+**Fecha:** 2026-06-10
+**Estado:** Cerrado
+
+### Contexto
+`apps/web` se sirve en producción con **nginx** (no con `server.mjs`/Express; esa nota quedó obsoleta en memoria y en las instrucciones del proyecto §4). El Dockerfile de `apps/web` hace build con Vite y copia `apps/web/nginx.conf` a `/etc/nginx/conf.d/default.conf`, y el `dist/` a `/usr/share/nginx/html`. La config previa (ADR-017) tenía los 4 headers de seguridad a nivel `server` (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) y un único `location /` con `try_files $uri $uri/ /index.html`, sin ningún control de cache HTTP.
+
+El síntoma: tras cada deploy, los usuarios no veían la versión nueva con un F5 normal y debían forzar recarga con Ctrl+Shift+R. La causa raíz es que `index.html` —único archivo sin hash en su nombre, por ser el punto de entrada— quedaba cacheado por el navegador apuntando a bundles viejos. Los assets de Vite sí llevan hash de contenido (`index-[hash].js`), así que nunca son el problema: si el contenido cambia, cambia el nombre.
+
+### Decisión
+Se agrega control de cache HTTP en `apps/web/nginx.conf` partiendo el `location /` en dos bloques:
+
+- **`location /assets/`** — `Cache-Control: public, max-age=31536000, immutable`. Los assets hasheados se cachean "para siempre": el navegador los sirve de memoria sin revalidar mientras el nombre coincida, y en cuanto un deploy cambia el hash, baja el nuevo. El `Cache-Control` va **sin** `always` para no marcar un eventual 404 como inmutable. `try_files $uri =404`.
+- **`location /`** (index.html + fallback SPA) — `Cache-Control: no-cache`. El navegador puede guardar el `index.html` pero está obligado a revalidarlo contra el servidor antes de usarlo; con el ETag que nginx ya genera, la respuesta es un 304 barato cuando no cambió. Así un F5 normal —o navegar a otra ruta, o reabrir la pestaña— siempre trae un index fresco que apunta a los bundles nuevos. Se conserva el `try_files $uri $uri/ /index.html`.
+
+**Herencia de headers (gotcha de nginx, ya documentado en el propio archivo):** un `add_header` dentro de un `location` elimina TODOS los `add_header` de nivel `server` para ese location. Por eso los 4 headers de seguridad se **repiten** dentro de cada uno de los dos `location`. Verificado en DevTools que HSTS, X-Frame-Options, X-Content-Type-Options y Referrer-Policy siguen presentes tanto en el documento como en los assets (no-regresión del hallazgo Invicti de ADR-017).
+
+No se tocó el Dockerfile (ya copia el `nginx.conf` correcto), ni la directiva `server`, ni los headers de seguridad a nivel server.
+
+### Consecuencias
+- Tras un deploy, un F5 normal basta para obtener la versión nueva; se elimina la necesidad de Ctrl+Shift+R. Esto resuelve el root cause del problema, pero NO cubre la pestaña que quedó abierta horas sin interacción (no se entera del deploy hasta que el usuario navega o recarga). Esa parte queda para una eventual capa de detección de versión + aviso (no implementada).
+- La verificación local de headers no se puede hacer con `pnpm dev` (Vite no pasa por nginx ni hashea). Se valida levantando `nginx:alpine` con el `dist/` y el `nginx.conf` montados, o tras el deploy en Railway.
+- El `Strict-Transport-Security` solo lo aplica el navegador sobre HTTPS; en pruebas locales sobre `http://localhost` el header se emite pero el browser lo ignora (esperado).
+
+### Archivos
+- `apps/web/nginx.conf` (parte el `location /` en `location /assets/` con cache inmutable y `location /` con `no-cache`; repite los 4 headers de seguridad en ambos bloques; deja intactos el `server`, el comentario WARNING y los headers de nivel server)
+
+### Commits
+- `0f0e7af` — fix(web): cache-control headers in nginx (no-cache index, immutable assets)
+
+### Pendientes
+- Capa de detección de versión nueva + aviso de recarga (banner tipo Gmail/Linear) para la pestaña abierta largo rato; recarga avisada, no forzada, para no perder una propuesta a medio llenar. Planificada, no implementada.
+- Captura de `vite:preloadError` (chunk de un deploy viejo que ya no existe en el servidor nuevo) con recarga automática. Opcional.
+- Renormalización CRLF/LF vía `.gitattributes` — `nginx.conf` se commiteó con CRLF (nginx en Alpine lo tolera, no rompe el deploy). Deuda de infra ya registrada, no atendida aquí.
+- Corregir en las instrucciones del proyecto (§4) la línea que dice que `apps/web` se sirve con `server.mjs`/Express: hoy es nginx.
