@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Building2, FileText, CalendarDays, Clock, ArrowRight, Loader2, AlertCircle, DollarSign, CheckCircle2, Hash } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { ManualConsecutiveValidation } from '../../lib/types';
+import { STATUS_CONFIG, ACQUISITION_CONFIG } from '../../lib/constants';
 import { ClientAutocomplete } from '../../components/ClientAutocomplete';
 
 // ──────────────────────────────────────────────────────────
@@ -21,6 +22,9 @@ interface ProposalFormData {
     manualAmount: string;
     consecutiveSource: 'AUTO' | 'MANUAL';
     manualConsecutive: string;
+    status: 'ELABORACION' | 'PROPUESTA';
+    acquisitionType: 'VENTA' | 'DAAS' | '';
+    closeDate: string;
 }
 
 /** Registro de historial para cruce de cuentas. */
@@ -103,6 +107,9 @@ export default function NewProposal() {
         manualAmount: '',
         consecutiveSource: 'AUTO',
         manualConsecutive: '',
+        status: 'ELABORACION',
+        acquisitionType: '',
+        closeDate: todayDateStr,
     });
 
     const [manualValidation, setManualValidation] = useState<ManualConsecutiveValidation | null>(null);
@@ -249,6 +256,9 @@ export default function NewProposal() {
                 validityDays: parseInt(formData.validityDays, 10),
                 validityDate: formData.validityDate,
                 manualAmount: formData.manualAmount ? parseFloat(formData.manualAmount) : undefined,
+                status: formData.status,
+                acquisitionType: formData.acquisitionType,
+                closeDate: formData.closeDate,
             };
 
             if (formData.consecutiveSource === 'MANUAL') {
@@ -272,7 +282,7 @@ export default function NewProposal() {
         formData.consecutiveSource === 'MANUAL' &&
         (formData.manualConsecutive === '' || isValidatingManual || manualValidation === null || !manualValidation.ok);
 
-    const isFormValid = formData.clientName.trim().length > 0 && !isManualBlocked;
+    const isFormValid = formData.clientName.trim().length > 0 && !isManualBlocked && formData.acquisitionType !== '' && formData.closeDate !== '';
     const hasNoConflicts = conflictHistory.length === 0;
     const isClientEmpty = formData.clientName.trim() === '';
 
@@ -358,6 +368,81 @@ export default function NewProposal() {
                                             onChange={handleFieldChange}
                                             required
                                             className="block w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-novo-primary/20 focus:border-novo-primary transition-all text-sm appearance-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Estado Inicial y Modo de Adquisición */}
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-gray-700 ml-1">Estado Inicial</label>
+                                        <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData(prev => ({ ...prev, status: 'ELABORACION' }))}
+                                                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                                                    formData.status === 'ELABORACION'
+                                                        ? 'bg-novo-primary text-white'
+                                                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {STATUS_CONFIG.ELABORACION.label}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData(prev => ({ ...prev, status: 'PROPUESTA' }))}
+                                                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                                                    formData.status === 'PROPUESTA'
+                                                        ? 'bg-novo-primary text-white'
+                                                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {STATUS_CONFIG.PROPUESTA.label}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-gray-700 ml-1">Modo de Adquisición</label>
+                                        <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData(prev => ({ ...prev, acquisitionType: prev.acquisitionType === 'VENTA' ? '' : 'VENTA' as const }))}
+                                                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                                                    formData.acquisitionType === 'VENTA'
+                                                        ? 'bg-novo-primary text-white'
+                                                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {ACQUISITION_CONFIG.VENTA.label}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData(prev => ({ ...prev, acquisitionType: prev.acquisitionType === 'DAAS' ? '' : 'DAAS' as const }))}
+                                                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                                                    formData.acquisitionType === 'DAAS'
+                                                        ? 'bg-novo-primary text-white'
+                                                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {ACQUISITION_CONFIG.DAAS.label}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700 ml-1">Fecha de Cierre</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                            <CalendarDays className="h-5 w-5 text-gray-400 group-focus-within:text-novo-primary transition-colors" />
+                                        </div>
+                                        <input
+                                            type="date"
+                                            name="closeDate"
+                                            value={formData.closeDate}
+                                            onChange={handleFieldChange}
+                                            required
+                                            className="block w-full pl-11 pr-4 py-3 bg-gray-50/50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-novo-primary/20 focus:border-novo-primary transition-all text-sm appearance-none"
                                         />
                                     </div>
                                 </div>
