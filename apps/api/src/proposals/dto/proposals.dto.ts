@@ -42,6 +42,14 @@ export class CreateProposalDto {
     @Min(1)
     @Max(99999)
     manualConsecutive?: number;
+
+    @IsOptional()
+    @IsIn([ProposalStatus.ELABORACION, ProposalStatus.PROPUESTA])
+    status?: ProposalStatus;
+
+    @IsOptional()
+    @IsEnum(AcquisitionType)
+    acquisitionType?: AcquisitionType;
 }
 
 /**

@@ -128,7 +128,8 @@ export class ProposalsService {
           issueDate: new Date(data.issueDate),
           validityDays: typeof data.validityDays === 'string' ? parseInt(data.validityDays, 10) : data.validityDays,
           validityDate: new Date(data.validityDate),
-          status: ProposalStatus.ELABORACION,
+          status: data.status ?? ProposalStatus.ELABORACION,
+          acquisitionType: data.acquisitionType,
           manualAmount: data.manualAmount,
         },
       });
