@@ -128,6 +128,7 @@ export class ProposalsService {
           issueDate: new Date(data.issueDate),
           validityDays: typeof data.validityDays === 'string' ? parseInt(data.validityDays, 10) : data.validityDays,
           validityDate: new Date(data.validityDate),
+          closeDate: new Date(data.closeDate),
           status: data.status ?? ProposalStatus.ELABORACION,
           acquisitionType: data.acquisitionType,
           manualAmount: data.manualAmount,

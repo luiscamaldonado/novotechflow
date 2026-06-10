@@ -26,6 +26,9 @@ export class CreateProposalDto {
     @IsDateString()
     validityDate: string;
 
+    @IsDateString()
+    closeDate: string;
+
     @IsOptional()
     @IsNumber()
     @Min(0)
