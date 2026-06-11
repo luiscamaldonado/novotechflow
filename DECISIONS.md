@@ -1593,3 +1593,69 @@ No se tocó el Dockerfile (ya copia el `nginx.conf` correcto), ni la directiva `
 - Captura de `vite:preloadError` (chunk de un deploy viejo que ya no existe en el servidor nuevo) con recarga automática. Opcional.
 - Renormalización CRLF/LF vía `.gitattributes` — `nginx.conf` se commiteó con CRLF (nginx en Alpine lo tolera, no rompe el deploy). Deuda de infra ya registrada, no atendida aquí.
 - Corregir en las instrucciones del proyecto (§4) la línea que dice que `apps/web` se sirve con `server.mjs`/Express: hoy es nginx.
+
+## ADR-039 — Alerta de precios unitarios sospechosos por moneda al entrar a construcción del documento
+
+**Fecha:** 2026-06-11
+**Estado:** Cerrado
+
+### Contexto
+La moneda es por escenario (`Scenario.currency`, default histórico COP), no por ítem. El costo tiene su propia moneda a nivel de ítem (`ProposalItem.costCurrency`), y el precio de venta en la moneda del escenario es un valor calculado por el pricing-engine (costo convertido por TRM + margen). El riesgo operativo: si un usuario configura un escenario en COP cuando los valores estaban pensados en USD, el número no cambia pero su significado se divide por la TRM (~4.000x). Un ítem que vale USD 50 queda como "COP 50" (unitario ridículamente bajo); el total puede verse grande por la cantidad y ocultar el error. Una propuesta así, llevada a PDF, es grave: un cliente puede exigir que se honre el precio bajo.
+
+La percepción del negocio es de **riesgo asimétrico**: vender por un precio ridículamente bajo es catastrófico e irreversible; cotizar ridículamente alto solo pierde el negocio y es auto-correctivo. Y casi todas las propuestas van en USD. Esto motivó dos frentes: prevención (cambiar los defaults a USD) y detección (alertar).
+
+### Decisión
+Se atacó el problema en tres piezas independientes (commits separados):
+
+**1. Defaults a USD (prevención).** El valor inicial de la moneda de costo en el formulario de ítems pasó de COP a USD (`useProposalBuilder.ts`), y el fallback de moneda al **crear** un escenario pasó de COP a USD (`scenarios.service.ts`, solo `createScenario`). Clonar escenario (`cloneScenario`) y versionar propuesta (`cloneProposal`) siguen **heredando** la moneda del origen a propósito; no se tocaron. El `@default("COP")` del schema Prisma se dejó intacto (es secundario: el servicio siempre escribe el campo).
+
+**2. Alerta de validación (detección).** Al entrar a la pantalla de construcción del documento (`ProposalDocBuilder`), el sistema evalúa los precios unitarios calculados y, si hay hallazgos, muestra un modal de aviso. La lógica es **asimétrica**: en escenario COP avisa de unitarios por **debajo** de un piso; en escenario USD avisa de unitarios por **encima** de un techo. No se buscan los casos inversos (alto en COP / bajo en USD) porque no delatan el error de moneda y solo serían ruido.
+
+**3. Umbrales configurables por admin.** Piso COP y techo USD son dos settings editables, respaldados por la tabla `AppSetting` (patrón clave-valor de ADR-026).
+
+Reglas de diseño que enmarcan la feature:
+- **Solo avisa, no bloquea.** Decisión explícita del dueño: un equipo comercial que choca con bloqueos aprende a despacharlos sin leer (alarm fatigue). Se acepta menos protección dura a cambio de no entorpecer el flujo.
+- **El modal interrumpe (no es banner).** Un banner en una pantalla cargada pasa desapercibido —justo el aviso que importa—; el modal obliga a mirar. Se acepta el costo de que pueda reaparecer.
+- **Tres reglas del modal:** no aparece si no hay hallazgos (entrada limpia = cero fricción); un único botón "Entendido, continuar" que cierra sin exigir corregir; se evalúa **una sola vez por carga** (flag `priceWarningEvaluatedRef`) y reaparece solo en una nueva entrada/recarga, no se redispara estando en la pantalla.
+- **Prominencia asimétrica:** los hallazgos COP-bajo (graves) van primero y en rojo; los USD-alto (tolerables) después y en ámbar.
+- **El check nombra escenario + ítem + valor + motivo** ("valor muy bajo/alto, verifícalo").
+- **Solo ítems con precio de venta real.** La validación recorre `ProcessedScenario.visibleItems`, que el pricing-engine ya construye excluyendo ítems diluidos y sub-ítems. No hay que filtrar nada: lo que llega tiene precio legítimo.
+- **No recalcula precios.** Consume el `unitSalePrice` que el engine ya calculó y solo lo compara contra los umbrales. La validación NO vive en el pricing-engine (no es un cálculo financiero, es una comparación), sino en `lib/priceValidation.ts`, siguiendo el patrón de `lib/dashboardValidation.ts`.
+- **Gate de UX puro:** no cambia datos, ni PDF, ni Excel.
+
+Defaults de umbral: piso **COP 50.000**, techo **USD 100.000**. Rangos de validación del DTO (solo para rechazar 0/negativos/absurdos): COP [1, 10.000.000], USD [1, 100.000.000]. Ambos enteros.
+
+El hook `usePriceThresholds` lee los umbrales una sola vez al montar (no refresca: cambian rara vez y aplican al recargar) y, ante fallo de red, devuelve los defaults de respaldo (50.000 / 100.000) en vez de null/0 —un umbral en 0 apagaría el check en silencio—.
+
+### Consecuencias
+- Caso de error en ítems muy caros: un umbral fijo no escala con la magnitud, así que un error de moneda en un ítem de valor enorme podría no caer bajo el piso. Se aceptó por KISS; el caso típico (equipo de USD 500–2.000 mal etiquetado queda en COP 500–2.000) cae muy por debajo del piso y se atrapa.
+- Falsos positivos legítimos: un accesorio barato real en COP por debajo del piso dispara el aviso. Tolerable porque no bloquea; el comercial lo cierra y sigue.
+- Caso "falta TRM" no diferenciado (V1 simple, decisión explícita): si un escenario está en COP con costos en USD y sin TRM liquidada, `convertCost` devuelve el costo sin convertir (número USD crudo), que cae bajo el piso y dispara "precio muy bajo" cuando el problema real es la TRM ausente. Con el default ahora en USD, ese caso es poco frecuente (requiere cambiar deliberadamente a COP sin liquidar TRM). Si en la práctica molesta, se agrega después distinguiendo el mensaje, lo que implicaría exponer un flag en `ProcessedScenario` (tocar `useProposalScenarios`).
+- Cambiar el default a USD reduce el caso COP-por-error pero sube el inverso (USD-por-error en quien sí quería COP); por eso el check cubre las dos direcciones (piso y techo).
+- La verificación de comportamiento (disparo del modal, asimetría de color, las tres reglas, panel admin) se hizo en navegador; `tsc --noEmit` solo garantiza compilación.
+
+### Archivos
+- `apps/web/src/hooks/useProposalBuilder.ts` (valor inicial de `costCurrency` de COP a USD en el form de ítems)
+- `apps/api/src/proposals/scenarios.service.ts` (fallback de `currency` de COP a USD solo en `createScenario`)
+- `apps/api/src/app-settings/app-settings.service.ts` (2 keys nuevas `cop_min_unit_price`/`usd_max_unit_price`, sus defaults, interface `PriceThresholds`, métodos `getPriceThresholds`/`updatePriceThresholds` con upsert idempotente)
+- `apps/api/src/app-settings/app-settings.controller.ts` (endpoints GET/PATCH `/app-settings/price-thresholds`; GET autenticado, PATCH admin)
+- `apps/api/src/app-settings/dto/update-price-thresholds.dto.ts` (nuevo; rangos COP [1, 10.000.000], USD [1, 100.000.000])
+- `apps/web/src/lib/priceValidation.ts` (nuevo; función pura `findProposalPriceWarnings`, asimétrica COP/USD, patrón de `dashboardValidation.ts`)
+- `apps/web/src/hooks/usePriceThresholds.ts` (nuevo; lectura única + `update`, fallback a defaults ante error)
+- `apps/web/src/components/proposals/PriceWarningModal.tsx` (nuevo; modal no bloqueante, COP-bajo rojo primero, USD-alto ámbar después)
+- `apps/web/src/pages/proposals/ProposalDocBuilder.tsx` (montaje: hook, hallazgos vía `useMemo`, `useEffect` de disparo único, modal hermano del `PdfPreviewModal`)
+- `apps/web/src/pages/admin/components/PriceThresholdsSettings.tsx` (nuevo; reusa `usePriceThresholds`, validación en espejo del backend)
+- `apps/web/src/pages/admin/SettingsAdmin.tsx` (monta `PriceThresholdsSettings` como card hermano de la sección "Sesión")
+
+### Commits
+- `9bf293c` — feat(items): default cost currency to USD in item form
+- `e1db177` — feat(scenarios): default sale currency to USD on creation
+- `<hash C>` — feat(app-settings): add price-thresholds endpoint for unit price validation
+- `c7912c4` — feat(proposals): add price validation logic and thresholds hook
+- `c0c0fdb` — feat(proposals): warn on suspicious unit prices when entering document builder
+- `d6f5801` — feat(admin): add price thresholds settings panel
+
+### Pendientes
+- Distinguir el caso "falta TRM" del de "precio sospechoso" en el aviso (hoy un escenario COP con costos USD sin TRM dispara "precio muy bajo" engañoso). Requiere exponer un flag en `ProcessedScenario`. No implementado; poco frecuente con el default en USD.
+- Umbral por tipo de ítem (un mouse y un servidor tienen pisos reales distintos). Descartado por YAGNI; un piso global basta hasta que un caso lo exija.
+- Evaluar si el modal, al reaparecer en cada entrada con un falso positivo legítimo, genera fricción suficiente para justificar una variante más persistente-pero-no-bloqueante. Solo si la práctica lo muestra.
