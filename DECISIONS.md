@@ -1650,7 +1650,7 @@ El hook `usePriceThresholds` lee los umbrales una sola vez al montar (no refresc
 ### Commits
 - `9bf293c` — feat(items): default cost currency to USD in item form
 - `e1db177` — feat(scenarios): default sale currency to USD on creation
-- `<hash C>` — feat(app-settings): add price-thresholds endpoint for unit price validation
+- `0497daf` — feat(app-settings): add price-thresholds endpoint for unit price validation
 - `c7912c4` — feat(proposals): add price validation logic and thresholds hook
 - `c0c0fdb` — feat(proposals): warn on suspicious unit prices when entering document builder
 - `d6f5801` — feat(admin): add price thresholds settings panel
