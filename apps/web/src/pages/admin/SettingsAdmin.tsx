@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Loader2, CheckCircle2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../store/authStore';
+import PriceThresholdsSettings from './components/PriceThresholdsSettings';
 
 /** Mínimo de minutos permitido para inactividad (espejo del backend). */
 const MIN_INACTIVITY_MINUTES = 2;
@@ -159,6 +160,11 @@ export default function SettingsAdmin() {
                         </button>
                     </div>
                 </div>
+            </div>
+
+            {/* Card: Validación de precios */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <PriceThresholdsSettings />
             </div>
         </div>
     );
