@@ -20,7 +20,7 @@ export function useProposalBuilder(proposalId: string | undefined) {
         partNumber: '',
         quantity: 1,
         unitCost: '',
-        costCurrency: 'COP',
+        costCurrency: 'USD',
         marginPct: 20,
         unitPrice: '',
         technicalSpecs: {},
