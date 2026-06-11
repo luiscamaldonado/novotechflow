@@ -10,8 +10,20 @@ export const MAINTENANCE_BANNER_MESSAGE_KEY = 'maintenance_banner_message';
 /** Key del flag on/off del banner de mantenimiento. */
 export const MAINTENANCE_BANNER_ACTIVE_KEY = 'maintenance_banner_active';
 
+/** Key del piso mínimo de precio unitario en COP (alerta de validación). */
+export const COP_MIN_UNIT_PRICE_KEY = 'cop_min_unit_price';
+
+/** Key del techo máximo de precio unitario en USD (alerta de validación). */
+export const USD_MAX_UNIT_PRICE_KEY = 'usd_max_unit_price';
+
 /** Default timeout in minutes when no setting exists yet */
 const DEFAULT_INACTIVITY_MINUTES = 5;
+
+/** Default del piso COP cuando no existe el registro aún. */
+const DEFAULT_COP_MIN_UNIT_PRICE = 50000;
+
+/** Default del techo USD cuando no existe el registro aún. */
+const DEFAULT_USD_MAX_UNIT_PRICE = 100000;
 
 /**
  * @class AppSettingsService
@@ -22,6 +34,12 @@ const DEFAULT_INACTIVITY_MINUTES = 5;
 export interface MaintenanceBanner {
   message: string;
   active: boolean;
+}
+
+/** Umbrales de validación de precio unitario expuestos a la app. */
+export interface PriceThresholds {
+  copMinUnitPrice: number;
+  usdMaxUnitPrice: number;
 }
 
 @Injectable()
@@ -117,5 +135,60 @@ export class AppSettingsService {
     });
 
     return { message, active };
+  }
+
+  /**
+   * Obtiene los umbrales de validación de precio unitario.
+   * Crea ambas keys con sus defaults si no existen (idempotente).
+   */
+  async getPriceThresholds(): Promise<PriceThresholds> {
+    const copSetting = await this.prisma.appSetting.upsert({
+      where: { key: COP_MIN_UNIT_PRICE_KEY },
+      update: {},
+      create: {
+        key: COP_MIN_UNIT_PRICE_KEY,
+        value: String(DEFAULT_COP_MIN_UNIT_PRICE),
+        description: 'Piso m\u00ednimo de precio unitario en COP para alertar valores sospechosamente bajos',
+      },
+    });
+
+    const usdSetting = await this.prisma.appSetting.upsert({
+      where: { key: USD_MAX_UNIT_PRICE_KEY },
+      update: {},
+      create: {
+        key: USD_MAX_UNIT_PRICE_KEY,
+        value: String(DEFAULT_USD_MAX_UNIT_PRICE),
+        description: 'Techo m\u00e1ximo de precio unitario en USD para alertar valores sospechosamente altos',
+      },
+    });
+
+    return {
+      copMinUnitPrice: Number(copSetting.value),
+      usdMaxUnitPrice: Number(usdSetting.value),
+    };
+  }
+
+  /**
+   * Actualiza los umbrales de validación de precio unitario.
+   * @param copMinUnitPrice — piso COP (ya validado por DTO).
+   * @param usdMaxUnitPrice — techo USD (ya validado por DTO).
+   * @param userId — ID del admin que realiza el cambio (audit trail).
+   */
+  async updatePriceThresholds(
+    copMinUnitPrice: number,
+    usdMaxUnitPrice: number,
+    userId: string,
+  ): Promise<PriceThresholds> {
+    await this.prisma.appSetting.update({
+      where: { key: COP_MIN_UNIT_PRICE_KEY },
+      data: { value: String(copMinUnitPrice), updatedById: userId },
+    });
+
+    await this.prisma.appSetting.update({
+      where: { key: USD_MAX_UNIT_PRICE_KEY },
+      data: { value: String(usdMaxUnitPrice), updatedById: userId },
+    });
+
+    return { copMinUnitPrice, usdMaxUnitPrice };
   }
 }

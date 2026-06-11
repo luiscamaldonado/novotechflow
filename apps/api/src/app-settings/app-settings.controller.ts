@@ -6,7 +6,8 @@ import { AdminGuard } from '../common/guards/admin.guard';
 import { AppSettingsService } from './app-settings.service';
 import { UpdateInactivityTimeoutDto } from './dto/update-inactivity-timeout.dto';
 import { UpdateMaintenanceBannerDto } from './dto/update-maintenance-banner.dto';
-import type { MaintenanceBanner } from './app-settings.service';
+import { UpdatePriceThresholdsDto } from './dto/update-price-thresholds.dto';
+import type { MaintenanceBanner, PriceThresholds } from './app-settings.service';
 
 /** Typed request after JWT authentication — mirrors the pattern in users.controller.ts */
 interface AuthenticatedRequest {
@@ -64,6 +65,26 @@ export class AppSettingsController {
     return this.appSettingsService.updateMaintenanceBanner(
       dto.message,
       dto.active,
+      req.user.id,
+    );
+  }
+
+  @Get('price-thresholds')
+  @ApiOperation({ summary: 'Obtener umbrales de validaci\u00f3n de precio unitario' })
+  async getPriceThresholds(): Promise<PriceThresholds> {
+    return this.appSettingsService.getPriceThresholds();
+  }
+
+  @Patch('price-thresholds')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Actualizar umbrales de precio unitario (solo admin)' })
+  async updatePriceThresholds(
+    @Body() dto: UpdatePriceThresholdsDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<PriceThresholds> {
+    return this.appSettingsService.updatePriceThresholds(
+      dto.copMinUnitPrice,
+      dto.usdMaxUnitPrice,
       req.user.id,
     );
   }
