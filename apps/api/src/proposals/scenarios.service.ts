@@ -72,7 +72,7 @@ export class ScenariosService {
       data: {
         proposalId,
         name: data.name,
-        currency: data.currency || 'COP',
+        currency: data.currency || 'USD',
         conversionTrm: data.conversionTrm ?? undefined,
         description: data.description ? sanitizePlainText(data.description) : undefined,
         sortOrder: nextOrder
