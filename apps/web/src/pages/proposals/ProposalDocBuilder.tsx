@@ -15,6 +15,9 @@ import { useProposalScenarios } from '../../hooks/useProposalScenarios';
 import { consolidateTechnicalItems } from '../../lib/consolidateTechnicalItems';
 import { useAuthStore } from '../../store/authStore';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
+import PriceWarningModal from '../../components/proposals/PriceWarningModal';
+import { usePriceThresholds } from '../../hooks/usePriceThresholds';
+import { findProposalPriceWarnings } from '../../lib/priceValidation';
 import { api } from '../../lib/api';
 import { validateImageFile, ACCEPT_IMAGES } from '../../lib/file-validation';
 import type { ProposalDetail } from '../../lib/types';
@@ -38,12 +41,30 @@ export default function ProposalDocBuilder() {
         createBlock, updateBlock, deleteBlock, uploadImage,
     } = useProposalPages(id);
 
-    const { processedScenarios } = useProposalScenarios(id);
+    const { processedScenarios, loading: scenariosLoading } = useProposalScenarios(id);
+    const { thresholds } = usePriceThresholds();
 
     const consolidatedTechCount = useMemo(
         () => consolidateTechnicalItems(processedScenarios).items.length,
         [processedScenarios],
     );
+
+    const priceWarnings = useMemo(
+        () => findProposalPriceWarnings(processedScenarios, thresholds),
+        [processedScenarios, thresholds],
+    );
+
+    const [showPriceWarning, setShowPriceWarning] = useState(false);
+    const priceWarningEvaluatedRef = useRef(false);
+
+    useEffect(() => {
+        if (scenariosLoading) return;
+        if (priceWarningEvaluatedRef.current) return;
+        priceWarningEvaluatedRef.current = true;
+        if (priceWarnings.length > 0) {
+            setShowPriceWarning(true);
+        }
+    }, [scenariosLoading, priceWarnings]);
 
 
     const movePage = (index: number, direction: 'up' | 'down') => {
@@ -286,6 +307,12 @@ export default function ProposalDocBuilder() {
                         proposalVars={proposalVars}
                         processedScenarios={processedScenarios}
                         enableExcelExport
+                    />
+                )}
+                {showPriceWarning && (
+                    <PriceWarningModal
+                        scenarioWarnings={priceWarnings}
+                        onClose={() => setShowPriceWarning(false)}
                     />
                 )}
             </AnimatePresence>
