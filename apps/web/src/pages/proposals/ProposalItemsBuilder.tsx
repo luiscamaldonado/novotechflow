@@ -10,6 +10,7 @@ import {
 import { cn } from '../../lib/utils';
 import type { ProposalItem, ProposalDetail } from '../../lib/types';
 import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../../lib/constants';
+import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '../../lib/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
@@ -133,25 +134,21 @@ export default function ProposalItemsBuilder() {
             }
             const flete = fleteValue;
             
-            const landedCost = cost * (1 + (flete / 100));
+            const landedCost = calculateParentLandedCost(cost, flete);
 
             // Disparar cálculos bidireccionales de manera robusta
             if (name === 'unitCost' || name === 'marginPct' || name === 'internal.fletePct' || name === 'internal.proveedor') {
-                if (margin < 100 && landedCost > 0) {
-                    const priceVal = landedCost / (1 - (margin / 100));
+                if (margin < MAX_MARGIN && landedCost > 0) {
+                    const priceVal = calculateUnitPrice(landedCost, margin);
                     next.unitPrice = priceVal.toFixed(2);
                 } else if (landedCost === 0) {
                     next.unitPrice = ''; // En caso de que no haya costo, limpiamos
                 }
             } else if (name === 'unitPrice') {
                 const price = Number(value);
-                if (price > 0 && landedCost > 0) {
-                    // Calculamos margen en base a qué tan grande es el precio vs landed cost
-                    const marginVal = ((price - landedCost) / price) * 100;
-                    next.marginPct = marginVal.toFixed(2);
-                } else if (price > 0 && landedCost === 0) {
-                    // Si ya le puso precio de venta y no hay costo, el margen teóricamente es 100%
-                    next.marginPct = '100.00';
+                // calculateMarginFromPrice devuelve 0 si price <= 0, y 100 si landedCost === 0
+                if (price > 0) {
+                    next.marginPct = calculateMarginFromPrice(price, landedCost).toFixed(2);
                 }
             }
 
@@ -462,7 +459,7 @@ export default function ProposalItemsBuilder() {
                                                     {(() => {
                                                         const cost = Number(itemForm.unitCost || 0);
                                                         const flete = Number(itemForm.internalCosts?.fletePct || 0);
-                                                        const nuevoCosto = cost * (1 + (flete / 100));
+                                                        const nuevoCosto = calculateParentLandedCost(cost, flete);
                                                         return nuevoCosto > 0 ? `$${nuevoCosto.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
                                                     })()}
                                                 </div>
@@ -596,7 +593,7 @@ export default function ProposalItemsBuilder() {
                                                             ? 'bg-indigo-100 text-indigo-600'
                                                             : 'bg-slate-100 text-slate-500'
                                                     }`}>{i.costCurrency || 'COP'}</span>
-                                                    <span className="font-mono text-[13px] text-slate-400 tracking-tighter">${(Number(i.unitCost) * (1 + Number(i.internalCosts?.fletePct || 0) / 100)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    <span className="font-mono text-[13px] text-slate-400 tracking-tighter">${calculateParentLandedCost(Number(i.unitCost), Number(i.internalCosts?.fletePct || 0)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-8 text-center">
