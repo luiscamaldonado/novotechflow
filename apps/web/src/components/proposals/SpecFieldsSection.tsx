@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Monitor, Package, FileText, Server, Settings, type LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { SPEC_FIELDS_BY_ITEM_TYPE } from '../../lib/constants';
+import { SPEC_FIELDS_BY_ITEM_TYPE, isSpecFieldVisible } from '../../lib/constants';
 import type { TechnicalSpecs } from '../../lib/types';
 import AutocompleteInput from '../AutocompleteInput';
 import type { AutocompleteSuggestion } from '../AutocompleteInput';
@@ -134,7 +134,7 @@ interface SpecFieldsSectionProps {
     /** Especificaciones técnicas actuales del formulario */
     technicalSpecs: TechnicalSpecs;
     /** Callback al cambiar un campo de spec (name="spec.fieldName") */
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
     /** Callback al seleccionar una sugerencia de autocompletado */
     onSelectSuggestion: (field: string, value: string) => void;
     /** Fetch de sugerencias desde el backend (fieldName resuelto, query) */
@@ -167,7 +167,8 @@ export default function SpecFieldsSection({
     const fieldFetchFns = useMemo(() => {
         if (!specFields) return {};
         const fns: Record<string, (q: string) => Promise<AutocompleteSuggestion[]>> = {};
-        for (const field of Object.keys(specFields)) {
+        for (const [field, def] of Object.entries(specFields)) {
+            if (def.input === 'select' || def.input === 'text') continue;
             const resolvedName = resolveFieldName(itemType, field);
             fns[field] = (query: string) => fetchSuggestions(resolvedName, query);
         }
@@ -205,9 +206,16 @@ export default function SpecFieldsSection({
                 </div>
             </div>
 
-            {/* Campos de especificación con autocompletado */}
-            {Object.entries(specFields).map(([field, spec]) => {
+            {/* Campos de especificación */}
+            {Object.entries(specFields)
+                .filter(([, spec]) => isSpecFieldVisible(spec, technicalSpecs as Record<string, string | undefined>))
+                .map(([field, spec]) => {
                 const currentVal = (technicalSpecs as Record<string, string>)?.[field] || '';
+                const inputClasses = cn(
+                    'w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none',
+                    theme.focusColor,
+                    'disabled:opacity-60 disabled:cursor-not-allowed',
+                );
 
                 return (
                     <div key={field} className="space-y-1.5 group">
@@ -216,21 +224,46 @@ export default function SpecFieldsSection({
                             `group-hover:${theme.titleColor.replace('text-', 'text-')}`
                         )}>
                             {spec.label}
+                            {spec.required && <span className="text-red-400 ml-0.5">*</span>}
                         </label>
-                        <AutocompleteInput
-                            name={`spec.${field}`}
-                            value={currentVal}
-                            onChange={onChange}
-                            onSelect={(val) => onSelectSuggestion(field, val)}
-                            fetchSuggestions={fieldFetchFns[field]}
-                            placeholder={`Escriba ${spec.label}...`}
-                            disabled={isReadOnly}
-                            className={cn(
-                                'w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none',
-                                theme.focusColor,
-                                'disabled:opacity-60 disabled:cursor-not-allowed'
-                            )}
-                        />
+
+                        {spec.input === 'select' ? (
+                            <select
+                                name={`spec.${field}`}
+                                value={currentVal}
+                                onChange={onChange}
+                                required={spec.required}
+                                disabled={isReadOnly}
+                                className={cn(inputClasses, 'appearance-none cursor-pointer')}
+                            >
+                                <option value="">Seleccione...</option>
+                                {spec.options?.map((opt) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                            </select>
+                        ) : spec.input === 'text' ? (
+                            <input
+                                type="text"
+                                name={`spec.${field}`}
+                                value={currentVal}
+                                onChange={onChange}
+                                required={spec.required}
+                                disabled={isReadOnly}
+                                placeholder={`Escriba ${spec.label}...`}
+                                className={inputClasses}
+                            />
+                        ) : (
+                            <AutocompleteInput
+                                name={`spec.${field}`}
+                                value={currentVal}
+                                onChange={onChange}
+                                onSelect={(val) => onSelectSuggestion(field, val)}
+                                fetchSuggestions={fieldFetchFns[field]}
+                                placeholder={`Escriba ${spec.label}...`}
+                                disabled={isReadOnly}
+                                className={inputClasses}
+                            />
+                        )}
                     </div>
                 );
             })}

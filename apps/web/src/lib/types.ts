@@ -84,10 +84,29 @@ export interface TechnicalSpecs {
     seguridad?: string;
     garantiaBateria?: string;
     garantiaEquipo?: string;
+    estado?: string;
+    numeroParte?: string;
     tipo?: string;
     garantia?: string;
     responsable?: string;
     unidadMedida?: string;
+}
+
+/** Definición de un campo de ficha técnica (data-driven). */
+export interface SpecFieldDef {
+    label: string;
+    cat: string;
+    /** Tipo de input. Si se omite: 'autocomplete' (comportamiento actual). */
+    input?: 'autocomplete' | 'select' | 'text';
+    /** Opciones cerradas para input 'select'. */
+    options?: readonly string[];
+    /** Si true, el input lleva el atributo nativo required. */
+    required?: boolean;
+    /**
+     * Visibilidad condicional: el campo solo se muestra si specs[field]
+     * está vacío (datos legacy) o es exactamente igual a `equals`.
+     */
+    visibleWhen?: { field: string; equals: string };
 }
 
 /** Costos internos asociados a un ítem. */

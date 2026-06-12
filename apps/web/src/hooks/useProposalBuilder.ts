@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { ProposalItem, ProposalDetail } from '../lib/types';
 import type { AutocompleteSuggestion } from '../components/AutocompleteInput';
-import { MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../lib/constants';
+import { MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, SPEC_FIELDS_BY_ITEM_TYPE, isSpecFieldVisible } from '../lib/constants';
 
 /** Estado y lógica del builder de propuestas (carga de datos + CRUD de items). */
 export function useProposalBuilder(proposalId: string | undefined) {
@@ -74,6 +74,17 @@ export function useProposalBuilder(proposalId: string | undefined) {
             const deliveryDaysRaw = itemForm.deliveryDays;
             const deliveryDays = deliveryDaysRaw != null ? Number(deliveryDaysRaw) : null;
 
+            // Excluir specs ocultos por visibleWhen (ej: garantías cuando estado no es Nuevo).
+            // El PATCH reemplaza technicalSpecs completo: lo que no viaja, no persiste.
+            const specFieldsDef = SPEC_FIELDS_BY_ITEM_TYPE[itemForm.itemType] ?? {};
+            const specsRecord = (itemForm.technicalSpecs ?? {}) as Record<string, string | undefined>;
+            const cleanedSpecs = Object.fromEntries(
+                Object.entries(specsRecord).filter(([key]) => {
+                    const def = specFieldsDef[key];
+                    return !def || isSpecFieldVisible(def, specsRecord);
+                }),
+            );
+
             const payload = {
                 itemType: itemForm.itemType,
                 name: itemForm.name,
@@ -87,7 +98,7 @@ export function useProposalBuilder(proposalId: string | undefined) {
                 unitPrice: Number(itemForm.unitPrice) || 0,
                 isTaxable: itemForm.isTaxable,
                 deliveryDays: Number.isFinite(deliveryDays) ? deliveryDays : undefined,
-                technicalSpecs: itemForm.technicalSpecs,
+                technicalSpecs: cleanedSpecs,
                 internalCosts: itemForm.internalCosts,
             };
 

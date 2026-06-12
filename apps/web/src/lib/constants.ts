@@ -8,7 +8,7 @@ import {
     Cpu, DollarSign,
     Image as ImageIcon,
 } from 'lucide-react';
-import type { ProposalStatus } from './types';
+import type { ProposalStatus, SpecFieldDef } from './types';
 
 /** Tasa de IVA colombiano (19%). */
 export const IVA_RATE = 0.19;
@@ -38,9 +38,16 @@ export const ITEM_TYPE_LABELS: Record<string, string> = {
     INFRA_SERVICES: 'Servicios de Infraestructura',
 } as const;
 
+/** Valor de estado que mantiene visibles las garantías de PCS. */
+export const ESTADO_NUEVO = 'Nuevo';
+/** Opciones cerradas del campo estado en la ficha PCS. */
+export const ESTADO_OPTIONS: readonly string[] = [ESTADO_NUEVO, 'Remanufacturado', 'Open Box', 'Usado'];
+
 /** Mapas de especificaciones técnicas por categoría de ítem. */
-export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, { label: string; cat: string }>> = {
+export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, SpecFieldDef>> = {
     PCS: {
+        estado: { label: 'Estado', cat: 'ESTADO', input: 'select', options: ESTADO_OPTIONS, required: true },
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         formato: { label: 'Formato', cat: 'FORMATO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
         modelo: { label: 'Modelo', cat: 'MODELO' },
@@ -52,8 +59,8 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, { label: st
         pantalla: { label: 'Pantalla', cat: 'PANTALLA' },
         network: { label: 'Network', cat: 'NETWORK' },
         seguridad: { label: 'Seguridad', cat: 'SEGURIDAD' },
-        garantiaBateria: { label: 'Garant\u00eda Bater\u00eda', cat: 'GARANTIA_BATERIA' },
-        garantiaEquipo: { label: 'Garant\u00eda Equipo', cat: 'GARANTIA_EQUIPO' },
+        garantiaBateria: { label: 'Garant\u00eda Bater\u00eda', cat: 'GARANTIA_BATERIA', visibleWhen: { field: 'estado', equals: ESTADO_NUEVO } },
+        garantiaEquipo: { label: 'Garant\u00eda Equipo', cat: 'GARANTIA_EQUIPO', visibleWhen: { field: 'estado', equals: ESTADO_NUEVO } },
     },
     ACCESSORIES: {
         tipo: { label: 'Tipo', cat: 'ACC_TIPO' },
@@ -81,6 +88,16 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, { label: st
         unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
     },
 } as const;
+
+/**
+ * Determina si un spec field es visible según su regla visibleWhen.
+ * Campo controlador vacío (legacy) cuenta como visible.
+ */
+export function isSpecFieldVisible(def: SpecFieldDef, specs: Record<string, string | undefined>): boolean {
+    if (!def.visibleWhen) return true;
+    const controllerValue = specs[def.visibleWhen.field]?.trim() ?? '';
+    return controllerValue === '' || controllerValue === def.visibleWhen.equals;
+}
 
 // ── Proposal Document Builder constants ──────────────────────
 
