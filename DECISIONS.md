@@ -1700,3 +1700,43 @@ Hallazgos del diagnóstico que condicionaron el diseño:
 
 ### Pendientes
 - Deuda preexistente detectada en el diagnóstico (no introducida por esta feature): `handleItemChange` en `ProposalItemsBuilder.tsx` duplica fórmulas del pricing-engine (precio desde landed cost + margen y el cálculo inverso de margen), en violación de CONVENTIONS §J. **Resuelto en `60546fb`**: las tres fórmulas del handler ahora llaman a `calculateParentLandedCost`/`calculateUnitPrice`/`calculateMarginFromPrice` (guard con `MAX_MARGIN` en vez del 100 mágico), y se eliminaron dos duplicaciones adicionales de landed cost detectadas en el mismo archivo (display "Nuevo Costo Unitario" y celda de landed en la tabla de ítems).
+
+## ADR-041 — Auditoría de versiones del entorno: Node 22 en producción, pin de Prisma CLI y CI en runtime node24
+**Fecha:** 2026-06-12
+**Estado:** Cerrado
+### Contexto
+Una sospecha de drift entre el entorno local y producción motivó una auditoría de versiones en cuatro planos: máquina local, repo (package.json/engines), Dockerfiles (= runtime de Railway) y workflows de CI. La sospecha resultó invertida: producción no estaba adelante del local salvo en Postgres (15 local vs 18 en Railway); lo crítico estaba en otro lado. Hallazgos de prioridad inmediata (P0):
+- **Node 20 EOL.** Ambos Dockerfiles usaban `node:20-alpine`; Node 20 llegó a End-of-Life el 2026-04-30, dejando el runtime de producción sin parches de seguridad. El entorno local ya corría Node 22 (LTS hasta abril 2027).
+- **Prisma CLI sin pin en el runner del api.** El stage de producción ejecutaba `RUN npm install prisma ts-node typescript` sin versión. En la práctica resolvía a 5.10.2 solo por una carambola de tres condiciones: el `package.json` copiado al runner declara `"prisma": "5.10.2"` exacto en devDependencies y npm respeta ese rango. Protección implícita y frágil: un cambio a `^5.10.2` o un reorden del Dockerfile la rompería en silencio y `migrate deploy` correría con un CLI de otra major. Además ts-node y typescript se instalaban sin que el CMD los use (el seed nunca corre en producción).
+- **CI roto y desactualizado.** El job de Lint & Type-check moría en el setup por doble declaración de la versión de pnpm (`version: 9` en los workflows vs `packageManager: pnpm@9.0.0` en el package.json raíz; `pnpm/action-setup` rechaza la duplicidad). Adicionalmente, GitHub deprecó las actions con runtime Node 20 y las fuerza a Node 24 desde el 2026-06-16. Dos fallas más estaban ocultas en cascada porque los jobs nunca llegaban a ejecutarse: el typecheck del API fallaba por ausencia de `prisma generate` (los enums del schema no existen en `@prisma/client` sin generar el cliente; el Dockerfile lo hace, el CI no lo hacía), y las actions de Docker (`setup-buildx@v3`, `build-push@v6`) también corrían en Node 20 — warning visible solo cuando el job `docker-build` corrió por primera vez.
+### Decisión
+1. **Pin explícito del Prisma CLI en el runner:** `RUN npm install prisma@5.10.2`, eliminando ts-node y typescript de la imagen de producción. Convierte la protección accidental en contrato explícito y aliviana la imagen.
+2. **CI con fuente única de versión de pnpm:** se elimina `version: 9` de los workflows; `pnpm/action-setup@v6` lee `packageManager` del package.json. Una sola fuente de verdad para futuros upgrades de pnpm.
+3. **Actions en runtime node24:** `actions/checkout@v6`, `pnpm/action-setup@v6`, `actions/setup-node@v6` (con `node-version: 22`), `docker/setup-buildx-action@v4` y `docker/build-push-action@v7`, en `ci.yml` y `pr-check.yml`. Cierre antes del deadline del 2026-06-16.
+4. **`pnpm exec tsc` en vez de `npx tsc`** en los typechecks de CI, alineado con la regla del proyecto (npx resuelve a global y rompe versiones pinneadas).
+5. **Step `Generate Prisma Client` en CI** (`pnpm exec prisma generate` con `working-directory: apps/api`) antes del typecheck y del build, espejo del paso equivalente del Dockerfile. Sin esto el cliente generado no existe en el runner fresco y los enums del schema no compilan.
+6. **`node:22-alpine` en los tres stages** que usaban Node: builder y runner del api, builder del web. El runner del web (nginx) no cambia.
+7. **Política de actualización adoptada:** un cambio por día con validación completa (build + deploy + smoke test) antes del siguiente; orden de dependencias respetado (fix de CI antes de pnpm 10; NestJS 11 antes de TypeScript 6 en el api); Prisma 5→7 se trata como proyecto aparte con ADR propio por su riesgo de regresión sobre el pricing-engine.
+### Consecuencias
+- Primer run completamente verde del CI en la historia del repo: el typecheck del API, el build de turbo y la validación de imágenes Docker se ejecutaron por primera vez. El CI ahora valida lo que dice validar.
+- Runtime de producción en Node 22.22.3 (verificado con `node -v` en la Console de Railway), un patch por delante del local (22.22.2). Paridad real entre entornos y soporte LTS hasta abril 2027.
+- Imagen del runner del api más liviana (sin ts-node/typescript).
+- El warning `Prisma failed to detect the libssl/openssl version` del stage builder persiste: no era cuestión de la versión de Node sino de que el builder no instala el paquete `openssl` (solo el runner hace `apk add`). Cosmético comprobado: el cliente se genera bien y el binaryTarget de runtime resuelve correcto (`linux-musl-openssl-3.0.x`).
+- El cambio de imagen base invalidó el cache de Docker una vez (build lento puntual); los siguientes builds recuperan cache normal.
+### Archivos
+- `apps/api/Dockerfile` (pin prisma@5.10.2 en runner; node:22-alpine en builder y runner)
+- `apps/web/Dockerfile` (node:22-alpine en builder)
+- `.github/workflows/ci.yml` (actions node24, fuente única pnpm, pnpm exec, step Generate Prisma Client en lint y build, Docker actions v4/v7)
+- `.github/workflows/pr-check.yml` (mismos cambios en su único job)
+### Commits
+- `7f53802` — fix(api): pin prisma cli to 5.10.2 in runner stage
+- `ada33d6` — fix(ci): update actions to node24, single pnpm version source, pnpm exec
+- `b4ad203` — fix(ci): generate prisma client before typecheck and build
+- `326bbe9` — fix(ci): update docker actions to node24
+- `33ae8a8` — chore(docker): bump node 20 to 22 in api and web dockerfiles
+### Pendientes
+- **P1 — Postgres:** local 15 → 18 en docker-compose (volumen nuevo + seed; datos locales de prueba) y aplicar el minor 18.4 disponible en Railway (backup previo, hora valle). Hacer antes de la próxima migración de schema.
+- **P2 (orden):** pnpm 9→10 (atención a `onlyBuiltDependencies` por bcrypt; el fix de CI prerequisito ya está hecho), NestJS 10→11 (antes del salto ESM de v12; unifica jwt/passport hoy mezclados en 11), ESLint 8→9 en el api, TypeScript unificado a 6.0.x (después de Nest 11), Turborepo 1→2 vía codemod oficial, quitar el logging `prisma:query` de producción, `apk add openssl` en el stage builder si se quiere silenciar el warning, pin de versión de nginx, limpiar `version:` obsoleta de docker-compose.
+- **P3 — Prisma 5→6→7:** proyecto aparte con ADR propio (requiere `prisma.config.ts` y regresión seria del pricing-engine). El pin de este ADR compra tiempo; no acumular más de un trimestre.
+- `pr-check.yml` queda validado en teoría (mismos cambios que ci.yml) pero su primer run real será en el próximo PR.
+- Renormalización CRLF/LF vía `.gitattributes` sigue pendiente (warnings cosméticos en los commits de este ADR).
