@@ -1659,3 +1659,44 @@ El hook `usePriceThresholds` lee los umbrales una sola vez al montar (no refresc
 - Distinguir el caso "falta TRM" del de "precio sospechoso" en el aviso (hoy un escenario COP con costos USD sin TRM dispara "precio muy bajo" engañoso). Requiere exponer un flag en `ProcessedScenario`. No implementado; poco frecuente con el default en USD.
 - Umbral por tipo de ítem (un mouse y un servidor tienen pisos reales distintos). Descartado por YAGNI; un piso global basta hasta que un caso lo exija.
 - Evaluar si el modal, al reaparecer en cada entrada con un falso positivo legítimo, genera fricción suficiente para justificar una variante más persistente-pero-no-bloqueante. Solo si la práctica lo muestra.
+
+## ADR-040 — Spec fields data-driven extendidos (select, required, visibilidad condicional): campos Estado y Número de Parte en PCS
+**Fecha:** 2026-06-12
+**Estado:** Cerrado
+### Contexto
+La ficha técnica automatizada es data-driven: `SPEC_FIELDS_BY_ITEM_TYPE` (`constants.ts`) define los campos por categoría y `SpecFieldsSection` los renderiza. Hasta ahora la definición de campo era plana (`{ label, cat }`) y todos los campos se renderizaban como `AutocompleteInput` contra el endpoint de sugerencias de `SpecOption`. El negocio necesita en PCS: un campo **Estado** (Nuevo, Remanufacturado, Open Box, Usado) obligatorio y con opciones cerradas —no texto libre—, y un campo **Número de Parte** de texto libre. Regla: cuando el estado es distinto de Nuevo, las garantías (Garantía Batería y Garantía Equipo) no aplican y no deben aparecer ni en el formulario ni en la cotización PDF.
+
+Hallazgos del diagnóstico que condicionaron el diseño:
+- `TechnicalSpecSheet` (ficha del PDF) itera la misma constante y **solo imprime specs con valor** → los campos nuevos salen solos en el PDF y un spec sin valor no se imprime.
+- `consolidateTechnicalItems.buildSpecsHash` hashea **todos** los specs con valor para detectar variantes (Config A/B). Garantías "zombi" guardadas en ítems con estado ≠ Nuevo generarían variantes falsas de ítems visualmente idénticos.
+- El DTO del backend valida `technicalSpecs` solo como `@IsObject()` `Record<string, string>` (`forbidNonWhitelisted` aplica a propiedades del DTO, no a keys internas del objeto) → keys nuevas pasan sin cambios de backend.
+- Existe un `partNumber` a nivel de ítem cableado end-to-end (schema Prisma, DTOs, service, hook) pero **sin input en la UI** y por fuera de `technicalSpecs`: no saldría en la ficha del PDF ni entraría al hash de variantes.
+
+### Decisión
+1. **Tipo de campo extendido.** Nueva interfaz `SpecFieldDef` en `lib/types.ts`: `{ label, cat, input?: 'autocomplete' | 'select' | 'text', options?, required?, visibleWhen?: { field, equals } }`. `input` omitido = `'autocomplete'` → cero impacto en los campos existentes de todas las categorías.
+2. **Estado** como `select` `required` con opciones cerradas (`ESTADO_OPTIONS`; `ESTADO_NUEVO = 'Nuevo'` como constante con nombre). No consulta el endpoint de sugerencias. **Número de Parte** como `text` plano (no es uno de los 17 fieldNames válidos de `SpecOption` en BD). Ambos encabezan el objeto PCS, en ese orden: el orden de inserción de las keys define el orden visual tanto del formulario como de la ficha en el PDF.
+3. **Garantías condicionales.** `garantiaBateria` y `garantiaEquipo` llevan `visibleWhen: { field: 'estado', equals: ESTADO_NUEVO }`. Regla de visibilidad: visibles si el estado es Nuevo **o está vacío** —los ítems legacy (sin estado) no cambian retroactivamente su formulario ni su PDF; al editarlos, el `required` obliga a definir el estado.
+4. **Limpieza en el guardado, no en el formulario.** Al cambiar el estado, los valores tecleados en las garantías NO se borran del form (si el usuario vuelve a Nuevo no pierde lo escrito). La exclusión ocurre en `saveItem` (`useProposalBuilder`): se filtran del payload los specs que no pasan la regla de visibilidad. Como el POST/PATCH reemplaza el JSON completo de `technicalSpecs`, lo que no viaja no persiste → la BD nunca guarda garantías zombi y el hash de variantes queda limpio.
+5. **Una sola fuente para la regla de visibilidad.** Helper puro `isSpecFieldVisible(def, specs)` en `constants.ts`, consumido por el render (`SpecFieldsSection`) y por la limpieza del payload (`useProposalBuilder`). Genérico: cualquier spec con `visibleWhen` de cualquier categoría futura obtiene el mismo comportamiento sin tocar componentes.
+6. **No se reutiliza el `partNumber` huérfano del ítem.** Número de Parte vive como spec (`numeroParte`) dentro de `technicalSpecs`, que es lo que la ficha del PDF imprime y el hash de variantes considera. El campo huérfano queda intacto.
+7. **Cero cambios en backend y en la capa PDF.** El DTO acepta las keys nuevas tal cual; `TechnicalSpecSheet` no necesita filtro propio porque con el payload limpio nunca recibe garantías inválidas (YAGNI: el formulario es la única vía de escritura de specs que existe hoy).
+8. La validación de "obligatorio" es la nativa del browser (`required` dentro del `<form onSubmit>` existente), consistente con el campo Nombre del mismo formulario.
+
+### Consecuencias
+- El patrón `SpecFieldDef` habilita selects, textos planos, obligatorios y visibilidad condicional para cualquier categoría futura por configuración, sin tocar `SpecFieldsSection`.
+- No hay validación server-side del estado: el DTO sigue aceptando cualquier `Record<string, string>`. Aceptado porque el formulario es la única vía de escritura; si aparece otra (import masivo, API externa), habrá que replicar el filtro en esa vía o agregar defensa en `TechnicalSpecSheet`.
+- Ítems legacy conservan sus garantías visibles en form y PDF hasta que alguien los edite y el `required` fuerce a definir estado.
+- Al volver a seleccionar Nuevo antes de guardar, las garantías reaparecen con lo que tenían escrito (diseño intencional, no bug).
+- Verificación de comportamiento (orden, ocultamiento, required, payload limpio, PDF) hecha en navegador; `tsc --noEmit` solo garantiza compilación.
+
+### Archivos
+- `apps/web/src/lib/types.ts` (`TechnicalSpecs` += `estado`/`numeroParte`; nueva interfaz `SpecFieldDef`)
+- `apps/web/src/lib/constants.ts` (`ESTADO_NUEVO`, `ESTADO_OPTIONS`; `SPEC_FIELDS_BY_ITEM_TYPE` tipado como `Record<string, Record<string, SpecFieldDef>>`; `estado` y `numeroParte` encabezando PCS; `visibleWhen` en ambas garantías; helper `isSpecFieldVisible`)
+- `apps/web/src/components/proposals/SpecFieldsSection.tsx` (filtro de visibilidad en el render; bifurcación select/text/autocomplete según `input`; `required` con asterisco en el label; `onChange` acepta `HTMLSelectElement`; `fieldFetchFns` omite campos select/text)
+- `apps/web/src/hooks/useProposalBuilder.ts` (`saveItem` excluye del payload los specs ocultos vía `isSpecFieldVisible`)
+
+### Commits
+- `76d1ce8` — feat(proposals): add estado and numero de parte to PCS spec sheet with conditional warranties
+
+### Pendientes
+- Deuda preexistente detectada en el diagnóstico (no introducida por esta feature): `handleItemChange` en `ProposalItemsBuilder.tsx` duplica fórmulas del pricing-engine (precio desde landed cost + margen y el cálculo inverso de margen), en violación de CONVENTIONS §J. Extraerlas al pricing-engine en una tarea aparte.
