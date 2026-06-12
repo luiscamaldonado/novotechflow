@@ -1740,3 +1740,35 @@ Una sospecha de drift entre el entorno local y producción motivó una auditorí
 - **P3 — Prisma 5→6→7:** proyecto aparte con ADR propio (requiere `prisma.config.ts` y regresión seria del pricing-engine). El pin de este ADR compra tiempo; no acumular más de un trimestre.
 - `pr-check.yml` queda validado en teoría (mismos cambios que ci.yml) pero su primer run real será en el próximo PR.
 - Renormalización CRLF/LF vía `.gitattributes` sigue pendiente (warnings cosméticos en los commits de este ADR).
+
+## ADR-042 — Postgres alineado local/producción en 18.4: upgrade local 15→18, pin del tag del template en Railway, layout de volumen 18+ y .env raíz
+**Fecha:** 2026-06-12
+**Estado:** Cerrado
+### Contexto
+Cierre del P1 del ADR-041: el único frente donde la sospecha de drift resultó cierta era Postgres — local en 15-alpine, producción en 18.x con un "Minor Update Available: 18.4" en el dashboard de Railway. Tres majors de distancia entre donde se desarrollan las migraciones y donde se aplican. Los datos locales eran de prueba, así que la vía elegida en local fue volumen nuevo + migraciones + seed, sin pg_upgrade. El proceso destapó tres hallazgos no documentados:
+- El contenedor `postgres:18-alpine` se negó a arrancar con el mount existente: desde la 18, la imagen oficial exige el mount un nivel arriba del path clásico.
+- La receta del docker-compose nunca había sido reproducible: el volumen viejo databa de una configuración histórica con el rol `admin`, pero los defaults actuales del compose (`novotechflow`/`changeme`) inicializan otra cosa y no existía `.env` en la raíz que los pisara. Como el volumen jamás se había recreado, nadie lo había notado.
+- En Railway, el `pg_dump` previo reveló que el server ya corría 18.4 pese al banner de minor disponible. Explicación: el Source Image del servicio es `ghcr.io/railwayapp-templates/postgres-ssl:18` — un tag flotante de major (mismo patrón que el `nginx:alpine` señalado en el ADR-041) cuyo contenido ya traía los binarios 18.4; el banner comparaba la etiqueta declarada, no los binarios corriendo.
+### Decisión
+1. **`postgres:15-alpine` → `postgres:18-alpine`** en `docker-compose.yml`.
+2. **Mount ajustado al layout de la imagen oficial 18+:** `postgres-data:/var/lib/postgresql/data` → `postgres-data:/var/lib/postgresql`. La imagen organiza internamente un subdirectorio por versión mayor, lo que habilita `pg_upgrade --link` para futuros saltos de major sin cruzar límites de mount. No aplica a Railway (usa su template `postgres-ssl`, no la imagen de Docker Hub).
+3. **Eliminada la clave `version: '3.8'`** obsoleta (ítem adelantado de la lista P2 del ADR-041: mismo archivo, mismo concern, y el warning salía en cada comando de la sesión).
+4. **Creado `.env` en la raíz** (no versionado; cubierto por gitignore) con `DB_USER=admin`, `DB_PASSWORD=password123`, `DB_NAME=novotechflow`, para que un volumen fresco inicialice con las credenciales canónicas y la receta del compose sea reproducible. Solo variables de DB: `JWT_SECRET` queda sin definir a propósito — la usa únicamente el servicio `api` del compose, que nunca se levanta localmente (el api corre con pnpm y su propio `apps/api/.env`); el warning resultante es esperado y benigno.
+5. **Backup doble antes de tocar producción:** `pg_dump -Fc` ejecutado desde el contenedor local (pg_dump 18.4, idéntico al server, sin instalar nada en Windows), verificado con `pg_restore --list` (117 TOC entries, 71 MB) y guardado en `backups/prod_pre184_2026-06-12.dump`; más backup manual de volumen en Railway (adicional al schedule diario existente, cuyo último corte era de 22 horas atrás).
+6. **Aplicado "Upgrade to 18.4" en Railway** — no por los binarios (ya eran 18.4) sino para **pinnear la etiqueta del Source Image**: coherente con la filosofía de pins de toda la auditoría, elimina el no-determinismo de que un futuro redeploy jale lo que el tag flotante `:18` contenga ese día, y retira el banner que generó la confusión. Ejecutado en hora valle con la base quieta.
+### Consecuencias
+- Local y producción en idéntico PostgreSQL 18.4 — el drift de P1 queda eliminado. Las 29 migraciones y el seed aplican limpios sobre 18: compatibilidad del schema completo confirmada de punta a punta.
+- El redeploy de Railway hizo recovery automático del WAL al arrancar (esperado: el contenedor viejo se mata sin checkpoint final). El `invalid record length... got 0` del log es la detección normal del final del WAL, no corrupción; el checkpoint escribió 0 buffers — la base estaba quieta, la hora valle pagó. Verificado post-upgrade: misma cadena de binarios (`18.4-1.pgdg13+1`), 168 propuestas intactas, smoke test en producción OK.
+- Warning `collation-refresh: Permission denied` en el arranque: helper del wrapper del template que falló leyendo su archivo temporal. Benigno aquí por diseño — binarios idénticos antes/después, el refresh era un no-op. Bug cosmético del template, no del proyecto.
+- La base local fresca solo contiene el seed; los datos de prueba anteriores se descartaron a propósito con el volumen. El usuario admin local se restauró convirtiendo el del seed vía SQL directo (UPDATE de email/nombre/nomenclatura; el hash del seed ya era la contraseña local) — patrón del proyecto para tocar datos.
+- Recrear el volumen local ahora es receta reproducible de tres comandos (`down` → `volume rm novotechflow_postgres-data` → `up -d db`), siempre quirúrgico sobre el volumen de postgres, nunca `down -v`.
+- Queda cobertura anticipada para la próxima migración de schema: pg_dump verificado en `backups/` + snapshot manual en Railway.
+- Futuros saltos de major en local podrán hacerse in-place con `pg_upgrade --link` gracias al layout nuevo.
+### Archivos
+- `docker-compose.yml` (imagen 18-alpine, mount en `/var/lib/postgresql`, sin clave `version`)
+- `.env` raíz (nuevo, no versionado — variables de DB para el compose)
+### Commits
+- `f598d57` — chore(db): bump local postgres 15 to 18, new volume layout, drop version key
+### Pendientes
+- **PITR en el Postgres de Railway está apagado.** Considerar habilitarlo (backups continuos + WAL archiving, restore a cualquier punto reciente; activa con un redeploy único). Complementa, no reemplaza, el schedule diario de volumen.
+- El ítem "limpiar `version:` obsoleta de docker-compose" de la lista P2 del ADR-041 quedó resuelto aquí; el resto de P2 y P3 sigue según ese ADR, sin cambios.
