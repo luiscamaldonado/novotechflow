@@ -24,5 +24,5 @@ COPY --from=builder /app/apps/api/package.json ./
 COPY --from=builder /app/apps/api/tsconfig.json ./
 RUN mkdir -p uploads/signatures uploads/templates
 EXPOSE 3000
-RUN npm install prisma ts-node typescript
+RUN npm install prisma@5.10.2
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
