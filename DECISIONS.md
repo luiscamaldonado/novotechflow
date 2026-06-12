@@ -1699,4 +1699,4 @@ Hallazgos del diagnóstico que condicionaron el diseño:
 - `76d1ce8` — feat(proposals): add estado and numero de parte to PCS spec sheet with conditional warranties
 
 ### Pendientes
-- Deuda preexistente detectada en el diagnóstico (no introducida por esta feature): `handleItemChange` en `ProposalItemsBuilder.tsx` duplica fórmulas del pricing-engine (precio desde landed cost + margen y el cálculo inverso de margen), en violación de CONVENTIONS §J. Extraerlas al pricing-engine en una tarea aparte.
+- Deuda preexistente detectada en el diagnóstico (no introducida por esta feature): `handleItemChange` en `ProposalItemsBuilder.tsx` duplica fórmulas del pricing-engine (precio desde landed cost + margen y el cálculo inverso de margen), en violación de CONVENTIONS §J. **Resuelto en `60546fb`**: las tres fórmulas del handler ahora llaman a `calculateParentLandedCost`/`calculateUnitPrice`/`calculateMarginFromPrice` (guard con `MAX_MARGIN` en vez del 100 mágico), y se eliminaron dos duplicaciones adicionales de landed cost detectadas en el mismo archivo (display "Nuevo Costo Unitario" y celda de landed en la tabla de ítems).
