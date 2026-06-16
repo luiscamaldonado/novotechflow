@@ -169,7 +169,7 @@ export async function validateImageFileSize(file: Express.Multer.File): Promise<
  * This replaces the 'file-type' npm package which is ESM-only
  * and incompatible with NestJS CommonJS compilation.
  */
-function detectMimeFromMagicBytes(buffer: Buffer): string | null {
+export function detectMimeFromMagicBytes(buffer: Buffer): string | null {
   if (buffer.length < 12) return null;
 
   // JPEG: FF D8 FF
