@@ -12,11 +12,12 @@ import { CatalogsModule } from './catalogs/catalogs.module';
 import { TemplatesModule } from './templates/templates.module';
 import { BillingProjectionsModule } from './billing-projections/billing-projections.module';
 import { SpecOptionsModule } from './spec-options/spec-options.module';
+import { SpecPrefillModule } from './spec-prefill/spec-prefill.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
 @Module({
-  imports: [PrismaModule, AppSettingsModule, AuthModule, UsersModule, ProposalsModule, ClientsModule, CatalogsModule, TemplatesModule, BillingProjectionsModule, SpecOptionsModule, PresenceModule, ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }])],
+  imports: [PrismaModule, AppSettingsModule, AuthModule, UsersModule, ProposalsModule, ClientsModule, CatalogsModule, TemplatesModule, BillingProjectionsModule, SpecOptionsModule, SpecPrefillModule, PresenceModule, ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }])],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
