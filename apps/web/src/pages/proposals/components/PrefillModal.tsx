@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Upload, Loader2, AlertCircle, CheckCircle2, ChevronRight, Cpu } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { extraerSpecs, colapsarProducto, esVacioOPlaceholder } from '../../../lib/specPrefill';
+import { extraerSpecs, colapsarProducto, esVacioOPlaceholder, filtrarProductosUtiles } from '../../../lib/specPrefill';
 import type { ProductoPrefill, PrefillTipoInput, PrefillSource } from '../../../lib/specPrefill';
 import type { TechnicalSpecs } from '../../../lib/types';
 
@@ -125,7 +125,14 @@ export default function PrefillModal({ isOpen, onClose, onApply }: PrefillModalP
                 }
                 resultado = await extraerSpecs(FUENTE_A_TIPO[fuente], { payload: valor });
             }
-            setProductos(resultado);
+            const utiles = filtrarProductosUtiles(resultado);
+            if (utiles.length === 0) {
+                setError(
+                    'No se encontraron especificaciones para esta b\u00fasqueda. Verifica el part number o intenta con otra fuente.',
+                );
+                return;
+            }
+            setProductos(utiles);
             setSeleccionado(0);
         } catch (err: unknown) {
             const axiosErr = err as { response?: { data?: { message?: string | string[] } } };

@@ -113,3 +113,23 @@ export function colapsarProducto(producto: ProductoPrefill): TechnicalSpecs {
     }
     return specs;
 }
+
+/** Campos de identidad que el backend rellena aunque no haya specs técnicas; no cuentan como información útil. */
+const CAMPOS_IDENTIDAD: ReadonlyArray<keyof TechnicalSpecs> = ['fabricante', 'numeroParte', 'modelo', 'formato'];
+
+/** Mínimo de specs técnicas reales (tras colapsar, excluyendo identidad) para considerar útil un equipo. */
+const MIN_SPECS_TECNICAS = 2;
+
+/** True si el equipo tiene al menos MIN_SPECS_TECNICAS specs técnicas reales tras colapsar. */
+export function tieneSpecsUtiles(producto: ProductoPrefill): boolean {
+    const specs = colapsarProducto(producto);
+    const tecnicas = Object.keys(specs).filter(
+        (key) => !CAMPOS_IDENTIDAD.includes(key as keyof TechnicalSpecs),
+    );
+    return tecnicas.length >= MIN_SPECS_TECNICAS;
+}
+
+/** Filtra los equipos extraídos dejando solo los que traen información útil. */
+export function filtrarProductosUtiles(productos: ProductoPrefill[]): ProductoPrefill[] {
+    return productos.filter(tieneSpecsUtiles);
+}
