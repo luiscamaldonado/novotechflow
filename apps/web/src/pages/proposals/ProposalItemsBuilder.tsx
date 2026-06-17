@@ -319,16 +319,7 @@ export default function ProposalItemsBuilder() {
                                 <p className="text-sm text-slate-500 font-medium">Configuración técnica de componentes y servicios.</p>
                             </div>
                         </div>
-                        {itemForm.itemType === 'PCS' && !isReadOnly && (
-                            <button
-                                type="button"
-                                onClick={() => setIsPrefillOpen(true)}
-                                className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3.5 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95 text-[11px] font-black uppercase tracking-widest"
-                            >
-                                <Cpu className="h-4 w-4" />
-                                <span>Prellenar IA</span>
-                            </button>
-                        )}
+
                         <div className="flex items-center space-x-3">
                             {isAddingItem ? (
                                 <button onClick={() => setIsAddingItem(false)} className="flex items-center space-x-2 text-slate-500 hover:text-slate-700 transition-colors px-5 py-3.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-sm">
@@ -383,6 +374,19 @@ export default function ProposalItemsBuilder() {
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nombre de Item</label>
                                             <input type="text" name="name" value={itemForm.name} onChange={handleItemChange} required disabled={isReadOnly} placeholder="Ej. Laptops Dell Vostro 3400..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
                                         </div>
+
+                                        {itemForm.itemType === 'PCS' && !isReadOnly && (
+                                            <div className="flex justify-end">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsPrefillOpen(true)}
+                                                    className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3.5 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95 text-[11px] font-black uppercase tracking-widest"
+                                                >
+                                                    <Cpu className="h-4 w-4" />
+                                                    <span>Prellenar IA</span>
+                                                </button>
+                                            </div>
+                                        )}
 
                                         {/* SECCIÓN DE ESPECIFICACIONES TÉCNICAS (data-driven) */}
                                         <SpecFieldsSection
