@@ -12,6 +12,7 @@ import type { ProposalItem, ProposalDetail } from '../../lib/types';
 import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../../lib/constants';
 import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '../../lib/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
+import PrefillModal from './components/PrefillModal';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
@@ -33,6 +34,7 @@ export default function ProposalItemsBuilder() {
     const [isAddingItem, setIsAddingItem] = useState(false);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [itemForm, setItemForm] = useState<ProposalItem>(initialItemForm);
+    const [isPrefillOpen, setIsPrefillOpen] = useState(false);
 
     const handleUpdateProposal = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -317,6 +319,16 @@ export default function ProposalItemsBuilder() {
                                 <p className="text-sm text-slate-500 font-medium">Configuración técnica de componentes y servicios.</p>
                             </div>
                         </div>
+                        {itemForm.itemType === 'PCS' && !isReadOnly && (
+                            <button
+                                type="button"
+                                onClick={() => setIsPrefillOpen(true)}
+                                className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3.5 rounded-2xl shadow-xl shadow-indigo-100 transition-all active:scale-95 text-[11px] font-black uppercase tracking-widest"
+                            >
+                                <Cpu className="h-4 w-4" />
+                                <span>Prellenar IA</span>
+                            </button>
+                        )}
                         <div className="flex items-center space-x-3">
                             {isAddingItem ? (
                                 <button onClick={() => setIsAddingItem(false)} className="flex items-center space-x-2 text-slate-500 hover:text-slate-700 transition-colors px-5 py-3.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-sm">
@@ -620,6 +632,17 @@ export default function ProposalItemsBuilder() {
             </div>
 
             <ProposalNavBar proposalId={id!} currentStep={1} />
+
+            <PrefillModal
+                isOpen={isPrefillOpen}
+                onClose={() => setIsPrefillOpen(false)}
+                onApply={(specs) =>
+                    setItemForm((prev) => ({
+                        ...prev,
+                        technicalSpecs: { ...prev.technicalSpecs, ...specs },
+                    }))
+                }
+            />
         </div>
     );
 }
