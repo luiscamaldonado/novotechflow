@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { GeminiClient } from '../gemini.client';
 import { NORMALIZATION_RULES } from '../constants/normalization-rules.constant';
-import { SPEC_SCHEMA_ARRAY } from '../constants/spec-schema.constant';
+import { SPEC_SCHEMA_OBJECT } from '../constants/spec-schema.constant';
 import type { PrefillStrategy, PrefillInput } from '../interfaces/prefill-strategy.interface';
 import type {
     PrefillResponseDto,
@@ -16,26 +16,22 @@ const SOURCE: PrefillSource = 'TEXTO_PLANO';
 /** Longitud mínima del texto de entrada para intentar una extracción. */
 const MIN_TEXT_LENGTH = 15;
 
-const PROMPT_HEADER = `Extrae las especificaciones de este texto. REGLAS CR\u00cdTICAS:
-- Purgar basura t\u00e9cnica (hilos, latencias, P/E cores, protocolos Wi-Fi).
-- Procesador: Solo familia, modelo y n\u00facleos.
-- Deduce el fabricante (Lenovo, HP, Dell, etc.) y el formato de cada equipo.
-
-REGLA DE L\u00cdNEAS INDEPENDIENTES (TEXTO CONTINUO):
-Si el texto de entrada contiene m\u00faltiples l\u00edneas y cada l\u00ednea describe un equipo independiente con sus propias especificaciones completas separadas por puntos y comas (Ej: 'Tipo de producto: Computadora port\u00e1til; Familia de procesador...'), DEBES generar un objeto JSON individual para cada l\u00ednea. NO los agrupes en un solo equipo.
+const PROMPT_HEADER = `Extrae las especificaciones de UN \u00danico equipo a partir del siguiente texto. REGLAS CR\u00cdTICAS:
+- El texto describe UN SOLO equipo, aunque venga en m\u00faltiples l\u00edneas, p\u00e1rrafos o con muchas frases separadas por puntos. CONSOLIDA toda la informaci\u00f3n dispersa en UN \u00danico objeto JSON. NUNCA generes m\u00e1s de un equipo.
+- Si una especificaci\u00f3n aparece fragmentada o repetida en distintas partes del texto, re\u00fanela en el campo que corresponde.
+- Purgar basura t\u00e9cnica (hilos, latencias, P/E cores, frecuencias, cach\u00e9, NPU TOPS, peso, adaptador).
+- Procesador: Solo marca, familia y modelo (ej. 'Intel Core Ultra 7 256V'), sin n\u00facleos ni frecuencias.
+- Deduce el fabricante (Lenovo, HP, Dell, etc.) y el formato del equipo.
 
 REFINAMIENTO DE PART NUMBER (DELL CODES):
-Para textos continuos de Dell, busca c\u00f3digos alfanum\u00e9ricos al inicio de la l\u00ednea o junto al nombre de la marca (ej. '6750370', 'PP70R', '9KP97') para usarlos como 'partNumber'. Si un c\u00f3digo o n\u00famero de producto viene acompa\u00f1ado de un numeral y caracteres posteriores (ej. 'BH8M9LT#ABM'), ignora el numeral y todo lo que le siga, dejando solo el c\u00f3digo base ('BH8M9LT').
+Si hay un c\u00f3digo alfanum\u00e9rico junto al nombre de la marca (ej. '6750370', 'PP70R', '9KP97'), \u00fasalo como 'partNumber'. Si un c\u00f3digo viene con un numeral y caracteres posteriores (ej. 'BH8M9LT#ABM'), ignora el numeral y todo lo que le siga, dejando solo el c\u00f3digo base ('BH8M9LT').
 
 ASEGURAR EXTRACTOS LIMPIOS:
-Aseg\u00farate de mapear las llaves obligatorias limpiando la basura t\u00e9cnica del p\u00e1rrafo continuo:
-- 'modelo': Extrae el nombre comercial completo (ej. 'Dell Pro 15 Essential').`;
+- 'modelo': Extrae el nombre comercial completo (ej. 'Dell Pro 15 Essential', 'EliteBook 8 G1i').`;
 
-const PROMPT_FOOTER = `- 'almacenamiento': Identifica la capacidad y tipo (ej. '512 GB SSD NVMe').
-- 'pantalla': Extrae tama\u00f1o y resoluci\u00f3n (ej. '15.6" FHD 1920x1080'). Busca t\u00e9rminos como "Pantalla", "Diagonal", "Display".
-- 'network': Extrae detalles de conectividad (ej. 'Wi-Fi 6E, Bluetooth'). Busca t\u00e9rminos como "Conectividad", "Conexi\u00f3n", "Wi-Fi", "Red".
-
-REGLA DELL (CTO/Cotizaciones): Si se lista un Sistema Base seguido de m\u00faltiples filas de componentes con SKUs individuales, NO extraigas cada componente como un \u00edtem separado. AGRUPA todos los componentes que le sigan al Sistema Base en UN SOLO objeto JSON y usa el nombre del Sistema Base como 'modelo'.`;
+const PROMPT_FOOTER = `- 'almacenamiento': Identifica la capacidad y tipo (ej. '512GB SSD').
+- 'pantalla': Extrae tama\u00f1o y resoluci\u00f3n (ej. '14" WUXGA 1920x1200'). Busca t\u00e9rminos como "Pantalla", "Diagonal", "Display".
+- 'network': Extrae detalles de conectividad (ej. 'Wi-Fi 7, Bluetooth 5.4'). Busca t\u00e9rminos como "Conectividad", "WLAN", "Wi-Fi", "Red".`;
 
 const readString = (raw: Record<string, unknown>, key: string): string => {
     const value = raw[key];
@@ -65,9 +61,9 @@ const mapProducto = (raw: Record<string, unknown>): ProductoPrefillDto => ({
 });
 
 /**
- * Estrategia de prellenado a partir de texto plano (párrafos o listados).
- * Envía el texto a Gemini con las reglas de normalización y devuelve los
- * equipos detectados.
+ * Estrategia de prellenado a partir de texto plano (párrafos o descripciones).
+ * Consolida todo el texto en un único equipo y lo envía a Gemini con las
+ * reglas de normalización.
  */
 @Injectable()
 export class TextoPlanoStrategy implements PrefillStrategy {
@@ -82,19 +78,15 @@ export class TextoPlanoStrategy implements PrefillStrategy {
         }
 
         const prompt = `${PROMPT_HEADER}\n${NORMALIZATION_RULES}\n${PROMPT_FOOTER}\n\nTexto:\n"${texto}"`;
-        const rawProducts = await this.gemini.generarJson(prompt, SPEC_SCHEMA_ARRAY);
+        const rawProducts = await this.gemini.generarJson(prompt, SPEC_SCHEMA_OBJECT);
 
-        const productos = rawProducts
-            .filter(
-                (item): item is Record<string, unknown> =>
-                    typeof item === 'object' && item !== null,
-            )
-            .map(mapProducto);
-
-        if (productos.length === 0) {
-            throw new BadRequestException('No se detectaron equipos en el texto proporcionado.');
+        const primero = rawProducts.find(
+            (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
+        );
+        if (!primero) {
+            throw new BadRequestException('No se detectaron especificaciones en el texto proporcionado.');
         }
 
-        return { productos };
+        return { productos: [mapProducto(primero)] };
     }
 }
