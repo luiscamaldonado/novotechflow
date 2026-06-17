@@ -94,7 +94,9 @@ export async function extraerSpecs(
     if (input.file) {
         formData.append('file', input.file);
     }
-    const { data } = await api.post<PrefillResponse>('/spec-prefill/extract', formData);
+    const { data } = await api.post<PrefillResponse>('/spec-prefill/extract', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return data.productos;
 }
 
