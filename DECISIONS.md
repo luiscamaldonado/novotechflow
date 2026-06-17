@@ -1772,3 +1772,72 @@ Cierre del P1 del ADR-041: el único frente donde la sospecha de drift resultó 
 ### Pendientes
 - **PITR en el Postgres de Railway está apagado.** Considerar habilitarlo (backups continuos + WAL archiving, restore a cualquier punto reciente; activa con un redeploy único). Complementa, no reemplaza, el schedule diario de volumen.
 - El ítem "limpiar `version:` obsoleta de docker-compose" de la lista P2 del ADR-041 quedó resuelto aquí; el resto de P2 y P3 sigue según ese ADR, sin cambios.
+
+## ADR-043 — Módulo spec-prefill: extracción de especificaciones de PC por IA desde 5 fuentes hacia items de propuesta
+**Fecha:** 2026-06-17
+**Estado:** Cerrado (backend y frontend en local; pendiente push a Railway)
+### Contexto
+Existía un prototipo aparte (`novotech-spec-lab`, carpeta `ProductosDellHpLenovo`) que extraía specs de hardware con Gemini: un módulo NestJS con patrón Strategy y cinco fuentes (texto plano, part number Lenovo vía scraping de PSREF, part number HP vía PartSurfer, Excel y PDF). No era un proyecto ejecutable —sin package.json, tsconfig ni workspace—, sino un paquete pensado para injertarse. Traía su propia capa de persistencia (`Propuesta`/`ItemPropuesta`) desacoplada del modelo real de NovoTechFlow.
+
+El objetivo era llevar ese motor al monorepo para poblar el `technicalSpecs` de un item tipo PC dentro del constructor de propuestas (la categoría `PCS` en `ProposalItemsBuilder`), no para crear un concepto de propuesta paralelo.
+
+El motor del prototipo arrastraba problemas que no podían pasar a producción: `rejectUnauthorized: false` en todas las llamadas TLS, API key de Gemini en query string, `any` generalizado, `console.log`/`console.error`, un import roto a la constante de reglas (`prompt-rules.contants.ts` vs `.constant`), y cada estrategia duplicaba la llamada HTTP, el schema y el parseo.
+
+### Decisión
+1. **Dirección B (no fusión de modelos):** se conserva el motor (5 estrategias, scraping PSREF/PartSurfer, prompt de normalización, lineage por campo) y se DESCARTA toda la capa de persistencia del prototipo. El prellenado es stateless: extrae y devuelve specs; la inserción la hace el `saveItem` real de NovoTechFlow sobre `Proposal.technicalSpecs` (JSON). Esto disuelve el bug de "campos descartados al guardar" del prototipo.
+2. **Módulo nuevo `apps/api/src/spec-prefill`** (carpetas en inglés, alineadas con `proposals`/`catalogs`): `interfaces/`, `dto/`, `constants/`, `strategies/`, `services/`, más `gemini.client.ts`, el orquestador `spec-prefill.service.ts`, el controller y el module. Registrado en `app.module.ts`. Sin Prisma (no toca DB), `imports: []`.
+3. **Cliente Gemini único (`GeminiClient`)** que centraliza la llamada REST a `gemini-3.1-flash-lite` (API v1beta), el backoff ante 503/429, y el parseo de JSON. Correcciones obligatorias frente al prototipo: API key por header `x-goog-api-key` leída de `process.env.GEMINI_API_KEY` en el constructor sin fallback (patrón de `email-verification.service`); **eliminado** `rejectUnauthorized: false` (TLS normal); sin `any` (narrowing con shape mínimo); `Logger` de Nest; magic numbers a constantes nombradas; tipo de excepción `BadGatewayException` para fallo del upstream en vez de envolver todo como 400.
+4. **Schema de respuesta compartido** (`spec-schema.constant.ts`, `SPEC_SCHEMA_ARRAY`/`SPEC_SCHEMA_OBJECT`) en vez de la copia inline por estrategia del prototipo (DRY). Se añadió `enum` real al campo `formato` (el prototipo solo lo describía en texto).
+5. **Cinco estrategias**, cada una inyecta el `GeminiClient`, arma su prompt con `NORMALIZATION_RULES` y mapea a `ProductoPrefillDto` (`{ value, source }` uniforme; rename `partNumber`→`numeroParte`; limpieza del prefijo de marca en `modelo`):
+   - **TextoPlano:** consolidada a UN solo equipo (`SPEC_SCHEMA_OBJECT`). Se eliminó la "regla de líneas independientes" del prototipo, que fragmentaba una descripción larga de un equipo en varios objetos. El multi-equipo por texto no es un caso de v1; los listados van por Excel.
+   - **PartNumber (Lenovo/Dell):** el scraping de PSREF se extrajo a un servicio propio `LenovoPsrefService` (handshake cookie/token, cache de menú 12h con promesa compartida anti-stampede, búsqueda de MT, extracción de fila de matriz, fallback a SmartFind), descompuesto en métodos pequeños por el límite de tamaño de función. Códigos Dell: no scrapea, Gemini deduce.
+   - **HP PartSurfer:** consulta los dos endpoints BFF (GetPart + GetProduct) en paralelo; devuelven JSON, sin parseo XML.
+   - **Excel:** lectura con `exceljs` (ver decisión 7), multi-equipo.
+   - **PDF:** extracción con `pdf-parse` 2.x (API de clase `PDFParse.getText()`).
+6. **Endpoint `POST /spec-prefill/extract`, stateless:** `@UseGuards(JwtAuthGuard)` + `@ApiBearerAuth()`, DTO con class-validator, `FileInterceptor` con `memoryStorage` (el archivo se procesa en RAM y se descarta; no aplica la regla de base64-en-PG, que es para uploads persistidos). Validación de archivo por **magic bytes sobre buffer** reutilizando `detectMimeFromMagicBytes` de `common/upload-validation` (se exportó; antes era privada). Cada estrategia de archivo afina su propio límite (Excel 5MB, PDF 10MB) además del techo del interceptor.
+7. **`exceljs` en vez de `xlsx`:** el paquete `xlsx` de npm está abandonado y congelado en 0.18.5 con dos CVE de severidad alta (prototype pollution y ReDoS) sin fix disponible en npm —el parche solo está en el CDN de SheetJS, lo que complicaría el build de Docker—, y la vulnerabilidad se dispara justo al parsear archivos subidos. `exceljs` está mantenido, instala limpio desde npm, trae sus tipos, y ya se usa en `apps/web`. Se sumó `pdf-parse` (2.4.5, TypeScript, trae tipos) para PDF.
+8. **Frontend:** capa de datos en `apps/web/src/lib/specPrefill.ts` (`extraerSpecs` multipart, `colapsarProducto`, filtros), un `PrefillModal` embebido en `ProposalItemsBuilder`, y la integración. UX de v1: el modal aplica **un** equipo al item en construcción (selección por clic cuando la fuente devuelve varios), solo revisión (sin edición dentro del modal; el form de specs ya permite editar tras aplicar), con badge de origen por equipo. El botón "Prellenar IA" solo se muestra dentro del formulario de alta/edición y solo para `itemType` PCS.
+9. **Colapso `{ value, source }` → `TechnicalSpecs`:** toma solo el valor, descarta los placeholders que Gemini devuelve cuando no hay dato (`"No especificada"`, `"No aplica"`, `"No incluida"`, `"N/A"`, vacío) tratándolos como vacío, y no escribe `estado` (lo elige el usuario). Se descartan además los equipos sin información útil: un resultado se considera vacío si tras colapsar tiene menos de 2 specs **técnicas** reales (excluyendo los campos de identidad `fabricante`, `numeroParte`, `modelo`, `formato`, que el backend rellena aunque no haya datos). Cubre el caso de un part number que el proveedor no reconoce.
+
+### Consecuencias
+- La feature está completa y verificada en local de punta a punta: las cinco fuentes extraen y normalizan correctamente (texto, PSREF real, PartSurfer real, Excel con 5 equipos, PDF), y los specs caen en el item al aplicar.
+- v1 aplica un solo equipo. El backend ya devuelve el array completo, así que el **lote** (crear N items de una fuente Excel/PDF de una sola vez) queda lote-ready y es fase 2 (frontend + posible endpoint bulk).
+- Los placeholders de "campo sin dato" que devuelve Gemini son inconsistentes entre fuentes (a veces texto, a veces vacío). No se persigue con prompt (frágil); se neutralizan en el colapso del frontend.
+- El scraping de PSREF y PartSurfer depende de sitios externos que pueden cambiar sin aviso; es riesgo asumido del negocio, no de diseño. El fallback PSREF→SmartFind mitiga parte.
+- `LenovoPsrefService` quedó cerca del límite de tamaño de archivo (§3); se dejó así por decisión explícita (funciones internas cortas, una sola responsabilidad). Si crece, sacar la búsqueda del árbol del menú a un helper.
+
+### Archivos
+- `apps/api/src/spec-prefill/**` (módulo completo: interfaces, dto, constants, strategies, services, gemini.client, service, controller, module)
+- `apps/api/src/app.module.ts` (registro de SpecPrefillModule)
+- `apps/api/src/common/upload-validation.ts` (export de detectMimeFromMagicBytes)
+- `apps/api/package.json` + `pnpm-lock.yaml` (exceljs 4.4.0, pdf-parse 2.4.5)
+- `apps/web/src/lib/specPrefill.ts` (capa de datos + colapso + filtros)
+- `apps/web/src/pages/proposals/components/PrefillModal.tsx` (modal)
+- `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx` (integración + botón)
+
+### Commits
+- `d641aaa` — feat(spec-prefill): add strategy contract and prefill DTOs
+- `f2fcbce` — feat(spec-prefill): add normalization rules and Gemini client
+- `38a8b6c` — feat(spec-prefill): add shared spec schema and texto-plano strategy
+- `56effc9` — feat(spec-prefill): add Lenovo PSREF service and part-number strategy
+- `90c5091` — chore(api): add exceljs for spec-prefill excel parsing
+- `f4dd0df` — feat(spec-prefill): add excel strategy with buffer validation
+- `0ad8447` — chore(api): add pdf-parse for spec-prefill pdf parsing
+- `aa7757a` — feat(spec-prefill): add pdf strategy with buffer validation
+- `3f1886e` — feat(spec-prefill): add HP PartSurfer strategy
+- `5b8f07a` — feat(spec-prefill): add orchestrator service, controller and module
+- `c540f39` — feat(spec-prefill): register module in app.module
+- `2644ddd` — feat(spec-prefill): add frontend prefill data layer (api + collapse)
+- `93ea3a9` — feat(spec-prefill): add PrefillModal component
+- `1fe4912` — feat(spec-prefill): integrate PrefillModal into ProposalItemsBuilder
+- `bc8eb87` — fix(spec-prefill): consolidate text input into single device
+- `6067cc5` — fix(spec-prefill): discard results without real technical specs
+- `c80e22a` — fix(spec-prefill): allow multipart file field in extract DTO
+- `45f43ea` — fix(spec-prefill): set multipart content-type for file upload
+- `1fcb8cf` — fix(spec-prefill): show prefill button only inside item form
+
+### Pendientes
+- **Push a Railway:** antes de desplegar, agregar `GEMINI_API_KEY` a las variables del servicio `api` en Railway, o el bootstrap del `GeminiClient` crashea. El push lo hace Luis tras decidir el momento (puede haber usuarios en producción).
+- **Fase 2 — lote:** aplicar varios equipos de una fuente Excel/PDF en una sola operación (crear N items). El backend ya entrega el array; falta el frontend y, posiblemente, un endpoint bulk.
+- **Limpieza menor:** el comentario de `PREFILL_SPEC_KEYS` en `apps/web/src/lib/specPrefill.ts` dice "13 keys" pero el array tiene 14.
+- **`GEMINI_API_KEY` no se le pasa al servicio `api` del docker-compose** (igual que ya estaba). No afecta `pnpm dev`; solo relevante si algún día se levanta el api por compose.
