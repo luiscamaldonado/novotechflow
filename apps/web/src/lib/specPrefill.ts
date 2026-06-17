@@ -73,7 +73,7 @@ const PLACEHOLDER_VALUES: ReadonlyArray<string> = [
 ];
 
 /** True si el valor es un placeholder o está vacío (no debe escribirse en el spec). */
-const esVacioOPlaceholder = (value: string): boolean => {
+export const esVacioOPlaceholder = (value: string): boolean => {
     const limpio = value.trim().toLowerCase();
     return limpio === '' || PLACEHOLDER_VALUES.includes(limpio);
 };
