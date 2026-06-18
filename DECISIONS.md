@@ -1871,3 +1871,41 @@ Sub-item del P2 del ADR-041 (auditoría de versiones del entorno). El core de Ne
 - **Push a Railway (servicio `api`):** lo hace Luis tras decidir el momento (puede haber usuarios en producción); revisar el build/deploy log del servicio.
 - **Sub-items P2+ restantes del ADR-041**, en orden: unificar TypeScript a 6 (siguiente), ESLint 8→9, Turborepo 1→2. La v12 de NestJS (ESM) queda en el horizonte, fuera de este ciclo.
 - Si `platform-express` sube multer a una major nueva, realinear el caret de la dependencia directa de `multer`.
+
+## ADR-045 — Migración de ESLint 8→9 (flat config) en apps/api
+**Fecha:** 2026-06-18
+**Estado:** Cerrado (commiteado y verificado en local con `tsc` y carga de config; pendiente push a master)
+
+### Contexto
+Sub-item de la auditoría de versiones (P2 del ADR-041, listado en los Pendientes del ADR-044). `apps/api` era el último holdout en ESLint 8 con formato legacy `.eslintrc.js`, aislado y sin consumir el paquete compartido `@repo/eslint-config`, que ya estaba en ESLint 9 + flat config (eslint ^9.39.1, typescript-eslint ^8.50.0, eslint-config-prettier ^10.1.1, globals ^16.5.0). Las versiones objetivo ya estaban resueltas y en el store del monorepo, así que el upgrade no requirió traer nada nuevo de la red. ESLint 9 usa flat config por defecto; mantener eslintrc habría dependido de `ESLINT_USE_FLAT_CONFIG=false`, deuda que se evita migrando.
+
+Se decidió convertir el config a flat preservando el comportamiento de lint actual, sin adoptar el paquete compartido: este apunta a frontend/React/Next y usa `eslint-plugin-only-warn` (degrada todo a warning), lo que sería un cambio de comportamiento, no un bump de versión.
+
+### Decisión
+1. **Conversión a flat config aislada:** se reemplaza `apps/api/.eslintrc.js` por `apps/api/eslint.config.mjs` (extensión `.mjs` para usar imports ESM sin cambiar el `type` CommonJS del paquete). Se replica el comportamiento del legacy: `typescript-eslint` recommended + `eslint-plugin-prettier/recommended`, globals de node/jest, `parserOptions.project` apuntando a `tsconfig.json`. Se conservan las 3 reglas en `off` (`explicit-function-return-type`, `explicit-module-boundary-types`, `no-explicit-any`).
+2. **Drop de `@typescript-eslint/interface-name-prefix`:** la regla fue removida del plugin hace años; en eslintrc era un no-op silencioso, pero bajo flat config en ESLint 9 una regla inexistente es error duro de carga. Se elimina.
+3. **Alineación de dependencias al paquete compartido:** en `apps/api/package.json` se reemplazan `@typescript-eslint/eslint-plugin` y `@typescript-eslint/parser` (^8.0.0) por el meta-paquete `typescript-eslint` (^8.50.0); se sube `eslint` ^8→^9.39.1, `eslint-config-prettier` ^9→^10.1.1, `eslint-plugin-prettier` ^5.0.0→^5.2.0 (el export flat `/recommended` aparece desde 5.1.2); se agrega `globals` ^16.5.0. Versiones idénticas a las ya resueltas en `@repo/eslint-config` para garantizar una sola versión en el monorepo.
+4. **`typescript` no se toca:** se mantiene en ^5.1.3, dentro del rango soportado por typescript-eslint v8. El bump a TS 6 es otro sub-item P2 independiente.
+5. **Limpieza del glob del script lint:** `eslint "{src,apps,libs,test}/**/*.ts"` → `eslint "{src,test}/**/*.ts"`; `apps` y `libs` no existen dentro de `apps/api` (eran patrones fantasma).
+
+### Consecuencias
+- `pnpm install` resolvió sin un solo peer warning; net `+1 -123` paquetes (limpieza de la cadena vieja de `@typescript-eslint/*` separados). El `typescript@5.1.3` local de api convive con el `typescript@6.0.2` de la raíz sin colisión (scopes distintos).
+- El lint carga y corre correctamente con el flat config nuevo: imports ESM, `tseslint.config()`, el export `eslint-plugin-prettier/recommended`, `parserOptions.project` y el set de reglas resuelven sin error de carga.
+- ESLint 9 cambió el default de `reportUnusedDisableDirectives` a `warn`: aparece 1 warning por una directiva `eslint-disable` obsoleta (apuntaba a `no-var-requires`, regla renombrada a `no-require-imports`). Benigno.
+- El lint sigue reportando hallazgos de código preexistentes (mayoría `prettier/prettier` por CRLF en el working tree, más 6 hallazgos sustantivos de typescript-eslint). No fueron introducidos por la migración: el legacy ya los reportaba. Su saneamiento queda fuera de esta tarea; el de CRLF se atiende en el item separado de `.gitattributes`/renormalización.
+- No se modificó código fuente `.ts`; el commit es exclusivamente dev-tooling. No corre `migrate deploy`; sin impacto en el artefacto de producción.
+
+### Archivos
+- `apps/api/eslint.config.mjs` (nuevo, flat config ESM)
+- `apps/api/.eslintrc.js` (eliminado)
+- `apps/api/package.json` (devDependencies + script lint)
+- `pnpm-lock.yaml`
+
+### Commits
+- `0a8df31` — chore(api): migrate eslint to 9 flat config
+
+### Pendientes
+- **CRLF→LF:** ~2915 hallazgos `prettier/prettier` de finales de línea en el working tree; se resuelven con `.gitattributes` + `git add --renormalize`, no con `--fix` masivo (reescribiría 69 archivos de golpe). Item de auditoría ya registrado.
+- **6 hallazgos sustantivos de typescript-eslint:** 4 `no-unused-vars`, 1 `no-require-imports`, 1 directiva `eslint-disable` sobrante. Revisar y sanear por separado.
+- **Push a master:** el commit `0a8df31` está local (`ahead 1`), pendiente de push para desplegar.
+- **P2 restantes de la auditoría:** TypeScript 6 (raíz ya en `6.0.2`; falta `apps/api`/`apps/web`) y Turborepo 1→2.
