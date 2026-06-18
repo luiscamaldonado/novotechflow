@@ -13,8 +13,11 @@
     "turbo": "^1.12.4",
     "typescript": "6.0.2"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@10.33.4",
   "engines": {
     "node": ">=18"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["bcrypt"]
   }
 }

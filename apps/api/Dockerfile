@@ -2,7 +2,7 @@
 FROM node:22-alpine AS builder
 ENV LANG=C.UTF-8
 WORKDIR /app
-RUN npm install -g pnpm@9.0.0
+RUN npm install -g pnpm@10.33.4
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY packages/ packages/
@@ -16,7 +16,7 @@ FROM node:22-alpine AS runner
 ENV LANG=C.UTF-8
 RUN apk add --no-cache openssl
 WORKDIR /app
-RUN npm install -g pnpm@9.0.0
+RUN npm install -g pnpm@10.33.4
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/node_modules ./node_modules
 COPY --from=builder /app/apps/api/prisma ./prisma
