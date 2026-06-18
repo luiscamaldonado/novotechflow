@@ -4,6 +4,8 @@
 *.tsx   text eol=lf encoding=utf-8
 *.js    text eol=lf encoding=utf-8
 *.jsx   text eol=lf encoding=utf-8
+*.mjs   text eol=lf encoding=utf-8
+*.cjs   text eol=lf encoding=utf-8
 *.json  text eol=lf encoding=utf-8
 *.md    text eol=lf encoding=utf-8
 *.yml   text eol=lf encoding=utf-8
@@ -13,3 +15,4 @@
 *.sql   text eol=lf encoding=utf-8
 *.prisma text eol=lf encoding=utf-8
 Dockerfile text eol=lf
+*.sh    text eol=lf
