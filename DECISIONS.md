@@ -1841,3 +1841,33 @@ El motor del prototipo arrastraba problemas que no podían pasar a producción: 
 - **Fase 2 — lote:** aplicar varios equipos de una fuente Excel/PDF en una sola operación (crear N items). El backend ya entrega el array; falta el frontend y, posiblemente, un endpoint bulk.
 - **Limpieza menor:** el comentario de `PREFILL_SPEC_KEYS` en `apps/web/src/lib/specPrefill.ts` dice "13 keys" pero el array tiene 14.
 - **`GEMINI_API_KEY` no se le pasa al servicio `api` del docker-compose** (igual que ya estaba). No afecta `pnpm dev`; solo relevante si algún día se levanta el api por compose.
+
+## ADR-044 — Upgrade de NestJS 10→11: Express 5 por defecto, swagger 7→11 y declaración explícita de multer 2
+**Fecha:** 2026-06-18
+**Estado:** Cerrado (commiteado y verificado en local; pendiente push a Railway)
+### Contexto
+Sub-item del P2 del ADR-041 (auditoría de versiones del entorno). El core de NestJS estaba en 10 (`@nestjs/common`, `core`, `platform-express`, `cli`, `schematics`, `testing`), pero `@nestjs/jwt` y `@nestjs/passport` ya en 11 y `@nestjs/throttler` en 6: un estado mezclado, con paquetes de la línea 11 corriendo sobre core 10. La 11 unifica esa base y llega antes de la unificación de TypeScript a 6 (sub-item siguiente del ADR-041) y del salto a ESM de la v12. El diagnóstico se hizo sin asumir: se leyeron los `package.json` reales, `main.ts`, `app.module.ts`, la capa de auth (strategy, guards, module), los usos de multer y las rutas, y se contrastaron los breaking changes contra la guía oficial de migración y el registry de npm.
+### Decisión
+1. **Core a v11 en `apps/api`:** `@nestjs/common`, `core`, `platform-express`, `cli`, `schematics`, `testing` → 11 (resueltos a 11.1.27, salvo cli 11.0.23 y schematics 11.1.0). Se dejan `@nestjs/jwt` (^11.0.2), `@nestjs/passport` (^11.0.5) y `@nestjs/throttler` (^6.5.0) sin tocar: ya son compatibles con Nest 11.
+2. **`@nestjs/swagger` 7 → ^11.4.4:** la 7 solo declara peer de `@nestjs/common` hasta ^10, así que el salto a core 11 la obliga. La versión de swagger alineada con Nest 11 es la 11.x (peer `@nestjs/common`/`core` ^11.0.1), no la 8. El setup en `main.ts` (DocumentBuilder → createDocument → setup) es estable entre 7 y 11 y no requirió cambios de código.
+3. **Express 5 entra por defecto con `platform-express` 11** (resuelto express 5.2.1). Impacto evaluado:
+   - **Rutas:** cero rutas comodín, cero `@All()`, cero `setGlobalPrefix` con regex → el cambio de path-to-regexp v8 (wildcard con nombre obligatorio) no aplica.
+   - **Query parser:** Express 5 abandona `qs` por defecto y deja de parsear arrays/objetos en query string salvo `app.set('query parser', 'extended')`. Los 8 `@Query()` del código leen claves escalares nombradas (string, o un number con `ParseIntPipe`), ninguno array/objeto ni `@Query()` whole-object → no se requiere esa línea. Cero cambios en `main.ts`.
+   - **Reflector:** `getAllAndOverride` ahora devuelve `T | undefined`; el único consumidor (`roles.guard.ts`) ya hacía `if (!requiredRoles) return true;` antes de usarlo → tsc en verde sin cambios.
+4. **multer 1.x → 2.x** (transitivo vía `platform-express` 11; resuelto 2.1.1). Como seis controllers importan `diskStorage`/`memoryStorage` directamente de `'multer'` sin que el paquete estuviera declarado (phantom import), se declaró `multer` explícito en `apps/api` a ^2.1.1 — la misma 2.1.1 ya resuelta, sin cambio funcional, una sola copia en el árbol. Elimina la fragilidad del import implícito ante futuros cambios del árbol de dependencias.
+5. **Sin cambios de código fuente:** el upgrade fue 100% operación de dependencias (`package.json` + lockfile), aplicada por Claude Code (instalar/actualizar dependencias está fuera del alcance de Antigravity, CONVENTIONS §0). `tsc --noEmit` de api en verde, sin regenerar Prisma.
+### Consecuencias
+- Verificado en runtime en local: arranque sin `DeprecationWarning` de path-to-regexp, login completo (passport-jwt + JwtModule), endpoint admin protegido por RolesGuard, `/api/docs` y `/api/docs-json` sirviendo (swagger 11 genera el documento OpenAPI en el arranque), subida de archivos (multer 2.x con disk y memory storage) y servido de `/uploads/` (serve-static de Express 5), y ThrottlerGuard cortando en 429 exactamente al pasar de 30 req/min.
+- Node ya estaba en 22 (Nest 11 exige ≥20). No se usa `@nestjs/config` ni `@nestjs/cache-manager`, así que sus breaking changes (precedencia de config, migración a Keyv) no aplican.
+- TypeScript queda heterogéneo a propósito (raíz 6.0.2, api ^5.1.3 → 5.9.x, web ~5.9.3); api resuelve a 5.9.x, soportado por Nest 11. La unificación a 6 es el sub-item siguiente del ADR-041.
+- `multer` queda con doble fuente de versión (la directa ^2.1.1 + la que pinnea `platform-express`). Si `platform-express` salta a multer 3.x, realinear el caret para no arrastrar dos majores.
+- El salto de swagger fue de 7 a 11 de una vez; no rompió el setup básico, pero queda como nota que cualquier uso avanzado de decoradores `@Api*` conviene revisarlo si se amplía la documentación OpenAPI.
+### Archivos
+- `apps/api/package.json` (core `@nestjs/*` 10→11, swagger 7→^11.4.4, cli/schematics/testing 10→11, multer declarado ^2.1.1)
+- `pnpm-lock.yaml`
+### Commits
+- `42e6fa9` — chore(api): upgrade NestJS core to v11 (Express 5, multer 2)
+### Pendientes
+- **Push a Railway (servicio `api`):** lo hace Luis tras decidir el momento (puede haber usuarios en producción); revisar el build/deploy log del servicio.
+- **Sub-items P2+ restantes del ADR-041**, en orden: unificar TypeScript a 6 (siguiente), ESLint 8→9, Turborepo 1→2. La v12 de NestJS (ESM) queda en el horizonte, fuera de este ciclo.
+- Si `platform-express` sube multer a una major nueva, realinear el caret de la dependencia directa de `multer`.
