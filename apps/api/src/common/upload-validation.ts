@@ -27,7 +27,6 @@ export function sanitizeFilename(originalname: string): string {
 
 // ─── CSV VALIDATION ─────────────────────────────────────────────
 
-const ALLOWED_CSV_MIMES = ['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'];
 const ALLOWED_CSV_EXTENSIONS = ['.csv'];
 const CSV_MAX_SIZE_BYTES = 401 * 1024; // 401KB
 const IMAGE_MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB

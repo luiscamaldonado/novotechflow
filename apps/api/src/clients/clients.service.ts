@@ -88,7 +88,7 @@ export class ClientsService {
 
     // Ordenar por relevancia descendente y devolver los top 15
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 15).map(({ score, ...client }) => client);
+    return scored.slice(0, 15).map(({ score: _score, ...client }) => client);
   }
 
   /**

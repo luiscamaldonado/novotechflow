@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BlockType, PageType } from '@prisma/client';
+import { PageType } from '@prisma/client';
 
 @Injectable()
 export class TemplatesService {
