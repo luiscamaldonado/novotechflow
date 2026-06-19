@@ -13,7 +13,13 @@ import {
   UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiConsumes,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { join } from 'path';
@@ -34,7 +40,12 @@ import {
 } from './dto/spec-options.dto';
 
 /** MIME types permitted for CSV uploads */
-const ALLOWED_CSV_MIMES = ['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'];
+const ALLOWED_CSV_MIMES = [
+  'text/csv',
+  'text/plain',
+  'application/csv',
+  'application/vnd.ms-excel',
+];
 
 /** Max CSV file size: 401 KB */
 const CSV_MAX_SIZE = 401 * 1024;
@@ -62,7 +73,9 @@ export class SpecOptionsController {
   @UseGuards(AdminGuard)
   @ApiBearerAuth()
   @ApiTags('admin/spec-options')
-  @ApiOperation({ summary: 'Listar opciones (opcionalmente filtrar por fieldName)' })
+  @ApiOperation({
+    summary: 'Listar opciones (opcionalmente filtrar por fieldName)',
+  })
   @ApiQuery({ name: 'fieldName', required: false, example: 'fabricante' })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   @Get('admin/spec-options')
@@ -133,24 +146,27 @@ export class SpecOptionsController {
   @ApiOperation({ summary: 'Importar opciones desde archivo CSV' })
   @ApiConsumes('multipart/form-data')
   @Post('admin/spec-options/import-csv')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: join(process.cwd(), 'uploads', 'tmp'),
-      filename: (_req, file, cb) => {
-        const safeName = sanitizeFilenameCsv(file.originalname);
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, `csv-${uniqueSuffix}-${safeName}`);
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'uploads', 'tmp'),
+        filename: (_req, file, cb) => {
+          const safeName = sanitizeFilenameCsv(file.originalname);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(null, `csv-${uniqueSuffix}-${safeName}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!ALLOWED_CSV_MIMES.includes(file.mimetype)) {
+          cb(new BadRequestException('Solo se permiten archivos CSV'), false);
+          return;
+        }
+        cb(null, true);
       },
+      limits: { fileSize: CSV_MAX_SIZE },
     }),
-    fileFilter: (_req, file, cb) => {
-      if (!ALLOWED_CSV_MIMES.includes(file.mimetype)) {
-        cb(new BadRequestException('Solo se permiten archivos CSV'), false);
-        return;
-      }
-      cb(null, true);
-    },
-    limits: { fileSize: CSV_MAX_SIZE },
-  }))
+  )
   async importCsv(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No se envi\u00f3 ning\u00fan archivo.');
@@ -166,7 +182,9 @@ export class SpecOptionsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiTags('spec-options')
-  @ApiOperation({ summary: 'Sugerir opciones para autocompletado (m\u00e1x 10)' })
+  @ApiOperation({
+    summary: 'Sugerir opciones para autocompletado (m\u00e1x 10)',
+  })
   @ApiQuery({ name: 'fieldName', required: true, example: 'fabricante' })
   @ApiQuery({ name: 'q', required: true, example: 'del' })
   @Get('spec-options/suggest')
@@ -185,26 +203,38 @@ export class SpecOptionsController {
    * Si el CSV solo tiene una columna, se interpreta como "value" y se requiere
    * que el header sea el fieldName.
    */
-  private async parseCsvToSpecOptions(filePath: string): Promise<CreateSpecOptionDto[]> {
+  private async parseCsvToSpecOptions(
+    filePath: string,
+  ): Promise<CreateSpecOptionDto[]> {
     const buffer = await readFile(filePath);
     const content = buffer.toString('utf-8');
-    const lines = content.split(/\r?\n/).filter(line => line.trim().length > 0);
+    const lines = content
+      .split(/\r?\n/)
+      .filter((line) => line.trim().length > 0);
 
     if (lines.length < 2) {
-      throw new BadRequestException('El CSV debe tener al menos un encabezado y una fila.');
+      throw new BadRequestException(
+        'El CSV debe tener al menos un encabezado y una fila.',
+      );
     }
 
     const headerLine = lines[0];
-    const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+    const headers = headerLine
+      .split(',')
+      .map((h) => h.trim().toLowerCase().replace(/"/g, ''));
     const items: CreateSpecOptionDto[] = [];
 
-    const fieldNameIndex = headers.findIndex(h => h === 'fieldname' || h === 'field_name');
-    const valueIndex = headers.findIndex(h => h === 'value');
+    const fieldNameIndex = headers.findIndex(
+      (h) => h === 'fieldname' || h === 'field_name',
+    );
+    const valueIndex = headers.findIndex((h) => h === 'value');
 
     // Two-column format: fieldName, value
     if (fieldNameIndex !== -1 && valueIndex !== -1) {
       for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        const cols = lines[i]
+          .split(',')
+          .map((c) => c.trim().replace(/^"|"$/g, ''));
         const fieldName = String(cols[fieldNameIndex] || '').trim();
         const value = String(cols[valueIndex] || '').trim();
         validateCsvCellValue(fieldName);
@@ -232,7 +262,9 @@ export class SpecOptionsController {
     }
 
     if (items.length === 0) {
-      throw new BadRequestException('El archivo CSV no contiene datos v\u00e1lidos.');
+      throw new BadRequestException(
+        'El archivo CSV no contiene datos v\u00e1lidos.',
+      );
     }
 
     return items;

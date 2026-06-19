@@ -1,4 +1,18 @@
-import { Controller, Get, Post, Patch, Body, UseGuards, Delete, Param, Req, UseInterceptors, UploadedFile, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  UseGuards,
+  Delete,
+  Param,
+  Req,
+  UseInterceptors,
+  UploadedFile,
+  ParseUUIDPipe,
+  BadRequestException,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -11,10 +25,14 @@ import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
+import {
+  validateImageMagicBytes,
+  validateImageFileSize,
+  sanitizeFilename,
+} from '../common/upload-validation';
 
 interface AuthenticatedRequest {
-    user: { id: string; role: Role; nomenclature: string; email: string };
+  user: { id: string; role: Role; nomenclature: string; email: string };
 }
 
 @ApiTags('Users')
@@ -22,79 +40,87 @@ interface AuthenticatedRequest {
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
-    constructor(private readonly usersService: UsersService) { }
+  constructor(private readonly usersService: UsersService) {}
 
-    @Get()
-    @Roles(Role.ADMIN)
-    async findAll() {
-        return this.usersService.findAll();
-    }
+  @Get()
+  @Roles(Role.ADMIN)
+  async findAll() {
+    return this.usersService.findAll();
+  }
 
-    @Post()
-    @Roles(Role.ADMIN)
-    async create(@Body() createUserDto: CreateUserDto) {
-        return this.usersService.createUser({
-            email: createUserDto.email,
-            name: createUserDto.name,
-            role: createUserDto.role,
-            nomenclature: createUserDto.nomenclature,
-            passwordHash: createUserDto.password,
-            proposalCounterStart: createUserDto.proposalCounterStart ?? 0,
-        });
-    }
+  @Post()
+  @Roles(Role.ADMIN)
+  async create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.createUser({
+      email: createUserDto.email,
+      name: createUserDto.name,
+      role: createUserDto.role,
+      nomenclature: createUserDto.nomenclature,
+      passwordHash: createUserDto.password,
+      proposalCounterStart: createUserDto.proposalCounterStart ?? 0,
+    });
+  }
 
-    @Patch(':id')
-    @Roles(Role.ADMIN)
-    async update(
-        @Param('id', ParseUUIDPipe) id: string,
-        @Body() updateUserDto: UpdateUserDto,
-        @Req() req: AuthenticatedRequest,
-    ) {
-        return this.usersService.updateUser(id, req.user.id, updateUserDto);
-    }
+  @Patch(':id')
+  @Roles(Role.ADMIN)
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.usersService.updateUser(id, req.user.id, updateUserDto);
+  }
 
-    @Delete(':id')
-    @Roles(Role.ADMIN)
-    async remove(@Param('id', ParseUUIDPipe) id: string) {
-        return this.usersService.deleteUser(id);
-    }
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.deleteUser(id);
+  }
 
-    @Post(':id/signature')
-    @Roles(Role.ADMIN)
-    @UseInterceptors(FileInterceptor('file', {
-        storage: diskStorage({
-            destination: join(process.cwd(), 'uploads', 'signatures'),
-            filename: (_req, file, cb) => {
-                const safeName = sanitizeFilename(file.originalname);
-                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-                cb(null, 'signature-' + uniqueSuffix + extname(safeName));
-            },
-        }),
-        fileFilter: (_req, file, cb) => {
-            const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            if (!allowed.includes(file.mimetype)) {
-                cb(new BadRequestException('Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP'), false);
-                return;
-            }
-            cb(null, true);
+  @Post(':id/signature')
+  @Roles(Role.ADMIN)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'uploads', 'signatures'),
+        filename: (_req, file, cb) => {
+          const safeName = sanitizeFilename(file.originalname);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(null, 'signature-' + uniqueSuffix + extname(safeName));
         },
-        limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
-    }))
-    async uploadSignature(
-        @Param('id', ParseUUIDPipe) id: string,
-        @UploadedFile() file: Express.Multer.File,
-    ) {
-        await validateImageFileSize(file);
-        await validateImageMagicBytes(file);
-        const buffer = await readFile(file.path);
-        const dataUri = `data:${file.mimetype};base64,${buffer.toString('base64')}`;
-        await unlink(file.path);
-        return this.usersService.updateSignature(id, dataUri);
-    }
+      }),
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowed.includes(file.mimetype)) {
+          cb(
+            new BadRequestException(
+              'Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP',
+            ),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+    }),
+  )
+  async uploadSignature(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    await validateImageFileSize(file);
+    await validateImageMagicBytes(file);
+    const buffer = await readFile(file.path);
+    const dataUri = `data:${file.mimetype};base64,${buffer.toString('base64')}`;
+    await unlink(file.path);
+    return this.usersService.updateSignature(id, dataUri);
+  }
 
-    @Delete(':id/signature')
-    @Roles(Role.ADMIN)
-    async deleteSignature(@Param('id', ParseUUIDPipe) id: string) {
-        return this.usersService.deleteSignature(id);
-    }
+  @Delete(':id/signature')
+  @Roles(Role.ADMIN)
+  async deleteSignature(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.deleteSignature(id);
+  }
 }

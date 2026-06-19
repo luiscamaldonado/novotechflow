@@ -13,43 +13,46 @@ export class CatalogsService {
 
   /**
    * Obtiene todos los valores activos para una categoría específica.
-   * 
+   *
    * @param {string} category - Nombre de la categoría (ej. FORMATO, FABRICANTE).
    * @returns Lista de valores ordenados alfabéticamente.
    */
   async findByCategory(category: string) {
     return this.prisma.catalog.findMany({
-      where: { 
+      where: {
         category: category.toUpperCase(),
-        isActive: true 
+        isActive: true,
       },
       orderBy: { value: 'asc' },
-      select: { value: true }
+      select: { value: true },
     });
   }
 
   /**
    * Obtiene múltiples categorías de una sola vez. Useful para inicializar formularios complejos.
-   * 
+   *
    * @param {string[]} categories - Lista de categorías.
    * @returns Objeto con las listas de valores indexadas por categoría.
    */
   async findMultipleCategories(categories: string[]) {
     const results = await this.prisma.catalog.findMany({
       where: {
-        category: { in: categories.map(c => c.toUpperCase()) },
-        isActive: true
+        category: { in: categories.map((c) => c.toUpperCase()) },
+        isActive: true,
       },
       orderBy: { value: 'asc' },
-      select: { category: true, value: true }
+      select: { category: true, value: true },
     });
 
     // Agrupar resultados por categoría
-    return results.reduce((acc, current) => {
-      const cat = current.category;
-      if (!acc[cat]) acc[cat] = [];
-      acc[cat].push(current.value);
-      return acc;
-    }, {} as Record<string, string[]>);
+    return results.reduce(
+      (acc, current) => {
+        const cat = current.category;
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(current.value);
+        return acc;
+      },
+      {} as Record<string, string[]>,
+    );
   }
 }

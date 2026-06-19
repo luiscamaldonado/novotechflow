@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Req, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Req,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -28,7 +36,9 @@ export class PresenceController {
   @Get('active')
   @SkipThrottle()
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Listar usuarios con sesi\u00f3n activa (solo admin)' })
+  @ApiOperation({
+    summary: 'Listar usuarios con sesi\u00f3n activa (solo admin)',
+  })
   async getActive(): Promise<ActiveUser[]> {
     return this.presenceService.getActiveUsers();
   }

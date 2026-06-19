@@ -5,11 +5,11 @@ import type { PrefillResponseDto } from '../dto/prefill-response.dto';
  * Cada valor identifica una fuente de extracción distinta.
  */
 export enum PrefillStrategyType {
-    EXCEL = 'EXCEL',
-    PART_NUMBER = 'PART_NUMBER',
-    HP_PART_NUMBER = 'HP_PART_NUMBER',
-    TEXTO_PLANO = 'TEXTO_PLANO',
-    PDF = 'PDF',
+  EXCEL = 'EXCEL',
+  PART_NUMBER = 'PART_NUMBER',
+  HP_PART_NUMBER = 'HP_PART_NUMBER',
+  TEXTO_PLANO = 'TEXTO_PLANO',
+  PDF = 'PDF',
 }
 
 /**
@@ -17,13 +17,13 @@ export enum PrefillStrategyType {
  * payload se usa en estrategias de texto/part number; file en Excel/PDF.
  */
 export interface PrefillInput {
-    payload?: string;
-    file?: Express.Multer.File;
+  payload?: string;
+  file?: Express.Multer.File;
 }
 
 /**
  * Contrato común de toda estrategia de prellenado.
  */
 export interface PrefillStrategy {
-    ejecutar(data: PrefillInput): Promise<PrefillResponseDto>;
+  ejecutar(data: PrefillInput): Promise<PrefillResponseDto>;
 }

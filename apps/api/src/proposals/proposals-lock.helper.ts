@@ -9,7 +9,9 @@ export interface LockableProposal {
  * Lanza ForbiddenException si la propuesta está bloqueada por ser versión histórica.
  * Si proposal es null/undefined, no hace nada (el caller maneja el NotFound).
  */
-export function assertProposalNotLocked(proposal: LockableProposal | null | undefined): void {
+export function assertProposalNotLocked(
+  proposal: LockableProposal | null | undefined,
+): void {
   if (!proposal) return;
   if (proposal.isLocked) {
     throw new ForbiddenException(

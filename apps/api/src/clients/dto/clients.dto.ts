@@ -69,7 +69,10 @@ export class BulkCreateClientsDto {
  * DTO para borrado masivo de clientes por IDs.
  */
 export class BulkDeleteClientsDto {
-  @ApiProperty({ example: ['uuid-1', 'uuid-2'], description: 'Array de UUIDs a eliminar' })
+  @ApiProperty({
+    example: ['uuid-1', 'uuid-2'],
+    description: 'Array de UUIDs a eliminar',
+  })
   @IsArray()
   @IsUUID('4', { each: true })
   @ArrayMinSize(1)

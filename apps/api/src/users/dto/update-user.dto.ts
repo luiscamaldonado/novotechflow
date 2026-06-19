@@ -68,7 +68,8 @@ export class UpdateUserDto {
   isActive?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Offset inicial del contador de propuestas. Editable por ADMIN. No puede ser menor o igual al \u00FAltimo n\u00FAmero secuencial ya emitido por el usuario.',
+    description:
+      'Offset inicial del contador de propuestas. Editable por ADMIN. No puede ser menor o igual al \u00FAltimo n\u00FAmero secuencial ya emitido por el usuario.',
     example: 100,
     minimum: 0,
     maximum: 99999,

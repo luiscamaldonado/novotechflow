@@ -3,20 +3,20 @@
  * ese valor lo asigna el frontend cuando el usuario edita el campo.
  */
 export type PrefillSource =
-    | 'EXCEL'
-    | 'TEXTO_PLANO'
-    | 'PART_NUMBER'
-    | 'PSREF'
-    | 'SMARTFIND'
-    | 'HP_PARTSURFER'
-    | 'PDF';
+  | 'EXCEL'
+  | 'TEXTO_PLANO'
+  | 'PART_NUMBER'
+  | 'PSREF'
+  | 'SMARTFIND'
+  | 'HP_PARTSURFER'
+  | 'PDF';
 
 /**
  * Un campo de especificación extraído, con su valor y su origen.
  */
 export class CampoPrefillDto {
-    value: string;
-    source: PrefillSource;
+  value: string;
+  source: PrefillSource;
 }
 
 /**
@@ -25,25 +25,25 @@ export class CampoPrefillDto {
  * salvo 'estado', que lo elige el usuario.
  */
 export class ProductoPrefillDto {
-    fabricante: CampoPrefillDto;
-    numeroParte: CampoPrefillDto;
-    formato: CampoPrefillDto;
-    modelo: CampoPrefillDto;
-    procesador: CampoPrefillDto;
-    sistemaOperativo: CampoPrefillDto;
-    graficos: CampoPrefillDto;
-    memoriaRam: CampoPrefillDto;
-    almacenamiento: CampoPrefillDto;
-    pantalla: CampoPrefillDto;
-    network: CampoPrefillDto;
-    seguridad: CampoPrefillDto;
-    garantiaEquipo: CampoPrefillDto;
-    garantiaBateria: CampoPrefillDto;
+  fabricante: CampoPrefillDto;
+  numeroParte: CampoPrefillDto;
+  formato: CampoPrefillDto;
+  modelo: CampoPrefillDto;
+  procesador: CampoPrefillDto;
+  sistemaOperativo: CampoPrefillDto;
+  graficos: CampoPrefillDto;
+  memoriaRam: CampoPrefillDto;
+  almacenamiento: CampoPrefillDto;
+  pantalla: CampoPrefillDto;
+  network: CampoPrefillDto;
+  seguridad: CampoPrefillDto;
+  garantiaEquipo: CampoPrefillDto;
+  garantiaBateria: CampoPrefillDto;
 }
 
 /**
  * Respuesta del endpoint de extracción: lista de equipos detectados.
  */
 export class PrefillResponseDto {
-    productos: ProductoPrefillDto[];
+  productos: ProductoPrefillDto[];
 }

@@ -30,14 +30,31 @@ export class CatalogsController {
   @Get('pc-specs')
   async getPcSpecs() {
     const categories = [
-      'FORMATO', 'FABRICANTE', 'MODELO', 'PROCESADOR', 'SISTEMA_OPERATIVO',
-      'GRAFICOS', 'MEMORIA_RAM', 'ALMACENAMIENTO', 'PANTALLA', 'NETWORK',
-      'SEGURIDAD', 'GARANTIA_BATERIA', 'GARANTIA_EQUIPO',
-      'ACC_TIPO', 'ACC_GARANTIA',
-      'SVC_TIPO', 'SVC_RESPONSABLE', 'SVC_UM',
-      'SW_TIPO', 'SW_UM',
-      'INFRA_TIPO', 'INFRA_GARANTIA',
-      'INFRA_SVC_TIPO', 'INFRA_SVC_RESPONSABLE', 'INFRA_SVC_UM'
+      'FORMATO',
+      'FABRICANTE',
+      'MODELO',
+      'PROCESADOR',
+      'SISTEMA_OPERATIVO',
+      'GRAFICOS',
+      'MEMORIA_RAM',
+      'ALMACENAMIENTO',
+      'PANTALLA',
+      'NETWORK',
+      'SEGURIDAD',
+      'GARANTIA_BATERIA',
+      'GARANTIA_EQUIPO',
+      'ACC_TIPO',
+      'ACC_GARANTIA',
+      'SVC_TIPO',
+      'SVC_RESPONSABLE',
+      'SVC_UM',
+      'SW_TIPO',
+      'SW_UM',
+      'INFRA_TIPO',
+      'INFRA_GARANTIA',
+      'INFRA_SVC_TIPO',
+      'INFRA_SVC_RESPONSABLE',
+      'INFRA_SVC_UM',
     ];
     return this.catalogsService.findMultipleCategories(categories);
   }

@@ -42,10 +42,7 @@ export class EmailVerificationService {
         Math.random() * 9 * Math.pow(10, CODE_LENGTH - 1),
     ).toString();
 
-    const hashedCode = crypto
-      .createHash('sha256')
-      .update(code)
-      .digest('hex');
+    const hashedCode = crypto.createHash('sha256').update(code).digest('hex');
 
     await this.prisma.verificationCode.create({
       data: {
@@ -56,8 +53,7 @@ export class EmailVerificationService {
     });
 
     const from =
-      process.env.RESEND_FROM ||
-      'NovoTechFlow <onboarding@resend.dev>';
+      process.env.RESEND_FROM || 'NovoTechFlow <onboarding@resend.dev>';
 
     await this.resend.emails.send({
       from,
@@ -97,10 +93,7 @@ export class EmailVerificationService {
       );
     }
 
-    const hashedInput = crypto
-      .createHash('sha256')
-      .update(code)
-      .digest('hex');
+    const hashedInput = crypto.createHash('sha256').update(code).digest('hex');
 
     if (hashedInput !== record.code) {
       await this.prisma.verificationCode.update({

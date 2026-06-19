@@ -1,17 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProposalsService } from './proposals.service';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
 import { assertProposalNotLocked } from './proposals-lock.helper';
 import {
-    CreateScenarioDto,
-    UpdateScenarioDto,
-    AddScenarioItemDto,
-    UpdateScenarioItemDto,
-    ReorderScenarioItemsDto,
+  CreateScenarioDto,
+  UpdateScenarioDto,
+  AddScenarioItemDto,
+  UpdateScenarioItemDto,
+  ReorderScenarioItemsDto,
 } from './dto/proposals.dto';
-
 
 @Injectable()
 export class ScenariosService {
@@ -24,10 +27,18 @@ export class ScenariosService {
    * Verifica ownership a través de un escenario.
    * Busca el scenario → obtiene proposalId → verifica ownership.
    */
-  private async verifyScenarioOwnership(scenarioId: string, user: AuthenticatedUser) {
-    const scenario = await this.prisma.scenario.findUnique({ where: { id: scenarioId } });
+  private async verifyScenarioOwnership(
+    scenarioId: string,
+    user: AuthenticatedUser,
+  ) {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
     if (!scenario) throw new NotFoundException('Escenario no encontrado.');
-    const proposal = await this.proposalsService.verifyProposalOwnership(scenario.proposalId, user);
+    const proposal = await this.proposalsService.verifyProposalOwnership(
+      scenario.proposalId,
+      user,
+    );
     assertProposalNotLocked(proposal);
     return scenario;
   }
@@ -58,12 +69,19 @@ export class ScenariosService {
   /**
    * Crea un nuevo escenario para una propuesta.
    */
-  async createScenario(proposalId: string, data: CreateScenarioDto, user: AuthenticatedUser) {
-    const proposal = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+  async createScenario(
+    proposalId: string,
+    data: CreateScenarioDto,
+    user: AuthenticatedUser,
+  ) {
+    const proposal = await this.proposalsService.verifyProposalOwnership(
+      proposalId,
+      user,
+    );
     assertProposalNotLocked(proposal);
     const aggregate = await this.prisma.scenario.aggregate({
       where: { proposalId },
-      _max: { sortOrder: true }
+      _max: { sortOrder: true },
     });
 
     const nextOrder = (aggregate._max.sortOrder || 0) + 1;
@@ -74,23 +92,31 @@ export class ScenariosService {
         name: data.name,
         currency: data.currency || 'USD',
         conversionTrm: data.conversionTrm ?? undefined,
-        description: data.description ? sanitizePlainText(data.description) : undefined,
-        sortOrder: nextOrder
-      }
+        description: data.description
+          ? sanitizePlainText(data.description)
+          : undefined,
+        sortOrder: nextOrder,
+      },
     });
   }
 
   /**
    * Actualiza un escenario existente.
    */
-  async updateScenario(id: string, data: UpdateScenarioDto, user: AuthenticatedUser) {
+  async updateScenario(
+    id: string,
+    data: UpdateScenarioDto,
+    user: AuthenticatedUser,
+  ) {
     const scenario = await this.verifyScenarioOwnership(id, user);
 
     const updateData = {
       name: data.name,
       currency: data.currency,
       conversionTrm: data.conversionTrm,
-      description: data.description ? sanitizePlainText(data.description) : data.description,
+      description: data.description
+        ? sanitizePlainText(data.description)
+        : data.description,
     };
 
     const isCurrencyChanging =
@@ -152,7 +178,7 @@ export class ScenariosService {
     });
 
     // Clone root items (parentId = null)
-    const rootItems = original.scenarioItems.filter(si => !si.parentId);
+    const rootItems = original.scenarioItems.filter((si) => !si.parentId);
     const siIdMap = new Map<string, string>();
 
     for (const si of rootItems) {
@@ -171,7 +197,7 @@ export class ScenariosService {
     }
 
     // Clone child items
-    const childItems = original.scenarioItems.filter(si => si.parentId);
+    const childItems = original.scenarioItems.filter((si) => si.parentId);
     for (const child of childItems) {
       const newParentId = siIdMap.get(child.parentId!) || child.parentId;
       await this.prisma.scenarioItem.create({
@@ -206,7 +232,11 @@ export class ScenariosService {
   /**
    * Vincula un item de propuesta a un escenario.
    */
-  async addScenarioItem(scenarioId: string, data: AddScenarioItemDto, user: AuthenticatedUser) {
+  async addScenarioItem(
+    scenarioId: string,
+    data: AddScenarioItemDto,
+    user: AuthenticatedUser,
+  ) {
     await this.verifyScenarioOwnership(scenarioId, user);
 
     const isParent = data.parentId === null || data.parentId === undefined;
@@ -238,20 +268,28 @@ export class ScenariosService {
   /**
    * Actualiza un ítem dentro de un escenario.
    */
-  async updateScenarioItem(id: string, data: UpdateScenarioItemDto, user: AuthenticatedUser) {
-    const scenarioItem = await this.prisma.scenarioItem.findUnique({ where: { id } });
-    if (!scenarioItem) throw new NotFoundException('\u00cdtem de escenario no encontrado.');
+  async updateScenarioItem(
+    id: string,
+    data: UpdateScenarioItemDto,
+    user: AuthenticatedUser,
+  ) {
+    const scenarioItem = await this.prisma.scenarioItem.findUnique({
+      where: { id },
+    });
+    if (!scenarioItem)
+      throw new NotFoundException('\u00cdtem de escenario no encontrado.');
     await this.verifyScenarioOwnership(scenarioItem.scenarioId, user);
     return this.prisma.scenarioItem.update({
       where: { id },
       data: {
         quantity: data.quantity,
         marginPctOverride: data.marginPct,
-        unitPriceOverride: data.unitPriceOverride === undefined
-          ? undefined
-          : data.unitPriceOverride,
+        unitPriceOverride:
+          data.unitPriceOverride === undefined
+            ? undefined
+            : data.unitPriceOverride,
         isDiluted: data.isDiluted,
-      }
+      },
     });
   }
 
@@ -259,8 +297,11 @@ export class ScenariosService {
    * Elimina un ítem específico de un escenario.
    */
   async removeScenarioItem(id: string, user: AuthenticatedUser) {
-    const scenarioItem = await this.prisma.scenarioItem.findUnique({ where: { id } });
-    if (!scenarioItem) throw new NotFoundException('\u00cdtem de escenario no encontrado.');
+    const scenarioItem = await this.prisma.scenarioItem.findUnique({
+      where: { id },
+    });
+    if (!scenarioItem)
+      throw new NotFoundException('\u00cdtem de escenario no encontrado.');
     await this.verifyScenarioOwnership(scenarioItem.scenarioId, user);
     // Cascade: delete children first, then the item itself
     await this.prisma.scenarioItem.deleteMany({ where: { parentId: id } });
@@ -271,28 +312,38 @@ export class ScenariosService {
    * Aplica un margen global a todos los ítems de un escenario específico.
    * Esto sobreescribe cualquier margen individual previo.
    */
-  async applyMarginToEntireScenario(scenarioId: string, marginPct: number, user: AuthenticatedUser) {
+  async applyMarginToEntireScenario(
+    scenarioId: string,
+    marginPct: number,
+    user: AuthenticatedUser,
+  ) {
     await this.verifyScenarioOwnership(scenarioId, user);
     return this.prisma.scenarioItem.updateMany({
       where: { scenarioId },
       data: {
         marginPctOverride: marginPct,
         unitPriceOverride: null,
-      }
+      },
     });
   }
 
   /**
    * Reordena los ítems padre de un escenario.
    */
-  async reorderScenarioItems(scenarioId: string, data: ReorderScenarioItemsDto, user: AuthenticatedUser) {
+  async reorderScenarioItems(
+    scenarioId: string,
+    data: ReorderScenarioItemsDto,
+    user: AuthenticatedUser,
+  ) {
     await this.verifyScenarioOwnership(scenarioId, user);
 
     const count = await this.prisma.scenarioItem.count({
       where: { id: { in: data.itemIds }, scenarioId, parentId: null },
     });
     if (count !== data.itemIds.length) {
-      throw new BadRequestException('IDs de ítems inválidos para este escenario.');
+      throw new BadRequestException(
+        'IDs de ítems inválidos para este escenario.',
+      );
     }
 
     await this.prisma.$transaction(

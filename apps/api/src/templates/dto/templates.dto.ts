@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsArray, IsObject, IsBoolean, IsNumber } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsObject,
+  IsBoolean,
+  IsNumber,
+} from 'class-validator';
 
 export class CreateTemplateDto {
   @IsString()
@@ -7,18 +14,22 @@ export class CreateTemplateDto {
   @IsString()
   templateType: string;
 
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   sortOrder?: number;
 }
 
 export class UpdateTemplateDto {
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   name?: string;
 
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   sortOrder?: number;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
@@ -31,7 +42,8 @@ export class CreateTemplateBlockDto {
   @IsString()
   blockType: string;
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   content?: object;
 }
 

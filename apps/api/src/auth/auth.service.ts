@@ -68,10 +68,7 @@ export class AuthService {
   /**
    * Validates the 2FA code and issues the JWT if correct.
    */
-  async verifyAndLogin(
-    userId: string,
-    code: string,
-  ): Promise<LoginResponse> {
+  async verifyAndLogin(userId: string, code: string): Promise<LoginResponse> {
     await this.emailVerificationService.verifyCode(userId, code);
 
     const user = await this.prisma.user.findUnique({
@@ -104,9 +101,7 @@ export class AuthService {
   /**
    * Re-sends a verification code if the user hasn't exceeded the rate limit.
    */
-  async resendCode(
-    userId: string,
-  ): Promise<{ message: string }> {
+  async resendCode(userId: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -115,8 +110,7 @@ export class AuthService {
       throw new UnauthorizedException('Usuario no encontrado');
     }
 
-    const canResend =
-      await this.emailVerificationService.canResendCode(userId);
+    const canResend = await this.emailVerificationService.canResendCode(userId);
 
     if (!canResend) {
       throw new BadRequestException(

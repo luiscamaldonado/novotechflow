@@ -15,20 +15,26 @@ export class CreateUserDto {
   @IsEmail()
   email: string;
 
-  @IsString() @MinLength(2) @MaxLength(100)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
   name: string;
 
-  @IsString() @MinLength(2) @MaxLength(10)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(10)
   nomenclature: string;
 
-  @IsString() @MinLength(8)
+  @IsString()
+  @MinLength(8)
   password: string;
 
   @IsEnum(Role)
   role: Role;
 
   @ApiPropertyOptional({
-    description: 'Número desde el cual empezará el consecutivo de cotizaciones (default 0)',
+    description:
+      'Número desde el cual empezará el consecutivo de cotizaciones (default 0)',
     default: 0,
   })
   @IsOptional()

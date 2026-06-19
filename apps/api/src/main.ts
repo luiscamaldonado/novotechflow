@@ -14,34 +14,43 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:', 'blob:'],
-        scriptSrc: ["'self'"],
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'blob:'],
+          scriptSrc: ["'self'"],
+        },
       },
-    },
-    hsts: { maxAge: 31536000, includeSubDomains: true },
-  }));
+      hsts: { maxAge: 31536000, includeSubDomains: true },
+    }),
+  );
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173'],
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   });
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,
-    forbidNonWhitelisted: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
 
   // Ensure upload directories exist
   const uploadsPath = join(process.cwd(), 'uploads');
   const signaturesPath = join(uploadsPath, 'signatures');
   const defaultsPath = join(uploadsPath, 'defaults');
   const templatesPath = join(uploadsPath, 'templates');
-  for (const dir of [uploadsPath, signaturesPath, defaultsPath, templatesPath]) {
+  for (const dir of [
+    uploadsPath,
+    signaturesPath,
+    defaultsPath,
+    templatesPath,
+  ]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 
@@ -61,4 +70,3 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
-

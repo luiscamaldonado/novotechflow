@@ -1,6 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Delete, Param, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Delete,
+  Param,
+  UseGuards,
+  Request,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { BillingProjectionsService, CreateBillingProjectionDto, UpdateBillingProjectionDto } from './billing-projections.service';
+import {
+  BillingProjectionsService,
+  CreateBillingProjectionDto,
+  UpdateBillingProjectionDto,
+} from './billing-projections.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 
@@ -8,29 +23,39 @@ import { AuthenticatedUser } from '../auth/dto/auth.dto';
 @ApiBearerAuth()
 @Controller('billing-projections')
 export class BillingProjectionsController {
-    constructor(private readonly service: BillingProjectionsService) {}
+  constructor(private readonly service: BillingProjectionsService) {}
 
-    @UseGuards(JwtAuthGuard)
-    @Get()
-    async findAll(@Request() req: { user: AuthenticatedUser }) {
-        return this.service.findAll(req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Get()
+  async findAll(@Request() req: { user: AuthenticatedUser }) {
+    return this.service.findAll(req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post()
-    async create(@Request() req: { user: AuthenticatedUser }, @Body() data: CreateBillingProjectionDto) {
-        return this.service.create(req.user.id, data);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post()
+  async create(
+    @Request() req: { user: AuthenticatedUser },
+    @Body() data: CreateBillingProjectionDto,
+  ) {
+    return this.service.create(req.user.id, data);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch(':id')
-    async update(@Param('id', ParseUUIDPipe) id: string, @Body() data: UpdateBillingProjectionDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.service.update(id, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id')
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: UpdateBillingProjectionDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.service.update(id, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Delete(':id')
-    async delete(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.service.delete(id, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  async delete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.service.delete(id, req.user);
+  }
 }

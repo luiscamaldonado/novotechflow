@@ -14,17 +14,17 @@ import { HpPartNumberStrategy } from './strategies/hp-part-number.strategy';
  * Expone el endpoint de extracción y registra las estrategias y el cliente Gemini.
  */
 @Module({
-    imports: [],
-    controllers: [SpecPrefillController],
-    providers: [
-        SpecPrefillService,
-        GeminiClient,
-        LenovoPsrefService,
-        TextoPlanoStrategy,
-        PartNumberStrategy,
-        ExcelStrategy,
-        PdfStrategy,
-        HpPartNumberStrategy,
-    ],
+  imports: [],
+  controllers: [SpecPrefillController],
+  providers: [
+    SpecPrefillService,
+    GeminiClient,
+    LenovoPsrefService,
+    TextoPlanoStrategy,
+    PartNumberStrategy,
+    ExcelStrategy,
+    PdfStrategy,
+    HpPartNumberStrategy,
+  ],
 })
 export class SpecPrefillModule {}

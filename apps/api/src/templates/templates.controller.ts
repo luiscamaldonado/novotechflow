@@ -1,6 +1,16 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Param, Body, UseGuards, Req, UseInterceptors, UploadedFile, ParseUUIDPipe,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+  Req,
+  UseInterceptors,
+  UploadedFile,
+  ParseUUIDPipe,
   BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -13,7 +23,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
-import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
+import {
+  validateImageMagicBytes,
+  validateImageFileSize,
+  sanitizeFilename,
+} from '../common/upload-validation';
 import {
   CreateTemplateDto,
   UpdateTemplateDto,
@@ -46,10 +60,7 @@ export class TemplatesController {
 
   /** Create a new template. */
   @Post()
-  async create(
-    @Req() req: any,
-    @Body() body: CreateTemplateDto,
-  ) {
+  async create(@Req() req: any, @Body() body: CreateTemplateDto) {
     return this.templatesService.create({
       name: body.name,
       templateType: body.templateType as any,
@@ -114,25 +125,33 @@ export class TemplatesController {
 
   /** Upload image for a block. */
   @Post(':templateId/blocks/:blockId/image')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: join(process.cwd(), 'uploads', 'templates'),
-      filename: (_req, file, cb) => {
-        const safeName = sanitizeFilename(file.originalname);
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, 'tpl-' + uniqueSuffix + extname(safeName));
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'uploads', 'templates'),
+        filename: (_req, file, cb) => {
+          const safeName = sanitizeFilename(file.originalname);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(null, 'tpl-' + uniqueSuffix + extname(safeName));
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowed.includes(file.mimetype)) {
+          cb(
+            new BadRequestException(
+              'Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP',
+            ),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
       },
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
     }),
-    fileFilter: (_req, file, cb) => {
-      const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-      if (!allowed.includes(file.mimetype)) {
-        cb(new BadRequestException('Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP'), false);
-        return;
-      }
-      cb(null, true);
-    },
-    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
-  }))
+  )
   async uploadBlockImage(
     @Param('templateId', ParseUUIDPipe) templateId: string,
     @Param('blockId', ParseUUIDPipe) blockId: string,

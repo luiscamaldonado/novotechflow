@@ -1,7 +1,10 @@
 import { Injectable, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { validateCsvCellValue } from '../common/upload-validation';
-import type { CreateSpecOptionDto, UpdateSpecOptionDto } from './dto/spec-options.dto';
+import type {
+  CreateSpecOptionDto,
+  UpdateSpecOptionDto,
+} from './dto/spec-options.dto';
 
 /** Máximo de sugerencias devueltas por el endpoint suggest */
 const MAX_SUGGESTIONS = 10;
@@ -112,7 +115,7 @@ export class SpecOptionsService {
    * Valida cada valor contra CSV injection antes de insertar (rechaza si detecta inyección).
    */
   async bulkCreate(items: CreateSpecOptionDto[]) {
-    const validatedItems = items.map(item => {
+    const validatedItems = items.map((item) => {
       const fieldName = String(item.fieldName || '').trim();
       const value = String(item.value || '').trim();
       validateCsvCellValue(fieldName);
@@ -125,9 +128,10 @@ export class SpecOptionsService {
       skipDuplicates: true,
     });
 
-    this.logger.log(`Bulk create: ${result.count} opciones creadas (${items.length} enviadas)`);
+    this.logger.log(
+      `Bulk create: ${result.count} opciones creadas (${items.length} enviadas)`,
+    );
 
     return { created: result.count, sent: items.length };
   }
 }
-

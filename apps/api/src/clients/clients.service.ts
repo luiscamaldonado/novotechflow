@@ -25,10 +25,10 @@ export class ClientsService {
 
   /**
    * Realiza una búsqueda de clientes con ranking de relevancia.
-   * 
+   *
    * @param {string} query - Término de búsqueda.
    * @returns {Promise<ISearchResponse>} Resultados rankeados y sugerencias.
-   * 
+   *
    * @description
    * El ranking funciona así:
    * 1. Prioridad ALTA: Nombres que EMPIEZAN por el término buscado.
@@ -36,7 +36,8 @@ export class ClientsService {
    * 3. Prioridad BAJA: Nombres que CONTIENEN el término en cualquier parte.
    */
   async search(query: string): Promise<ISearchResponse> {
-    const normalizedQuery = query?.normalize("NFD").replace(/[\u0300-\u036f]/g, "") || '';
+    const normalizedQuery =
+      query?.normalize('NFD').replace(/[\u0300-\u036f]/g, '') || '';
     const rawQuery = normalizedQuery.toUpperCase();
 
     if (rawQuery.trim().length < 2) {
@@ -54,7 +55,9 @@ export class ClientsService {
       const suggestion = await this.getSmartSuggestion(rawQuery.trim());
       return { results: [], suggestion };
     } catch (error) {
-      this.logger.error(`Error en búsqueda: "${query}": ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Error en búsqueda: "${query}": ${error instanceof Error ? error.message : String(error)}`,
+      );
       return { results: [], suggestion: null };
     }
   }
@@ -65,13 +68,13 @@ export class ClientsService {
    * @private
    */
   private async findWithRelevanceRanking(query: string) {
-    const terms = query.split(' ').filter(t => t.length > 0);
+    const terms = query.split(' ').filter((t) => t.length > 0);
     const searchTerm = query.trim();
 
     // Traemos un pool más grande para luego rankear
     const candidates = await this.prisma.client.findMany({
       where: {
-        AND: terms.map(term => ({
+        AND: terms.map((term) => ({
           name: { contains: term, mode: 'insensitive' },
         })),
         isActive: true,
@@ -81,7 +84,7 @@ export class ClientsService {
     });
 
     // Asignar puntaje de relevancia a cada candidato
-    const scored = candidates.map(client => ({
+    const scored = candidates.map((client) => ({
       ...client,
       score: this.calculateRelevanceScore(client.name, searchTerm),
     }));
@@ -93,13 +96,16 @@ export class ClientsService {
 
   /**
    * Calcula un puntaje de relevancia para ranking de resultados.
-   * 
+   *
    * @param {string} clientName - Nombre del cliente en la BD.
    * @param {string} searchTerm - Término que buscó el usuario.
    * @returns {number} Puntaje de 0 a 100 donde más alto = más relevante.
    * @private
    */
-  private calculateRelevanceScore(clientName: string, searchTerm: string): number {
+  private calculateRelevanceScore(
+    clientName: string,
+    searchTerm: string,
+  ): number {
     const name = clientName.toUpperCase();
     const term = searchTerm.toUpperCase();
     let score = 0;
@@ -111,7 +117,7 @@ export class ClientsService {
 
     // +30 si alguna PALABRA del nombre empieza por el término
     const words = name.split(/\s+/);
-    if (words.some(word => word.startsWith(term))) {
+    if (words.some((word) => word.startsWith(term))) {
       score += 30;
     }
 
@@ -146,7 +152,10 @@ export class ClientsService {
 
     if (candidates.length === 0) return null;
 
-    const bestMatch = this.findBestSimilarityMatch(query, candidates.map(c => c.name));
+    const bestMatch = this.findBestSimilarityMatch(
+      query,
+      candidates.map((c) => c.name),
+    );
     return bestMatch.score > 0.45 ? bestMatch.target : null;
   }
 
@@ -186,7 +195,7 @@ export class ClientsService {
     const pairs2 = getPairs(s2);
     if (pairs1.size === 0 || pairs2.size === 0) return 0;
 
-    const intersection = new Set([...pairs1].filter(x => pairs2.has(x)));
+    const intersection = new Set([...pairs1].filter((x) => pairs2.has(x)));
     return (2.0 * intersection.size) / (pairs1.size + pairs2.size);
   }
 
@@ -201,7 +210,11 @@ export class ClientsService {
    *
    * @returns Objeto con `data` (página actual) y `meta` (total, page, pageSize, totalPages).
    */
-  async findAllAdmin(query?: string, page = 1, pageSize = ClientsService.DEFAULT_PAGE_SIZE) {
+  async findAllAdmin(
+    query?: string,
+    page = 1,
+    pageSize = ClientsService.DEFAULT_PAGE_SIZE,
+  ) {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(Math.max(1, pageSize), 200);
     const skip = (safePage - 1) * safePageSize;
@@ -240,7 +253,9 @@ export class ClientsService {
     });
 
     if (existingClient) {
-      throw new ConflictException(`Ya existe un cliente con el nombre "${dto.name}".`);
+      throw new ConflictException(
+        `Ya existe un cliente con el nombre "${dto.name}".`,
+      );
     }
 
     return this.prisma.client.create({ data: dto });
@@ -278,7 +293,7 @@ export class ClientsService {
    * Valida cada valor contra CSV injection antes de insertar (rechaza si detecta inyección).
    */
   async bulkCreate(items: CreateClientDto[]) {
-    const validatedItems = items.map(item => {
+    const validatedItems = items.map((item) => {
       const name = String(item.name || '').trim();
       const nit = item.nit ? String(item.nit).trim() : undefined;
       validateCsvCellValue(name);
@@ -291,9 +306,10 @@ export class ClientsService {
       skipDuplicates: true,
     });
 
-    this.logger.log(`Bulk create clientes: ${result.count} creados (${items.length} enviados)`);
+    this.logger.log(
+      `Bulk create clientes: ${result.count} creados (${items.length} enviados)`,
+    );
 
     return { created: result.count, sent: items.length };
   }
 }
-

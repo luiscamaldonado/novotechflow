@@ -1,10 +1,10 @@
 import {
-    Body,
-    Controller,
-    Post,
-    UploadedFile,
-    UseGuards,
-    UseInterceptors,
+  Body,
+  Controller,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -21,24 +21,28 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 @ApiBearerAuth()
 @Controller('spec-prefill')
 export class SpecPrefillController {
-    constructor(private readonly specPrefill: SpecPrefillService) {}
+  constructor(private readonly specPrefill: SpecPrefillService) {}
 
-    @Post('extract')
-    @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
-    @ApiOperation({
-        summary: 'Extrae especificaciones de un equipo desde texto, part number o archivo (Excel/PDF).',
-    })
-    @UseInterceptors(
-        FileInterceptor('file', {
-            storage: memoryStorage(),
-            limits: { fileSize: MAX_UPLOAD_BYTES },
-        }),
-    )
-    async extract(
-        @Body() dto: ExtractSpecsDto,
-        @UploadedFile() file?: Express.Multer.File,
-    ): Promise<PrefillResponseDto> {
-        return this.specPrefill.extraer(dto.tipoInput, { payload: dto.payload, file });
-    }
+  @Post('extract')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Extrae especificaciones de un equipo desde texto, part number o archivo (Excel/PDF).',
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_UPLOAD_BYTES },
+    }),
+  )
+  async extract(
+    @Body() dto: ExtractSpecsDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<PrefillResponseDto> {
+    return this.specPrefill.extraer(dto.tipoInput, {
+      payload: dto.payload,
+      file,
+    });
+  }
 }

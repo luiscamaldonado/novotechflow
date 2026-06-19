@@ -2,12 +2,15 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { GeminiClient } from '../gemini.client';
 import { NORMALIZATION_RULES } from '../constants/normalization-rules.constant';
 import { SPEC_SCHEMA_OBJECT } from '../constants/spec-schema.constant';
-import type { PrefillStrategy, PrefillInput } from '../interfaces/prefill-strategy.interface';
 import type {
-    PrefillResponseDto,
-    ProductoPrefillDto,
-    CampoPrefillDto,
-    PrefillSource,
+  PrefillStrategy,
+  PrefillInput,
+} from '../interfaces/prefill-strategy.interface';
+import type {
+  PrefillResponseDto,
+  ProductoPrefillDto,
+  CampoPrefillDto,
+  PrefillSource,
 } from '../dto/prefill-response.dto';
 
 /** Origen que se estampa en cada campo extraído por esta estrategia. */
@@ -34,30 +37,30 @@ const PROMPT_FOOTER = `- 'almacenamiento': Identifica la capacidad y tipo (ej. '
 - 'network': Extrae detalles de conectividad (ej. 'Wi-Fi 7, Bluetooth 5.4'). Busca t\u00e9rminos como "Conectividad", "WLAN", "Wi-Fi", "Red".`;
 
 const readString = (raw: Record<string, unknown>, key: string): string => {
-    const value = raw[key];
-    return typeof value === 'string' ? value.trim() : '';
+  const value = raw[key];
+  return typeof value === 'string' ? value.trim() : '';
 };
 
 const cleanModelo = (modelo: string): string =>
-    modelo.replace(/^(Dell|HP|Lenovo)\s+/i, '').trim();
+  modelo.replace(/^(Dell|HP|Lenovo)\s+/i, '').trim();
 
 const toCampo = (value: string): CampoPrefillDto => ({ value, source: SOURCE });
 
 const mapProducto = (raw: Record<string, unknown>): ProductoPrefillDto => ({
-    fabricante: toCampo(readString(raw, 'fabricante')),
-    numeroParte: toCampo(readString(raw, 'partNumber')),
-    formato: toCampo(readString(raw, 'formato')),
-    modelo: toCampo(cleanModelo(readString(raw, 'modelo'))),
-    procesador: toCampo(readString(raw, 'procesador')),
-    sistemaOperativo: toCampo(readString(raw, 'sistemaOperativo')),
-    graficos: toCampo(readString(raw, 'graficos')),
-    memoriaRam: toCampo(readString(raw, 'memoriaRam')),
-    almacenamiento: toCampo(readString(raw, 'almacenamiento')),
-    pantalla: toCampo(readString(raw, 'pantalla')),
-    network: toCampo(readString(raw, 'network')),
-    seguridad: toCampo(readString(raw, 'seguridad')),
-    garantiaEquipo: toCampo(readString(raw, 'garantiaEquipo')),
-    garantiaBateria: toCampo(readString(raw, 'garantiaBateria')),
+  fabricante: toCampo(readString(raw, 'fabricante')),
+  numeroParte: toCampo(readString(raw, 'partNumber')),
+  formato: toCampo(readString(raw, 'formato')),
+  modelo: toCampo(cleanModelo(readString(raw, 'modelo'))),
+  procesador: toCampo(readString(raw, 'procesador')),
+  sistemaOperativo: toCampo(readString(raw, 'sistemaOperativo')),
+  graficos: toCampo(readString(raw, 'graficos')),
+  memoriaRam: toCampo(readString(raw, 'memoriaRam')),
+  almacenamiento: toCampo(readString(raw, 'almacenamiento')),
+  pantalla: toCampo(readString(raw, 'pantalla')),
+  network: toCampo(readString(raw, 'network')),
+  seguridad: toCampo(readString(raw, 'seguridad')),
+  garantiaEquipo: toCampo(readString(raw, 'garantiaEquipo')),
+  garantiaBateria: toCampo(readString(raw, 'garantiaBateria')),
 });
 
 /**
@@ -67,26 +70,32 @@ const mapProducto = (raw: Record<string, unknown>): ProductoPrefillDto => ({
  */
 @Injectable()
 export class TextoPlanoStrategy implements PrefillStrategy {
-    constructor(private readonly gemini: GeminiClient) {}
+  constructor(private readonly gemini: GeminiClient) {}
 
-    async ejecutar(data: PrefillInput): Promise<PrefillResponseDto> {
-        const texto = data.payload?.trim();
-        if (!texto || texto.length < MIN_TEXT_LENGTH) {
-            throw new BadRequestException(
-                'El texto proporcionado es muy corto para extraer especificaciones.',
-            );
-        }
-
-        const prompt = `${PROMPT_HEADER}\n${NORMALIZATION_RULES}\n${PROMPT_FOOTER}\n\nTexto:\n"${texto}"`;
-        const rawProducts = await this.gemini.generarJson(prompt, SPEC_SCHEMA_OBJECT);
-
-        const primero = rawProducts.find(
-            (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
-        );
-        if (!primero) {
-            throw new BadRequestException('No se detectaron especificaciones en el texto proporcionado.');
-        }
-
-        return { productos: [mapProducto(primero)] };
+  async ejecutar(data: PrefillInput): Promise<PrefillResponseDto> {
+    const texto = data.payload?.trim();
+    if (!texto || texto.length < MIN_TEXT_LENGTH) {
+      throw new BadRequestException(
+        'El texto proporcionado es muy corto para extraer especificaciones.',
+      );
     }
+
+    const prompt = `${PROMPT_HEADER}\n${NORMALIZATION_RULES}\n${PROMPT_FOOTER}\n\nTexto:\n"${texto}"`;
+    const rawProducts = await this.gemini.generarJson(
+      prompt,
+      SPEC_SCHEMA_OBJECT,
+    );
+
+    const primero = rawProducts.find(
+      (item): item is Record<string, unknown> =>
+        typeof item === 'object' && item !== null,
+    );
+    if (!primero) {
+      throw new BadRequestException(
+        'No se detectaron especificaciones en el texto proporcionado.',
+      );
+    }
+
+    return { productos: [mapProducto(primero)] };
+  }
 }

@@ -62,7 +62,10 @@ export class BulkCreateSpecOptionsDto {
  * DTO para borrado masivo de opciones por IDs.
  */
 export class BulkDeleteSpecOptionsDto {
-  @ApiProperty({ example: ['uuid-1', 'uuid-2'], description: 'Array de UUIDs a eliminar' })
+  @ApiProperty({
+    example: ['uuid-1', 'uuid-2'],
+    description: 'Array de UUIDs a eliminar',
+  })
   @IsArray()
   @IsUUID('4', { each: true })
   @ArrayMinSize(1)

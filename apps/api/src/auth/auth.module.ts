@@ -13,7 +13,8 @@ import { EmailVerificationService } from './email-verification.service';
     PassportModule,
     JwtModule.register({
       secret: (() => {
-        if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET env var is required');
+        if (!process.env.JWT_SECRET)
+          throw new Error('JWT_SECRET env var is required');
         return process.env.JWT_SECRET;
       })(),
       signOptions: { expiresIn: '12h' },
@@ -23,4 +24,4 @@ import { EmailVerificationService } from './email-verification.service';
   providers: [AuthService, JwtStrategy, EmailVerificationService],
   exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

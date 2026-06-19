@@ -59,7 +59,10 @@ export class TemplatesService {
   /**
    * Update a template (name, sortOrder, isActive).
    */
-  async update(id: string, data: { name?: string; sortOrder?: number; isActive?: boolean }) {
+  async update(
+    id: string,
+    data: { name?: string; sortOrder?: number; isActive?: boolean },
+  ) {
     return this.prisma.pdfTemplate.update({
       where: { id },
       data,
@@ -107,11 +110,7 @@ export class TemplatesService {
   /**
    * Update a block inside a template's content array.
    */
-  async updateBlock(
-    templateId: string,
-    blockId: string,
-    content: object,
-  ) {
+  async updateBlock(templateId: string, blockId: string, content: object) {
     const template = await this.prisma.pdfTemplate.findUnique({
       where: { id: templateId },
     });
@@ -219,7 +218,11 @@ export class TemplatesService {
           {
             id: crypto.randomUUID(),
             blockType: 'IMAGE',
-            content: { url: '/defaults/portada.png', caption: '', fullPage: true },
+            content: {
+              url: '/defaults/portada.png',
+              caption: '',
+              fullPage: true,
+            },
             sortOrder: 1,
           },
         ],
@@ -235,9 +238,31 @@ export class TemplatesService {
             content: {
               type: 'doc',
               content: [
-                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentaci\u00f3n' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Estimado cliente, nos complace presentar nuestra propuesta comercial para su consideraci\u00f3n. NOVOTECHNO S.A.S es una empresa dedicada a ofrecer soluciones tecnol\u00f3gicas integrales que se adaptan a las necesidades espec\u00edficas de cada organizaci\u00f3n.' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Nuestro equipo de profesionales altamente calificados est\u00e1 comprometido en brindar servicios de excelencia, acompa\u00f1ando a nuestros clientes en cada etapa de su transformaci\u00f3n digital.' }] },
+                {
+                  type: 'heading',
+                  attrs: { level: 2, textAlign: 'left' },
+                  content: [
+                    { type: 'text', text: 'Carta de Presentaci\u00f3n' },
+                  ],
+                },
+                {
+                  type: 'paragraph',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Estimado cliente, nos complace presentar nuestra propuesta comercial para su consideraci\u00f3n. NOVOTECHNO S.A.S es una empresa dedicada a ofrecer soluciones tecnol\u00f3gicas integrales que se adaptan a las necesidades espec\u00edficas de cada organizaci\u00f3n.',
+                    },
+                  ],
+                },
+                {
+                  type: 'paragraph',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Nuestro equipo de profesionales altamente calificados est\u00e1 comprometido en brindar servicios de excelencia, acompa\u00f1ando a nuestros clientes en cada etapa de su transformaci\u00f3n digital.',
+                    },
+                  ],
+                },
               ],
             },
             sortOrder: 1,
@@ -255,8 +280,20 @@ export class TemplatesService {
             content: {
               type: 'doc',
               content: [
-                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Qui\u00e9nes Somos' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'NOVOTECHNO S.A.S es una empresa colombiana especialista en soluciones de tecnolog\u00eda empresarial. Con amplia experiencia en el mercado, nos hemos consolidado como un aliado estrat\u00e9gico para empresas que buscan optimizar sus procesos a trav\u00e9s de la innovaci\u00f3n tecnol\u00f3gica.' }] },
+                {
+                  type: 'heading',
+                  attrs: { level: 2, textAlign: 'left' },
+                  content: [{ type: 'text', text: 'Qui\u00e9nes Somos' }],
+                },
+                {
+                  type: 'paragraph',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'NOVOTECHNO S.A.S es una empresa colombiana especialista en soluciones de tecnolog\u00eda empresarial. Con amplia experiencia en el mercado, nos hemos consolidado como un aliado estrat\u00e9gico para empresas que buscan optimizar sus procesos a trav\u00e9s de la innovaci\u00f3n tecnol\u00f3gica.',
+                    },
+                  ],
+                },
               ],
             },
             sortOrder: 1,
@@ -274,8 +311,20 @@ export class TemplatesService {
             content: {
               type: 'doc',
               content: [
-                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Nuestros Servicios' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Ofrecemos un portafolio integral de servicios tecnol\u00f3gicos que incluyen: suministro de equipos de c\u00f3mputo, infraestructura de red, servicios de soporte t\u00e9cnico, licenciamiento de software y soluciones de seguridad inform\u00e1tica.' }] },
+                {
+                  type: 'heading',
+                  attrs: { level: 2, textAlign: 'left' },
+                  content: [{ type: 'text', text: 'Nuestros Servicios' }],
+                },
+                {
+                  type: 'paragraph',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Ofrecemos un portafolio integral de servicios tecnol\u00f3gicos que incluyen: suministro de equipos de c\u00f3mputo, infraestructura de red, servicios de soporte t\u00e9cnico, licenciamiento de software y soluciones de seguridad inform\u00e1tica.',
+                    },
+                  ],
+                },
               ],
             },
             sortOrder: 1,
@@ -299,8 +348,22 @@ export class TemplatesService {
             content: {
               type: 'doc',
               content: [
-                { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'T\u00e9rminos y Condiciones' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'Los precios y condiciones de esta oferta son v\u00e1lidos por el per\u00edodo indicado en la misma. Todos los precios est\u00e1n expresados en pesos colombianos (COP) e incluyen IVA donde aplique.' }] },
+                {
+                  type: 'heading',
+                  attrs: { level: 2, textAlign: 'left' },
+                  content: [
+                    { type: 'text', text: 'T\u00e9rminos y Condiciones' },
+                  ],
+                },
+                {
+                  type: 'paragraph',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Los precios y condiciones de esta oferta son v\u00e1lidos por el per\u00edodo indicado en la misma. Todos los precios est\u00e1n expresados en pesos colombianos (COP) e incluyen IVA donde aplique.',
+                    },
+                  ],
+                },
               ],
             },
             sortOrder: 1,

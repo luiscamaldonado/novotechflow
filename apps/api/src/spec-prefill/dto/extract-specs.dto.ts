@@ -8,13 +8,13 @@ import { PrefillStrategyType } from '../interfaces/prefill-strategy.interface';
  * Su contenido NO se valida aquí: cada estrategia valida el buffer por magic bytes.
  */
 export class ExtractSpecsDto {
-    @IsEnum(PrefillStrategyType)
-    tipoInput: PrefillStrategyType;
+  @IsEnum(PrefillStrategyType)
+  tipoInput: PrefillStrategyType;
 
-    @IsOptional()
-    @IsString()
-    payload?: string;
+  @IsOptional()
+  @IsString()
+  payload?: string;
 
-    @IsOptional()
-    file?: unknown;
+  @IsOptional()
+  file?: unknown;
 }

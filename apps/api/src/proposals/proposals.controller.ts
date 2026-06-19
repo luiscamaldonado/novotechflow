@@ -1,5 +1,26 @@
-import { Controller, Get, Post, Body, UseGuards, Query, Request, Param, Patch, Delete, UseInterceptors, UploadedFile, ParseUUIDPipe, ParseIntPipe, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Query,
+  Request,
+  Param,
+  Patch,
+  Delete,
+  UseInterceptors,
+  UploadedFile,
+  ParseUUIDPipe,
+  ParseIntPipe,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiOperation,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -11,26 +32,30 @@ import { TrmService } from './trm.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
-import { validateImageMagicBytes, validateImageFileSize, sanitizeFilename } from '../common/upload-validation';
+import {
+  validateImageMagicBytes,
+  validateImageFileSize,
+  sanitizeFilename,
+} from '../common/upload-validation';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
-    CreateProposalDto,
-    UpdateProposalDto,
-    CreateProposalItemDto,
-    UpdateProposalItemDto,
-    CreateScenarioDto,
-    UpdateScenarioDto,
-    AddScenarioItemDto,
-    UpdateScenarioItemDto,
-    ApplyMarginDto,
-    CloneProposalDto,
-    CreatePageDto,
-    UpdatePageDto,
-    ReorderPagesDto,
-    CreateBlockDto,
-    UpdateBlockDto,
-    ReorderBlocksDto,
-    ReorderScenarioItemsDto,
+  CreateProposalDto,
+  UpdateProposalDto,
+  CreateProposalItemDto,
+  UpdateProposalItemDto,
+  CreateScenarioDto,
+  UpdateScenarioDto,
+  AddScenarioItemDto,
+  UpdateScenarioItemDto,
+  ApplyMarginDto,
+  CloneProposalDto,
+  CreatePageDto,
+  UpdatePageDto,
+  ReorderPagesDto,
+  CreateBlockDto,
+  UpdateBlockDto,
+  ReorderBlocksDto,
+  ReorderScenarioItemsDto,
 } from './dto/proposals.dto';
 
 /**
@@ -44,261 +69,386 @@ import {
 @ApiBearerAuth()
 @Controller('proposals')
 export class ProposalsController {
-    constructor(
-        private readonly proposalsService: ProposalsService,
-        private readonly scenariosService: ScenariosService,
-        private readonly pagesService: PagesService,
-        private readonly trmService: TrmService,
-    ) {}
+  constructor(
+    private readonly proposalsService: ProposalsService,
+    private readonly scenariosService: ScenariosService,
+    private readonly pagesService: PagesService,
+    private readonly trmService: TrmService,
+  ) {}
 
-    @SkipThrottle()
-    @UseGuards(JwtAuthGuard)
-    @Get('trm-extra')
-    async getExtraTrm() {
-        return this.trmService.getExtraTrmValues();
-    }
+  @SkipThrottle()
+  @UseGuards(JwtAuthGuard)
+  @Get('trm-extra')
+  async getExtraTrm() {
+    return this.trmService.getExtraTrmValues();
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Get('client-history')
-    async getClientHistory(@Query('clientName') query: string) {
-        return this.proposalsService.findPotentialConflicts(query);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Get('client-history')
+  async getClientHistory(@Query('clientName') query: string) {
+    return this.proposalsService.findPotentialConflicts(query);
+  }
 
-    @Get('validate-manual')
-    @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
-    @ApiOperation({ summary: 'Valida un número manual contra los códigos del usuario logueado' })
-    @ApiQuery({ name: 'n', type: Number, required: true, example: 1234 })
-    async validateManual(
-        @Query('n', ParseIntPipe) n: number,
-        @Request() req: { user: AuthenticatedUser },
-    ) {
-        return this.proposalsService.validateManualConsecutive(req.user.id, n);
-    }
+  @Get('validate-manual')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Valida un número manual contra los códigos del usuario logueado',
+  })
+  @ApiQuery({ name: 'n', type: Number, required: true, example: 1234 })
+  async validateManual(
+    @Query('n', ParseIntPipe) n: number,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.proposalsService.validateManualConsecutive(req.user.id, n);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post()
-    async create(@Request() req: { user: AuthenticatedUser }, @Body() createProposalDto: CreateProposalDto) {
-        return this.proposalsService.createProposal(req.user.id, createProposalDto);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post()
+  async create(
+    @Request() req: { user: AuthenticatedUser },
+    @Body() createProposalDto: CreateProposalDto,
+  ) {
+    return this.proposalsService.createProposal(req.user.id, createProposalDto);
+  }
 
-    @UseGuards(AdminGuard)
-    @Get('deleted')
-    @ApiOperation({ summary: 'Lista las propuestas eliminadas (papelera). Solo ADMIN.' })
-    async findDeleted() {
-        return this.proposalsService.findDeleted();
-    }
+  @UseGuards(AdminGuard)
+  @Get('deleted')
+  @ApiOperation({
+    summary: 'Lista las propuestas eliminadas (papelera). Solo ADMIN.',
+  })
+  async findDeleted() {
+    return this.proposalsService.findDeleted();
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Get(':id')
-    async getById(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.getProposalById(id, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Get(':id')
+  async getById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.proposalsService.getProposalById(id, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch(':id')
-    async update(@Param('id', ParseUUIDPipe) id: string, @Body() updateData: UpdateProposalDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.updateProposal(id, updateData, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id')
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateData: UpdateProposalDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.proposalsService.updateProposal(id, updateData, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post(':id/items')
-    async addItem(@Param('id', ParseUUIDPipe) id: string, @Body() itemData: CreateProposalItemDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.addProposalItem(id, itemData, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/items')
+  async addItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() itemData: CreateProposalItemDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.proposalsService.addProposalItem(id, itemData, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Delete('items/:itemId')
-    async removeItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.removeProposalItem(itemId, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Delete('items/:itemId')
+  async removeItem(
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.proposalsService.removeProposalItem(itemId, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('items/:itemId')
-    async updateItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Body() itemData: UpdateProposalItemDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.updateProposalItem(itemId, itemData, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('items/:itemId')
+  async updateItem(
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() itemData: UpdateProposalItemDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.proposalsService.updateProposalItem(itemId, itemData, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Get()
-    async findAll(@Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.findAll(req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Get()
+  async findAll(@Request() req: { user: AuthenticatedUser }) {
+    return this.proposalsService.findAll(req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Delete(':id')
-    async delete(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.proposalsService.deleteProposal(id, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  async delete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.proposalsService.deleteProposal(id, req.user);
+  }
 
-    @UseGuards(AdminGuard)
-    @Patch(':id/restore')
-    @ApiOperation({ summary: 'Restaura una propuesta eliminada. Solo ADMIN.' })
-    async restore(@Param('id', ParseUUIDPipe) id: string) {
-        return this.proposalsService.restoreProposal(id);
-    }
+  @UseGuards(AdminGuard)
+  @Patch(':id/restore')
+  @ApiOperation({ summary: 'Restaura una propuesta eliminada. Solo ADMIN.' })
+  async restore(@Param('id', ParseUUIDPipe) id: string) {
+    return this.proposalsService.restoreProposal(id);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post(':id/clone')
-    async clone(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }, @Body() data: CloneProposalDto) {
-        return this.proposalsService.cloneProposal(id, req.user.id, data.cloneType, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/clone')
+  async clone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthenticatedUser },
+    @Body() data: CloneProposalDto,
+  ) {
+    return this.proposalsService.cloneProposal(
+      id,
+      req.user.id,
+      data.cloneType,
+      req.user,
+    );
+  }
 
-    // --- ENDPOINTS DE ESCENARIOS ---
+  // --- ENDPOINTS DE ESCENARIOS ---
 
-    @UseGuards(JwtAuthGuard)
-    @Get(':id/scenarios')
-    async getScenarios(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.getScenariosByProposalId(id, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/scenarios')
+  async getScenarios(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.getScenariosByProposalId(id, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post(':id/scenarios')
-    async createScenario(@Param('id', ParseUUIDPipe) id: string, @Body() data: CreateScenarioDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.createScenario(id, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/scenarios')
+  async createScenario(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: CreateScenarioDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.createScenario(id, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('scenarios/:scenarioId')
-    async updateScenario(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Body() data: UpdateScenarioDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.updateScenario(scenarioId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('scenarios/:scenarioId')
+  async updateScenario(
+    @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
+    @Body() data: UpdateScenarioDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.updateScenario(scenarioId, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Delete('scenarios/:scenarioId')
-    async deleteScenario(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.deleteScenario(scenarioId, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Delete('scenarios/:scenarioId')
+  async deleteScenario(
+    @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.deleteScenario(scenarioId, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post('scenarios/:scenarioId/clone')
-    async cloneScenario(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.cloneScenario(scenarioId, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post('scenarios/:scenarioId/clone')
+  async cloneScenario(
+    @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.cloneScenario(scenarioId, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post('scenarios/:scenarioId/items')
-    async addScenarioItem(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Body() data: AddScenarioItemDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.addScenarioItem(scenarioId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post('scenarios/:scenarioId/items')
+  async addScenarioItem(
+    @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
+    @Body() data: AddScenarioItemDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.addScenarioItem(scenarioId, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('scenarios/items/:itemId')
-    async updateScenarioItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Body() data: UpdateScenarioItemDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.updateScenarioItem(itemId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('scenarios/items/:itemId')
+  async updateScenarioItem(
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() data: UpdateScenarioItemDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.updateScenarioItem(itemId, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Delete('scenarios/items/:itemId')
-    async removeScenarioItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.removeScenarioItem(itemId, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Delete('scenarios/items/:itemId')
+  async removeScenarioItem(
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.removeScenarioItem(itemId, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('scenarios/:scenarioId/items/reorder')
-    async reorderScenarioItems(@Param('scenarioId', ParseUUIDPipe) scenarioId: string, @Body() data: ReorderScenarioItemsDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.reorderScenarioItems(scenarioId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('scenarios/:scenarioId/items/reorder')
+  async reorderScenarioItems(
+    @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
+    @Body() data: ReorderScenarioItemsDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.reorderScenarioItems(
+      scenarioId,
+      data,
+      req.user,
+    );
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('scenarios/:scenarioId/apply-margin')
-    async applyMarginToScenario(@Param('scenarioId', ParseUUIDPipe) id: string, @Body() data: ApplyMarginDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.scenariosService.applyMarginToEntireScenario(id, data.marginPct, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('scenarios/:scenarioId/apply-margin')
+  async applyMarginToScenario(
+    @Param('scenarioId', ParseUUIDPipe) id: string,
+    @Body() data: ApplyMarginDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.applyMarginToEntireScenario(
+      id,
+      data.marginPct,
+      req.user,
+    );
+  }
 
-    // --- ENDPOINTS DE PÁGINAS ---
+  // --- ENDPOINTS DE PÁGINAS ---
 
-    @UseGuards(JwtAuthGuard)
-    @Get(':id/pages')
-    async getPages(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.getPagesByProposalId(id, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/pages')
+  async getPages(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.getPagesByProposalId(id, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post(':id/pages/initialize')
-    async initializePages(@Param('id', ParseUUIDPipe) id: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.initializeDefaultPages(id, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/pages/initialize')
+  async initializePages(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.initializeDefaultPages(id, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Post(':id/pages')
-    async createPage(@Param('id', ParseUUIDPipe) id: string, @Body() data: CreatePageDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.createCustomPage(id, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/pages')
+  async createPage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: CreatePageDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.createCustomPage(id, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('pages/:pageId')
-    async updatePage(@Param('pageId', ParseUUIDPipe) pageId: string, @Body() data: UpdatePageDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.updatePage(pageId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('pages/:pageId')
+  async updatePage(
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Body() data: UpdatePageDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.updatePage(pageId, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Delete('pages/:pageId')
-    async deletePage(@Param('pageId', ParseUUIDPipe) pageId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.deletePage(pageId, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Delete('pages/:pageId')
+  async deletePage(
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.deletePage(pageId, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch(':id/pages/reorder')
-    async reorderPages(@Param('id', ParseUUIDPipe) id: string, @Body() data: ReorderPagesDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.reorderPages(id, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/pages/reorder')
+  async reorderPages(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: ReorderPagesDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.reorderPages(id, data, req.user);
+  }
 
-    // --- ENDPOINTS DE BLOQUES ---
+  // --- ENDPOINTS DE BLOQUES ---
 
-    @UseGuards(JwtAuthGuard)
-    @Post('pages/:pageId/blocks')
-    async createBlock(@Param('pageId', ParseUUIDPipe) pageId: string, @Body() data: CreateBlockDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.createBlock(pageId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Post('pages/:pageId/blocks')
+  async createBlock(
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Body() data: CreateBlockDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.createBlock(pageId, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('pages/blocks/:blockId')
-    async updateBlock(@Param('blockId', ParseUUIDPipe) blockId: string, @Body() data: UpdateBlockDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.updateBlock(blockId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('pages/blocks/:blockId')
+  async updateBlock(
+    @Param('blockId', ParseUUIDPipe) blockId: string,
+    @Body() data: UpdateBlockDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.updateBlock(blockId, data, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Delete('pages/blocks/:blockId')
-    async deleteBlock(@Param('blockId', ParseUUIDPipe) blockId: string, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.deleteBlock(blockId, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Delete('pages/blocks/:blockId')
+  async deleteBlock(
+    @Param('blockId', ParseUUIDPipe) blockId: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.deleteBlock(blockId, req.user);
+  }
 
-    @UseGuards(JwtAuthGuard)
-    @Patch('pages/:pageId/blocks/reorder')
-    async reorderBlocks(@Param('pageId', ParseUUIDPipe) pageId: string, @Body() data: ReorderBlocksDto, @Request() req: { user: AuthenticatedUser }) {
-        return this.pagesService.reorderBlocks(pageId, data, req.user);
-    }
+  @UseGuards(JwtAuthGuard)
+  @Patch('pages/:pageId/blocks/reorder')
+  async reorderBlocks(
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Body() data: ReorderBlocksDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.reorderBlocks(pageId, data, req.user);
+  }
 
-    // --- UPLOAD DE IMÁGENES ---
+  // --- UPLOAD DE IMÁGENES ---
 
-    @UseGuards(JwtAuthGuard)
-    @Post('pages/upload-image')
-    @UseInterceptors(FileInterceptor('file', {
-        storage: diskStorage({
-            destination: join(process.cwd(), 'uploads'),
-            filename: (_req, file, cb) => {
-                const safeName = sanitizeFilename(file.originalname);
-                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-                cb(null, uniqueSuffix + extname(safeName));
-            },
-        }),
-        fileFilter: (_req, file, cb) => {
-            const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            if (!allowed.includes(file.mimetype)) {
-                cb(new BadRequestException('Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP'), false);
-                return;
-            }
-            cb(null, true);
+  @UseGuards(JwtAuthGuard)
+  @Post('pages/upload-image')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'uploads'),
+        filename: (_req, file, cb) => {
+          const safeName = sanitizeFilename(file.originalname);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(null, uniqueSuffix + extname(safeName));
         },
-        limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
-    }))
-    async uploadImage(@UploadedFile() file: Express.Multer.File) {
-        await validateImageFileSize(file);
-        await validateImageMagicBytes(file);
-        const buffer = await readFile(file.path);
-        const dataUri = `data:${file.mimetype};base64,${buffer.toString('base64')}`;
-        await unlink(file.path);
-        return { url: dataUri, originalName: file.originalname };
-    }
+      }),
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowed.includes(file.mimetype)) {
+          cb(
+            new BadRequestException(
+              'Solo se permiten im\u00e1genes JPEG, PNG, GIF o WebP',
+            ),
+            false,
+          );
+          return;
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+    }),
+  )
+  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+    await validateImageFileSize(file);
+    await validateImageMagicBytes(file);
+    const buffer = await readFile(file.path);
+    const dataUri = `data:${file.mimetype};base64,${buffer.toString('base64')}`;
+    await unlink(file.path);
+    return { url: dataUri, originalName: file.originalname };
+  }
 }

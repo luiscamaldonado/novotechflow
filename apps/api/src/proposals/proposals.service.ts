@@ -1,21 +1,31 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProposalStatus, ConsecutiveSource } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
 import {
-    CreateProposalDto,
-    UpdateProposalDto,
-    CreateProposalItemDto,
-    UpdateProposalItemDto,
+  CreateProposalDto,
+  UpdateProposalDto,
+  CreateProposalItemDto,
+  UpdateProposalItemDto,
 } from './dto/proposals.dto';
 import { assertProposalNotLocked } from './proposals-lock.helper';
-
 
 /** Resultado de la validación de un consecutivo manual. */
 export type ManualConsecutiveValidation =
   | { ok: true }
-  | { ok: false; reason: 'OUT_OF_RANGE' | 'GTE_AUTO' | 'TAKEN'; conflict?: string; suggestion: number | null };
+  | {
+      ok: false;
+      reason: 'OUT_OF_RANGE' | 'GTE_AUTO' | 'TAKEN';
+      conflict?: string;
+      suggestion: number | null;
+    };
 
 /** Límite superior del rango de consecutivos. */
 const MAX_CONSECUTIVE = 99999;
@@ -34,12 +44,15 @@ export class ProposalsService {
    * Público para que ScenariosService y PagesService lo importen.
    */
   async verifyProposalOwnership(proposalId: string, user: AuthenticatedUser) {
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+    });
     if (!proposal) throw new NotFoundException('Propuesta no encontrada.');
     if (user.role !== 'ADMIN' && proposal.userId !== user.id) {
       throw new ForbiddenException('No tienes acceso a esta propuesta.');
     }
-    if (proposal.deletedAt) throw new NotFoundException('Propuesta no encontrada.');
+    if (proposal.deletedAt)
+      throw new NotFoundException('Propuesta no encontrada.');
     return proposal;
   }
 
@@ -65,7 +78,7 @@ export class ProposalsService {
       where: {
         OR: [
           { clientName: { contains: normalizedQuery, mode: 'insensitive' } },
-          { subject: { contains: normalizedQuery, mode: 'insensitive' } }
+          { subject: { contains: normalizedQuery, mode: 'insensitive' } },
         ],
         createdAt: { gte: oneYearAgo },
         deletedAt: null,
@@ -90,13 +103,17 @@ export class ProposalsService {
   async createProposal(userId: string, data: CreateProposalDto) {
     try {
       const user = await this.validateUserAccess(userId);
-      const clientId = await this.ensureClientExists(data.clientName, data.clientId);
+      const clientId = await this.ensureClientExists(
+        data.clientName,
+        data.clientId,
+      );
 
       let proposalCode: string;
       let consecutiveSource: ConsecutiveSource;
 
       if (data.manualConsecutive !== undefined) {
-        const validation: ManualConsecutiveValidation = await this.validateManualConsecutive(userId, data.manualConsecutive);
+        const validation: ManualConsecutiveValidation =
+          await this.validateManualConsecutive(userId, data.manualConsecutive);
 
         if (validation.ok === false) {
           const { reason, conflict, suggestion } = validation;
@@ -109,11 +126,16 @@ export class ProposalsService {
         }
 
         const prefix = user.nomenclature || 'XX';
-        const sequential = data.manualConsecutive.toString().padStart(CONSECUTIVE_PAD_LENGTH, '0');
+        const sequential = data.manualConsecutive
+          .toString()
+          .padStart(CONSECUTIVE_PAD_LENGTH, '0');
         proposalCode = `COT-${prefix}${sequential}-1`;
         consecutiveSource = ConsecutiveSource.MANUAL;
       } else {
-        proposalCode = await this.generateProposalCode(user.nomenclature, userId);
+        proposalCode = await this.generateProposalCode(
+          user.nomenclature,
+          userId,
+        );
         consecutiveSource = ConsecutiveSource.AUTO;
       }
 
@@ -126,7 +148,10 @@ export class ProposalsService {
           clientName: sanitizePlainText(data.clientName.trim().toUpperCase()),
           subject: sanitizePlainText(data.subject),
           issueDate: new Date(data.issueDate),
-          validityDays: typeof data.validityDays === 'string' ? parseInt(data.validityDays, 10) : data.validityDays,
+          validityDays:
+            typeof data.validityDays === 'string'
+              ? parseInt(data.validityDays, 10)
+              : data.validityDays,
           validityDate: new Date(data.validityDate),
           closeDate: new Date(data.closeDate),
           status: data.status ?? ProposalStatus.ELABORACION,
@@ -135,7 +160,9 @@ export class ProposalsService {
         },
       });
     } catch (error) {
-      this.logger.error(`Falla al crear propuesta para usuario ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Falla al crear propuesta para usuario ${userId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
@@ -146,12 +173,14 @@ export class ProposalsService {
    */
   private async validateUserAccess(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    
+
     // Early return pattern para validación
     if (!user) {
-      throw new NotFoundException(`El usuario con ID ${userId} no fue encontrado en el sistema.`);
+      throw new NotFoundException(
+        `El usuario con ID ${userId} no fue encontrado en el sistema.`,
+      );
     }
-    
+
     return user;
   }
 
@@ -160,20 +189,23 @@ export class ProposalsService {
    * Implementa un patrón Upsert para evitar duplicidad de nombres normalizados.
    * @private
    */
-  private async ensureClientExists(name: string, existingId?: string): Promise<string> {
+  private async ensureClientExists(
+    name: string,
+    existingId?: string,
+  ): Promise<string> {
     const normalizedName = name.trim().toUpperCase();
-    
+
     // Si ya tenemos un ID verificado, lo usamos directamente (OCP)
     if (existingId) return existingId;
 
     // Si no, realizamos un registro automático
     const client = await this.prisma.client.upsert({
       where: { name: normalizedName },
-      update: {}, 
+      update: {},
       create: {
         name: normalizedName,
-        isActive: true
-      }
+        isActive: true,
+      },
     });
 
     return client.id;
@@ -191,13 +223,13 @@ export class ProposalsService {
     });
 
     const autoNumbers = autoCodes
-      .map(p => p.proposalCode)
+      .map((p) => p.proposalCode)
       .filter((c): c is string => c !== null)
-      .map(c => {
+      .map((c) => {
         const m = c.match(/(\d+)-\d+$/);
         return m ? parseInt(m[1], 10) : 0;
       })
-      .filter(n => n > 0);
+      .filter((n) => n > 0);
 
     const maxAutoNumber = autoNumbers.length > 0 ? Math.max(...autoNumbers) : 0;
     let nextNumber = maxAutoNumber + 1;
@@ -227,13 +259,13 @@ export class ProposalsService {
 
     return new Set(
       allCodes
-        .map(p => p.proposalCode)
+        .map((p) => p.proposalCode)
         .filter((c): c is string => c !== null)
-        .map(c => {
+        .map((c) => {
           const m = c.match(/(\d+)-\d+$/);
           return m ? parseInt(m[1], 10) : -1;
         })
-        .filter(n => n > 0),
+        .filter((n) => n > 0),
     );
   }
 
@@ -244,7 +276,10 @@ export class ProposalsService {
    * números ya tomados por manuales.
    * @private
    */
-  private async generateProposalCode(nomenclature: string, userId: string): Promise<string> {
+  private async generateProposalCode(
+    nomenclature: string,
+    userId: string,
+  ): Promise<string> {
     const prefix = nomenclature || 'XX';
 
     let nextNumber = await this.getNextAutoNumber(userId);
@@ -256,10 +291,14 @@ export class ProposalsService {
     }
 
     if (nextNumber > MAX_CONSECUTIVE) {
-      throw new BadRequestException('Se agotó el rango de consecutivos disponibles para este usuario.');
+      throw new BadRequestException(
+        'Se agotó el rango de consecutivos disponibles para este usuario.',
+      );
     }
 
-    const sequential = nextNumber.toString().padStart(CONSECUTIVE_PAD_LENGTH, '0');
+    const sequential = nextNumber
+      .toString()
+      .padStart(CONSECUTIVE_PAD_LENGTH, '0');
     return `COT-${prefix}${sequential}-1`;
   }
 
@@ -267,7 +306,10 @@ export class ProposalsService {
    * Valida un número de consecutivo manual contra el estado actual del usuario.
    * Retorna { ok: true } si es válido, o un objeto con reason, conflict y suggestion si no.
    */
-  async validateManualConsecutive(userId: string, number: number): Promise<ManualConsecutiveValidation> {
+  async validateManualConsecutive(
+    userId: string,
+    number: number,
+  ): Promise<ManualConsecutiveValidation> {
     if (!Number.isInteger(number) || number < 1 || number > MAX_CONSECUTIVE) {
       return { ok: false, reason: 'OUT_OF_RANGE', suggestion: null };
     }
@@ -313,18 +355,22 @@ export class ProposalsService {
     return this.prisma.proposal.findUnique({
       where: { id },
       include: {
-        proposalItems: { orderBy: { sortOrder: 'asc' } }
-      }
+        proposalItems: { orderBy: { sortOrder: 'asc' } },
+      },
     });
   }
 
   /**
    * Actualiza los datos generales de una propuesta existente.
-   * 
+   *
    * @param {string} id - UUID de la propuesta.
    * @param {any} data - Nuevos datos (asunto, fechas, etc).
    */
-  async updateProposal(id: string, data: UpdateProposalDto, user: AuthenticatedUser) {
+  async updateProposal(
+    id: string,
+    data: UpdateProposalDto,
+    user: AuthenticatedUser,
+  ) {
     const proposal = await this.verifyProposalOwnership(id, user);
     assertProposalNotLocked(proposal);
     return this.prisma.proposal.update({
@@ -333,13 +379,24 @@ export class ProposalsService {
         subject: data.subject ? sanitizePlainText(data.subject) : undefined,
         issueDate: data.issueDate ? new Date(data.issueDate) : undefined,
         validityDays: data.validityDays ?? undefined,
-        validityDate: data.validityDate ? new Date(data.validityDate) : undefined,
+        validityDate: data.validityDate
+          ? new Date(data.validityDate)
+          : undefined,
         status: data.status ?? undefined,
-        closeDate: data.closeDate ? new Date(data.closeDate) : data.closeDate === null ? null : undefined,
-        billingDate: data.billingDate ? new Date(data.billingDate) : data.billingDate === null ? null : undefined,
+        closeDate: data.closeDate
+          ? new Date(data.closeDate)
+          : data.closeDate === null
+            ? null
+            : undefined,
+        billingDate: data.billingDate
+          ? new Date(data.billingDate)
+          : data.billingDate === null
+            ? null
+            : undefined,
         acquisitionType: data.acquisitionType ?? undefined,
         issueCity: data.issueCity ?? undefined,
-        manualAmount: data.manualAmount === undefined ? undefined : data.manualAmount,
+        manualAmount:
+          data.manualAmount === undefined ? undefined : data.manualAmount,
       },
     });
   }
@@ -348,12 +405,16 @@ export class ProposalsService {
    * Añade un nuevo ítem (producto/servicio) a la propuesta.
    * Gestiona el correlativo de orden (sortOrder) automáticamente.
    */
-  async addProposalItem(proposalId: string, data: CreateProposalItemDto, user: AuthenticatedUser) {
+  async addProposalItem(
+    proposalId: string,
+    data: CreateProposalItemDto,
+    user: AuthenticatedUser,
+  ) {
     const proposal = await this.verifyProposalOwnership(proposalId, user);
     assertProposalNotLocked(proposal);
     const aggregate = await this.prisma.proposalItem.aggregate({
       where: { proposalId },
-      _max: { sortOrder: true }
+      _max: { sortOrder: true },
     });
 
     const nextOrder = (aggregate._max.sortOrder || 0) + 1;
@@ -376,7 +437,7 @@ export class ProposalsService {
         technicalSpecs: (data.technicalSpecs || {}) as object,
         internalCosts: (data.internalCosts || {}) as object,
         sortOrder: nextOrder,
-      }
+      },
     });
   }
 
@@ -384,20 +445,28 @@ export class ProposalsService {
    * Elimina un ítem específico de una propuesta.
    */
   async removeProposalItem(itemId: string, user: AuthenticatedUser) {
-    const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
+    const item = await this.prisma.proposalItem.findUnique({
+      where: { id: itemId },
+    });
     if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
     const proposal = await this.verifyProposalOwnership(item.proposalId, user);
     assertProposalNotLocked(proposal);
     return this.prisma.proposalItem.delete({
-      where: { id: itemId }
+      where: { id: itemId },
     });
   }
 
   /**
    * Actualiza un ítem específico de una propuesta.
    */
-  async updateProposalItem(itemId: string, data: UpdateProposalItemDto, user: AuthenticatedUser) {
-    const item = await this.prisma.proposalItem.findUnique({ where: { id: itemId } });
+  async updateProposalItem(
+    itemId: string,
+    data: UpdateProposalItemDto,
+    user: AuthenticatedUser,
+  ) {
+    const item = await this.prisma.proposalItem.findUnique({
+      where: { id: itemId },
+    });
     if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
     const proposal = await this.verifyProposalOwnership(item.proposalId, user);
     assertProposalNotLocked(proposal);
@@ -418,7 +487,7 @@ export class ProposalsService {
         isTaxable: data.isTaxable,
         technicalSpecs: data.technicalSpecs as object | undefined,
         internalCosts: data.internalCosts as object | undefined,
-      }
+      },
     });
   }
 
@@ -457,7 +526,12 @@ export class ProposalsService {
    * NEW_VERSION: incrementa la versión (COT-LM0001-1 → COT-LM0001-2), conserva consecutiveSource.
    * NEW_PROPOSAL: genera nuevo código secuencial (COT-LM0002-1), siempre AUTO.
    */
-  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser) {
+  async cloneProposal(
+    id: string,
+    userId: string,
+    cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL',
+    user: AuthenticatedUser,
+  ) {
     await this.verifyProposalOwnership(id, user);
     const original = await this.prisma.proposal.findUnique({
       where: { id },
@@ -479,7 +553,9 @@ export class ProposalsService {
       let newCode: string;
 
       if (cloneType === 'NEW_VERSION') {
-        const groupPrefix = this.extractVersionGroupPrefix(original.proposalCode);
+        const groupPrefix = this.extractVersionGroupPrefix(
+          original.proposalCode,
+        );
 
         if (groupPrefix) {
           const groupCodes = await tx.proposal.findMany({
@@ -498,14 +574,19 @@ export class ProposalsService {
         }
       } else {
         const cloneUser = await this.validateUserAccess(userId);
-        newCode = await this.generateProposalCode(cloneUser.nomenclature, userId);
+        newCode = await this.generateProposalCode(
+          cloneUser.nomenclature,
+          userId,
+        );
       }
 
-      const clonedConsecutiveSource = cloneType === 'NEW_VERSION'
-        ? original.consecutiveSource
-        : ConsecutiveSource.AUTO;
+      const clonedConsecutiveSource =
+        cloneType === 'NEW_VERSION'
+          ? original.consecutiveSource
+          : ConsecutiveSource.AUTO;
 
-      const ownerUserId = cloneType === 'NEW_VERSION' ? original.userId : userId;
+      const ownerUserId =
+        cloneType === 'NEW_VERSION' ? original.userId : userId;
 
       const cloned = await tx.proposal.create({
         data: {
@@ -562,7 +643,7 @@ export class ProposalsService {
         });
 
         // Clone root scenario items (parentId = null)
-        const rootItems = scenario.scenarioItems.filter(si => !si.parentId);
+        const rootItems = scenario.scenarioItems.filter((si) => !si.parentId);
         const scenarioItemIdMap = new Map<string, string>();
 
         for (const si of rootItems) {
@@ -579,9 +660,10 @@ export class ProposalsService {
         }
 
         // Clone child scenario items
-        const childItems = scenario.scenarioItems.filter(si => si.parentId);
+        const childItems = scenario.scenarioItems.filter((si) => si.parentId);
         for (const child of childItems) {
-          const newParentId = scenarioItemIdMap.get(child.parentId!) || child.parentId;
+          const newParentId =
+            scenarioItemIdMap.get(child.parentId!) || child.parentId;
           const newItemId = itemIdMap.get(child.itemId) || child.itemId;
           await tx.scenarioItem.create({
             data: {
@@ -650,7 +732,9 @@ export class ProposalsService {
    * Extrae el prefijo del grupo de versiones de un proposalCode.
    * Ej: 'COT-LMA05001-3' → 'COT-LMA05001-'
    */
-  private extractVersionGroupPrefix(proposalCode: string | null): string | null {
+  private extractVersionGroupPrefix(
+    proposalCode: string | null,
+  ): string | null {
     if (!proposalCode) return null;
     const lastDashIndex = proposalCode.lastIndexOf('-');
     if (lastDashIndex === -1) return null;

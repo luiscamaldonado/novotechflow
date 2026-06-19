@@ -7,8 +7,8 @@ import { ProposalsController } from './proposals.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [ProposalsController],
-    providers: [ProposalsService, ScenariosService, PagesService, TrmService],
+  imports: [PrismaModule],
+  controllers: [ProposalsController],
+  providers: [ProposalsService, ScenariosService, PagesService, TrmService],
 })
-export class ProposalsModule { }
+export class ProposalsModule {}

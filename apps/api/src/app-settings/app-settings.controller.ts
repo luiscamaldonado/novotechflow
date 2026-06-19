@@ -7,7 +7,10 @@ import { AppSettingsService } from './app-settings.service';
 import { UpdateInactivityTimeoutDto } from './dto/update-inactivity-timeout.dto';
 import { UpdateMaintenanceBannerDto } from './dto/update-maintenance-banner.dto';
 import { UpdatePriceThresholdsDto } from './dto/update-price-thresholds.dto';
-import type { MaintenanceBanner, PriceThresholds } from './app-settings.service';
+import type {
+  MaintenanceBanner,
+  PriceThresholds,
+} from './app-settings.service';
 
 /** Typed request after JWT authentication — mirrors the pattern in users.controller.ts */
 interface AuthenticatedRequest {
@@ -41,10 +44,11 @@ export class AppSettingsController {
     @Body() dto: UpdateInactivityTimeoutDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ minutes: number }> {
-    const minutes = await this.appSettingsService.updateInactivityTimeoutMinutes(
-      dto.minutes,
-      req.user.id,
-    );
+    const minutes =
+      await this.appSettingsService.updateInactivityTimeoutMinutes(
+        dto.minutes,
+        req.user.id,
+      );
     return { minutes };
   }
 
@@ -57,7 +61,9 @@ export class AppSettingsController {
 
   @Patch('maintenance-banner')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Actualizar el banner de mantenimiento (solo admin)' })
+  @ApiOperation({
+    summary: 'Actualizar el banner de mantenimiento (solo admin)',
+  })
   async updateMaintenanceBanner(
     @Body() dto: UpdateMaintenanceBannerDto,
     @Req() req: AuthenticatedRequest,
@@ -70,14 +76,18 @@ export class AppSettingsController {
   }
 
   @Get('price-thresholds')
-  @ApiOperation({ summary: 'Obtener umbrales de validaci\u00f3n de precio unitario' })
+  @ApiOperation({
+    summary: 'Obtener umbrales de validaci\u00f3n de precio unitario',
+  })
   async getPriceThresholds(): Promise<PriceThresholds> {
     return this.appSettingsService.getPriceThresholds();
   }
 
   @Patch('price-thresholds')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Actualizar umbrales de precio unitario (solo admin)' })
+  @ApiOperation({
+    summary: 'Actualizar umbrales de precio unitario (solo admin)',
+  })
   async updatePriceThresholds(
     @Body() dto: UpdatePriceThresholdsDto,
     @Req() req: AuthenticatedRequest,

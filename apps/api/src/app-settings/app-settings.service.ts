@@ -57,7 +57,8 @@ export class AppSettingsService {
       create: {
         key: INACTIVITY_TIMEOUT_KEY,
         value: String(DEFAULT_INACTIVITY_MINUTES),
-        description: 'Minutos de inactividad antes de cerrar sesión automáticamente',
+        description:
+          'Minutos de inactividad antes de cerrar sesión automáticamente',
       },
     });
 
@@ -70,7 +71,10 @@ export class AppSettingsService {
    * @param userId — ID del admin que realiza el cambio (audit trail).
    * @returns el nuevo valor en minutos.
    */
-  async updateInactivityTimeoutMinutes(minutes: number, userId: string): Promise<number> {
+  async updateInactivityTimeoutMinutes(
+    minutes: number,
+    userId: string,
+  ): Promise<number> {
     const updated = await this.prisma.appSetting.update({
       where: { key: INACTIVITY_TIMEOUT_KEY },
       data: {
@@ -148,7 +152,8 @@ export class AppSettingsService {
       create: {
         key: COP_MIN_UNIT_PRICE_KEY,
         value: String(DEFAULT_COP_MIN_UNIT_PRICE),
-        description: 'Piso m\u00ednimo de precio unitario en COP para alertar valores sospechosamente bajos',
+        description:
+          'Piso m\u00ednimo de precio unitario en COP para alertar valores sospechosamente bajos',
       },
     });
 
@@ -158,7 +163,8 @@ export class AppSettingsService {
       create: {
         key: USD_MAX_UNIT_PRICE_KEY,
         value: String(DEFAULT_USD_MAX_UNIT_PRICE),
-        description: 'Techo m\u00e1ximo de precio unitario en USD para alertar valores sospechosamente altos',
+        description:
+          'Techo m\u00e1ximo de precio unitario en USD para alertar valores sospechosamente altos',
       },
     });
 

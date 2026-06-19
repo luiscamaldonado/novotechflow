@@ -6,14 +6,13 @@ import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizeRichText } from '../common/sanitize';
 import { assertProposalNotLocked } from './proposals-lock.helper';
 import {
-    CreatePageDto,
-    UpdatePageDto,
-    ReorderPagesDto,
-    CreateBlockDto,
-    UpdateBlockDto,
-    ReorderBlocksDto,
+  CreatePageDto,
+  UpdatePageDto,
+  ReorderPagesDto,
+  CreateBlockDto,
+  UpdateBlockDto,
+  ReorderBlocksDto,
 } from './dto/proposals.dto';
-
 
 @Injectable()
 export class PagesService {
@@ -27,9 +26,14 @@ export class PagesService {
    * Busca la page → obtiene proposalId → verifica ownership.
    */
   private async verifyPageOwnership(pageId: string, user: AuthenticatedUser) {
-    const page = await this.prisma.proposalPage.findUnique({ where: { id: pageId } });
+    const page = await this.prisma.proposalPage.findUnique({
+      where: { id: pageId },
+    });
     if (!page) throw new NotFoundException('P\u00e1gina no encontrada.');
-    const proposal = await this.proposalsService.verifyProposalOwnership(page.proposalId, user);
+    const proposal = await this.proposalsService.verifyProposalOwnership(
+      page.proposalId,
+      user,
+    );
     assertProposalNotLocked(proposal);
     return page;
   }
@@ -41,7 +45,10 @@ export class PagesService {
    * Agrega la firma del comercial a la página de presentación.
    */
   async initializeDefaultPages(proposalId: string, user: AuthenticatedUser) {
-    const proposalOwner = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    const proposalOwner = await this.proposalsService.verifyProposalOwnership(
+      proposalId,
+      user,
+    );
     assertProposalNotLocked(proposalOwner);
     // Check for ANY existing pages to prevent re-initialization
     const existingCount = await this.prisma.proposalPage.count({
@@ -86,18 +93,95 @@ export class PagesService {
     } else {
       // Fallback: minimal hardcoded defaults
       pageDefs = [
-        { pageType: 'COVER', title: 'Portada', sortOrder: 1, blocks: [{ blockType: 'IMAGE', content: { url: '/defaults/portada.png', caption: '', fullPage: true } }] },
-        { pageType: 'PRESENTATION', title: 'Carta de Presentaci\u00f3n', sortOrder: 2, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Carta de Presentaci\u00f3n' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Contenido de la carta de presentaci\u00f3n.' }] }] } }] },
-        { pageType: 'COMPANY_INFO', title: 'Informaci\u00f3n General (1/2)', sortOrder: 3, blocks: [] },
-        { pageType: 'COMPANY_INFO', title: 'Informaci\u00f3n General (2/2)', sortOrder: 4, blocks: [] },
+        {
+          pageType: 'COVER',
+          title: 'Portada',
+          sortOrder: 1,
+          blocks: [
+            {
+              blockType: 'IMAGE',
+              content: {
+                url: '/defaults/portada.png',
+                caption: '',
+                fullPage: true,
+              },
+            },
+          ],
+        },
+        {
+          pageType: 'PRESENTATION',
+          title: 'Carta de Presentaci\u00f3n',
+          sortOrder: 2,
+          blocks: [
+            {
+              blockType: 'RICH_TEXT',
+              content: {
+                type: 'doc',
+                content: [
+                  {
+                    type: 'heading',
+                    attrs: { level: 2, textAlign: 'left' },
+                    content: [
+                      { type: 'text', text: 'Carta de Presentaci\u00f3n' },
+                    ],
+                  },
+                  {
+                    type: 'paragraph',
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Contenido de la carta de presentaci\u00f3n.',
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          pageType: 'COMPANY_INFO',
+          title: 'Informaci\u00f3n General (1/2)',
+          sortOrder: 3,
+          blocks: [],
+        },
+        {
+          pageType: 'COMPANY_INFO',
+          title: 'Informaci\u00f3n General (2/2)',
+          sortOrder: 4,
+          blocks: [],
+        },
         { pageType: 'INDEX', title: '\u00cdndice', sortOrder: 5, blocks: [] },
-        { pageType: 'TERMS', title: 'T\u00e9rminos y Condiciones', sortOrder: 1000, blocks: [{ blockType: 'RICH_TEXT', content: { type: 'doc', content: [{ type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'T\u00e9rminos y Condiciones' }] }] } }] },
+        {
+          pageType: 'TERMS',
+          title: 'T\u00e9rminos y Condiciones',
+          sortOrder: 1000,
+          blocks: [
+            {
+              blockType: 'RICH_TEXT',
+              content: {
+                type: 'doc',
+                content: [
+                  {
+                    type: 'heading',
+                    attrs: { level: 2, textAlign: 'left' },
+                    content: [
+                      { type: 'text', text: 'T\u00e9rminos y Condiciones' },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
       ];
     }
 
     // For the PRESENTATION page, append the commercial user's signature if available
     if (proposal?.user?.signatureUrl) {
-      const presentationIdx = pageDefs.findIndex(p => p.pageType === 'PRESENTATION');
+      const presentationIdx = pageDefs.findIndex(
+        (p) => p.pageType === 'PRESENTATION',
+      );
       if (presentationIdx !== -1) {
         pageDefs[presentationIdx].blocks.push({
           blockType: 'IMAGE',
@@ -139,7 +223,8 @@ export class PagesService {
    * Retorna todas las páginas con sus bloques para una propuesta.
    */
   async getPagesByProposalId(proposalId: string, user?: AuthenticatedUser) {
-    if (user) await this.proposalsService.verifyProposalOwnership(proposalId, user);
+    if (user)
+      await this.proposalsService.verifyProposalOwnership(proposalId, user);
     return this.prisma.proposalPage.findMany({
       where: { proposalId },
       include: { blocks: { orderBy: { sortOrder: 'asc' } } },
@@ -150,8 +235,15 @@ export class PagesService {
   /**
    * Crea una página personalizada.
    */
-  async createCustomPage(proposalId: string, data: CreatePageDto, user: AuthenticatedUser) {
-    const proposal = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+  async createCustomPage(
+    proposalId: string,
+    data: CreatePageDto,
+    user: AuthenticatedUser,
+  ) {
+    const proposal = await this.proposalsService.verifyProposalOwnership(
+      proposalId,
+      user,
+    );
     assertProposalNotLocked(proposal);
     // Insert before TERMS (sortOrder 1000) but after everything else
     const aggregate = await this.prisma.proposalPage.aggregate({
@@ -175,7 +267,11 @@ export class PagesService {
   /**
    * Actualiza una página (título o variables).
    */
-  async updatePage(pageId: string, data: UpdatePageDto, user: AuthenticatedUser) {
+  async updatePage(
+    pageId: string,
+    data: UpdatePageDto,
+    user: AuthenticatedUser,
+  ) {
     await this.verifyPageOwnership(pageId, user);
     return this.prisma.proposalPage.update({
       where: { id: pageId },
@@ -193,7 +289,8 @@ export class PagesService {
    */
   async deletePage(pageId: string, user: AuthenticatedUser) {
     const page = await this.verifyPageOwnership(pageId, user);
-    if (page.isLocked) throw new Error('No se puede eliminar una p\u00e1gina predeterminada.');
+    if (page.isLocked)
+      throw new Error('No se puede eliminar una p\u00e1gina predeterminada.');
 
     return this.prisma.proposalPage.delete({ where: { id: pageId } });
   }
@@ -201,8 +298,15 @@ export class PagesService {
   /**
    * Reordena las páginas respetando las posiciones fijas de predeterminadas.
    */
-  async reorderPages(proposalId: string, data: ReorderPagesDto, user: AuthenticatedUser) {
-    const proposal = await this.proposalsService.verifyProposalOwnership(proposalId, user);
+  async reorderPages(
+    proposalId: string,
+    data: ReorderPagesDto,
+    user: AuthenticatedUser,
+  ) {
+    const proposal = await this.proposalsService.verifyProposalOwnership(
+      proposalId,
+      user,
+    );
     assertProposalNotLocked(proposal);
     await this.prisma.$transaction(
       data.pageIds.map((id, index) =>
@@ -218,7 +322,11 @@ export class PagesService {
   /**
    * Crea un bloque dentro de una página.
    */
-  async createBlock(pageId: string, data: CreateBlockDto, user: AuthenticatedUser) {
+  async createBlock(
+    pageId: string,
+    data: CreateBlockDto,
+    user: AuthenticatedUser,
+  ) {
     await this.verifyPageOwnership(pageId, user);
     const aggregate = await this.prisma.proposalPageBlock.aggregate({
       where: { pageId },
@@ -226,9 +334,16 @@ export class PagesService {
     });
     const nextOrder = (aggregate._max.sortOrder || 0) + 1;
 
-    const contentToSave = data.blockType === 'RICH_TEXT' && data.content
-      ? { ...data.content as object, html: typeof (data.content as any).html === 'string' ? sanitizeRichText((data.content as any).html) : undefined }
-      : (data.content || {});
+    const contentToSave =
+      data.blockType === 'RICH_TEXT' && data.content
+        ? {
+            ...(data.content as object),
+            html:
+              typeof (data.content as any).html === 'string'
+                ? sanitizeRichText((data.content as any).html)
+                : undefined,
+          }
+        : data.content || {};
 
     return this.prisma.proposalPageBlock.create({
       data: {
@@ -243,14 +358,27 @@ export class PagesService {
   /**
    * Actualiza el contenido de un bloque.
    */
-  async updateBlock(blockId: string, data: UpdateBlockDto, user: AuthenticatedUser) {
-    const block = await this.prisma.proposalPageBlock.findUnique({ where: { id: blockId } });
+  async updateBlock(
+    blockId: string,
+    data: UpdateBlockDto,
+    user: AuthenticatedUser,
+  ) {
+    const block = await this.prisma.proposalPageBlock.findUnique({
+      where: { id: blockId },
+    });
     if (!block) throw new NotFoundException('Bloque no encontrado.');
     await this.verifyPageOwnership(block.pageId, user);
 
-    const contentToSave = block.blockType === 'RICH_TEXT' && data.content
-      ? { ...data.content as object, html: typeof (data.content as any).html === 'string' ? sanitizeRichText((data.content as any).html) : undefined }
-      : data.content;
+    const contentToSave =
+      block.blockType === 'RICH_TEXT' && data.content
+        ? {
+            ...(data.content as object),
+            html:
+              typeof (data.content as any).html === 'string'
+                ? sanitizeRichText((data.content as any).html)
+                : undefined,
+          }
+        : data.content;
 
     return this.prisma.proposalPageBlock.update({
       where: { id: blockId },
@@ -262,7 +390,9 @@ export class PagesService {
    * Elimina un bloque.
    */
   async deleteBlock(blockId: string, user: AuthenticatedUser) {
-    const block = await this.prisma.proposalPageBlock.findUnique({ where: { id: blockId } });
+    const block = await this.prisma.proposalPageBlock.findUnique({
+      where: { id: blockId },
+    });
     if (!block) throw new NotFoundException('Bloque no encontrado.');
     await this.verifyPageOwnership(block.pageId, user);
     return this.prisma.proposalPageBlock.delete({ where: { id: blockId } });
@@ -271,7 +401,11 @@ export class PagesService {
   /**
    * Reordena los bloques dentro de una página.
    */
-  async reorderBlocks(pageId: string, data: ReorderBlocksDto, user: AuthenticatedUser) {
+  async reorderBlocks(
+    pageId: string,
+    data: ReorderBlocksDto,
+    user: AuthenticatedUser,
+  ) {
     await this.verifyPageOwnership(pageId, user);
     await this.prisma.$transaction(
       data.blockIds.map((id, index) =>
