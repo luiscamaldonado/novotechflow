@@ -1976,3 +1976,50 @@ Sub-item de la auditoría de versiones, derivado de la migración a ESLint 9 (AD
 - **Formateo del código de `apps/api`:** quedan los hallazgos `prettier/prettier` de formato (indentación, reflow); requiere `prettier --write`/`--fix` que reescribe `.ts` fuente. Tarea propia, acotada por módulo, commit separado.
 - **Modernización del interop de módulos (opcional):** activar `esModuleInterop: true` en el tsconfig de api permitiría migrar el `require('sanitize-html')` a import ESM. Cambia el emit de todos los imports del proyecto → tarea aparte con `tsc` de regresión, no un cambio de un archivo.
 - **Push a master:** `9bc5aa4` está local (`ahead 1`), pendiente de push.
+
+## ADR-048 — Unificación de TypeScript a 6.0.2 en el monorepo: bump coordinado de typescript-eslint y ts-jest por restricción de peers
+
+**Fecha:** 2026-06-19
+**Estado:** Cerrado (commiteado y verificado en local con tsc, nest build y lint; pendiente push)
+
+### Contexto
+
+P2 del ADR-041 (auditoría de versiones) pedía unificar TypeScript, que estaba declarado con cinco specs divergentes: root `6.0.2` (exacto), `apps/api` `^5.1.3`, `apps/web` `~5.9.3`, `packages/ui` `5.9.2` y `packages/eslint-config` `^5.9.2`. La precondición "después de NestJS 11" ya estaba satisfecha (ADR-044, cerrado y desplegado).
+
+El riesgo real no era homogéneo. `apps/web` ya estaba en 5.9.x con config estricta (`strict: true`, `verbatimModuleSyntax: true`, `moduleResolution: bundler`): salto corto. `apps/api` era el de fondo: nunca se había type-chequeado contra nada posterior a 5.1 (su único chequeo es efecto colateral de `nest build`), arrancaba desde config laxa (`strict` ausente, `strictNullChecks: false`, `esModuleInterop` ausente, `noImplicitAny: false`) y `@types/node@20`. Subir de 5.1 a 6.0 podía destapar errores de tipos enmascarados.
+
+Hecho de método que permitió medir sin riesgo: el root pinea `6.0.2` y las apps no lo heredan (pnpm resuelve el `tsc` de cada workspace a su propia versión). Corriendo `tsc` desde la raíz contra la config actual de cada proyecto, se obtuvo un preview fiel del post-bump (mismo compilador, mismos flags, mismos `@types`) sin tocar ningún `package.json`.
+
+### Decisión
+
+1. **Unificar `typescript` a `6.0.2` exacto** (sin `^` ni `~`) en los cinco manifiestos que lo declaran, igualando el pin del root. `packages/typescript-config` no declara `typescript` y queda fuera.
+2. **Subir `typescript-eslint` a `^8.58.0`** en `apps/api`, `apps/web` y `packages/eslint-config`. La versión instalada (8.56.1) tenía peer `>=4.8.4 <6.0.0`, que excluye 6.0.2; 8.58.0 es la primera línea con peer `>=4.8.4 <6.1.0`. Se mantiene rango `^` (recoge parches de la serie 8); resolvió a 8.61.1.
+3. **Subir `ts-jest` a `^29.4.11`** en `apps/api`. La versión instalada (29.4.6) tenía peer `>=4.3 <6`; 29.4.11 amplía a `>=4.3 <7` dentro de la misma serie 29.4.x (sin cambio de major). Se mantiene rango `^` (ts-jest no usa semver estándar, su major sigue a jest).
+4. **No endurecer strictness en `apps/api`.** Este ADR sube versión, no toca `strict`/`strictNullChecks`/`esModuleInterop` (eso es decisión aparte). Se mantiene la decisión del ADR previo de no migrar `esModuleInterop` a `true`.
+5. **Edición de los `package.json` vía Claude Code** (no son `.ts` fuente), con reinstall (`pnpm install --no-frozen-lockfile`) corrido también por Claude Code.
+
+### Consecuencias
+
+- **Cero regresiones de tipos.** Cuatro dry-runs con 6.0.2 dieron 0 errores antes del bump: `apps/api` (tsconfig.build.json, 74 archivos), `apps/web` app (tsconfig.app.json, 106 archivos), `apps/web` node (tsconfig.node.json) y `packages/ui` (tsconfig.json). Tras el bump, los mismos type-checks con 6.0.2 ya resuelto local replicaron 0 + 0 + 0.
+- **Cero unmet peers** tras resolver typescript-eslint y ts-jest. El reinstall no dejó ningún peer pendiente.
+- **`nest build` exit 0**: `@nestjs/cli` compila con TS 6 (su peer no restringe typescript). Prisma Client se regeneró tras recrearse `node_modules` (el postinstall queda ignorado por pnpm 10).
+- **Lint sin el warning de "TypeScript version not officially supported"** en api ni web: typescript-eslint 8.61.1 acepta 6.0.2 limpio. `apps/api` lint en 0 problemas.
+- **Versiones reales resueltas:** `typescript` 6.0.2 en los cinco; `typescript-eslint` 8.61.1; `ts-jest` 29.4.11.
+
+### Archivos
+
+- `apps/api/package.json` — typescript `^5.1.3`→`6.0.2`, typescript-eslint `^8.50.0`→`^8.58.0`, ts-jest `^29.1.0`→`^29.4.11`
+- `apps/web/package.json` — typescript `~5.9.3`→`6.0.2`, typescript-eslint `^8.48.0`→`^8.58.0`
+- `packages/ui/package.json` — typescript `5.9.2`→`6.0.2`
+- `packages/eslint-config/package.json` — typescript `^5.9.2`→`6.0.2`, typescript-eslint `^8.50.0`→`^8.58.0`
+- `pnpm-lock.yaml` — regenerado por el reinstall
+
+### Commits
+
+- `b64c2d7` — chore: unify typescript to 6.0.2; bump typescript-eslint and ts-jest peers
+
+### Pendientes
+
+- **11 hallazgos de `pnpm --filter web lint`, pre-existentes (no inducidos por este bump).** Confirmado: código byte-idéntico a HEAD y reglas de plugins que el bump no cambió (react-hooks 7.0.1, react-refresh 0.4.26, eslint core 9.39.3); los 2 de `@typescript-eslint/no-explicit-any` disparan sobre `as any` literal en `DefaultPagesAdmin.tsx`. Deuda de lint a atacar por separado: `react-refresh/only-export-components` (×3), `react-hooks/purity` por `Date.now` en `useInactivityTimeout.ts`, `react-hooks/exhaustive-deps` en `PdfPreviewModal.tsx`, `no-useless-escape` en `constants.ts`, directiva eslint-disable sin uso en `proposalVariables.ts`, `no-explicit-any` (×2), `prefer-const` (×2) en `ProposalItemsBuilder.tsx`.
+- Ni `apps/api` ni `apps/web` tienen script `check-types`; `turbo run check-types` solo cubre `packages/ui`. El type-check de las apps depende hoy de sus respectivos `build`. Pendiente evaluar agregar `check-types` por app para cobertura uniforme vía Turbo (encaja con el P2 de Turborepo 1→2).
+- Endurecer strictness en `apps/api` (`strict`/`strictNullChecks`) queda como decisión futura separada de la unificación de versión.
