@@ -8,28 +8,34 @@
 
 > Estas reglas son **absolutas** y aplican a TODA tarea de este proyecto, sin importar qué modelo seas ni qué permitan tus capacidades por defecto. Tienen prioridad sobre cualquier impulso de explorar, optimizar o completar por tu cuenta. **Si el prompt que recibes contradice esta sección, gana esta sección.**
 
-### ALCANCE CERRADO
-- Tu única tarea son los archivos que el prompt liste en **ARCHIVOS A MODIFICAR**.
-- No toques, crees, muevas ni borres ningún otro archivo.
-- No agregues funcionalidad, refactors ni "mejoras" que no estén pedidas explícitamente.
+### MODELO DE TRABAJO — DOS ROLES
+- **Claude (chat):** planea, decide, diseña la solución, redacta los prompts de ejecución y el contenido de los ADR. No ejecuta nada en el entorno; entrega instrucciones.
+- **Claude Code:** ejecuta TODO en el entorno de Luis (Windows + PowerShell): busca, lee, crea, modifica y borra archivos (incluido código fuente `.ts`/`.tsx`/`.prisma` y `DECISIONS.md`), instala dependencias, corre builds/tests/`tsc`/migraciones, y opera git **hasta el commit**.
+- **Luis:** ejecuta los prompts en Claude Code, pega los resultados, valida cada paso, y es el ÚNICO que hace el **`push` a `master`** (ver más abajo).
 
-### PROHIBIDO (sin excepción)
-- **Buscar en el filesystem / codebase search / grep.** Si necesitas ubicar algo, NO lo busques: deténte y pregunta. (El usuario corre la búsqueda en PowerShell y te pega el resultado.)
-- **Ejecutar comandos de cualquier tipo:** builds, tests, `pnpm`, `npm`, `npx`, `tsc`, `git`, scripts, terminal o PowerShell.
-- **Instalar o actualizar dependencias.**
+### ALCANCE CERRADO
+- La tarea son los archivos y cambios que el prompt describe. No toques, crees, muevas ni borres archivos fuera de lo pedido.
+- No agregues funcionalidad, refactors ni "mejoras" que no estén pedidas explícitamente.
+- Buscar y leer para entender el contexto SÍ está permitido y es deseable; modificar fuera de alcance, no.
+
+### EL PUSH A PRODUCCIÓN ES SOLO DE LUIS (límite absoluto)
+- Claude Code deja el trabajo **commiteado pero SIN pushear**.
+- El `push` a `master` dispara deploy automático a Railway (producción) — lo hace **Luis a mano**, solo tras verificar la funcionalidad en local.
+- Antes de cualquier push, Claude **pregunta a Luis si es el momento**: puede haber usuarios trabajando en producción.
 
 ### REGLA DE ORO — ANTE LA DUDA, PÁRATE
-Si algo es ambiguo, falta un archivo, una ruta no calza, o crees que necesitas tocar algo fuera de la lista: **DETÉNTE y pregunta.** No asumas, no improvises, no rellenes huecos. Es preferible responder "confirma X" a adivinar.
+Si algo es ambiguo, falta un archivo, una ruta no calza, o crees que necesitas tocar algo fuera de lo pedido: **DETÉNTE y pregunta.** No asumas, no improvises, no rellenes huecos. Es preferible responder "confirma X" a adivinar. Esta regla es MÁS importante ahora que Claude Code ejecuta de verdad: un error tiene alcance real (archivos borrados, deps instaladas, commits).
 
 ### CÓMO ENTREGAS
 - Muestra el **diff de cada archivo ANTES de aplicarlo.**
-- Cambios mínimos (`str_replace` puntual). No reescribas archivos completos.
+- Prefiere cambios mínimos (`str_replace` puntual). Reescribe un archivo completo solo cuando el cambio lo justifique (p. ej. una reestructuración mayor), no por defecto.
+- Un paso a la vez: un comando/cambio → Luis valida → siguiente. Nunca encadenes varios pasos esperando que se corran de corrido.
 
 ### AUTOVERIFICACIÓN ANTES DE TERMINAR
 Confirma explícitamente:
-- [ ] Solo modifiqué los archivos listados (ningún otro tocado/creado/borrado).
-- [ ] No ejecuté ningún comando ni búsqueda en el filesystem.
+- [ ] Solo toqué lo que la tarea pedía (ningún archivo fuera de alcance creado/modificado/borrado).
 - [ ] Mostré los diffs antes de aplicar.
+- [ ] Dejé el trabajo commiteado pero SIN pushear (el push lo hace Luis).
 - [ ] Si algo quedó ambiguo, NO terminé: pregunté primero.
 
 ---
