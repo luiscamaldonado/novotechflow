@@ -1940,3 +1940,39 @@ Item recurrente de la auditoría: el lint de `apps/api` reportaba cientos de hal
 - **6 hallazgos sustantivos de typescript-eslint:** 4 `no-unused-vars`, 1 `no-require-imports`, 1 directiva `eslint-disable` obsoleta (apunta a `no-var-requires`, renombrada). Sanear a mano por separado.
 - **Cobertura opcional adicional en `.gitattributes`:** `apps/web/nginx.conf` sigue en CRLF y va a build Docker/Alpine; candidato a `*.conf text eol=lf` o `nginx.conf text eol=lf`. Otros (`*.toml`, `*.txt`) de baja prioridad (mayoría en `backups/`).
 - **Push a master:** el commit `4c55abb` (y los 3 previos de la sesión) están locales, `ahead 4`.
+
+## ADR-047 — Saneo de los 6 hallazgos de typescript-eslint en apps/api
+**Fecha:** 2026-06-18
+**Estado:** Cerrado (commiteado y verificado en local con `tsc` y re-lint; pendiente push)
+
+### Contexto
+Sub-item de la auditoría de versiones, derivado de la migración a ESLint 9 (ADR-045): tras la renormalización a LF (ADR-046), el lint de `apps/api` quedó con 6 hallazgos sustantivos no-prettier que el legacy ESLint 8 ya reportaba pero que nunca se habían saneado: 4 `@typescript-eslint/no-unused-vars`, 1 `@typescript-eslint/no-require-imports`, y 1 warning de directiva `eslint-disable` obsoleta. Se localizaron con contexto antes de tocar nada, porque cada uno tenía un tratamiento distinto y dos requerían verificación de runtime antes de decidir el fix.
+
+### Decisión
+1. **Imports muertos eliminados:** se quitó `Query` del import de `@nestjs/common` en `catalogs.controller.ts` y `BlockType` del import de `@prisma/client` en `templates.service.ts` (ambos símbolos sin usar; `PageType` se conserva).
+2. **`no-unused-vars` con ignore por prefijo `_`:** se agregó la regla a `eslint.config.mjs` como `['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }]`, para soportar el patrón de omisión por destructuring sin afectar el resto de la regla.
+3. **Patrón omit en `clients.service.ts` corregido con rename pattern:** la línea destructura `score` solo para excluirlo del objeto devuelto (`({ score, ...client }) => client`). El fix correcto NO es reemplazar la clave por `_score` (eso busca una propiedad `_score` inexistente → error de tipos `TS2339` y deja `score` dentro de `client`, rompiendo el omit), sino **renombrar el binding**: `({ score: _score, ...client }) => client`. Así se sigue extrayendo `score` (omit intacto) y el valor se liga a `_score`, cubierto por `varsIgnorePattern: '^_'`. El que aplica a este caso (rest sibling en destructuring de objeto) es `varsIgnorePattern`, no `destructuredArrayIgnorePattern` (ese es para arrays).
+4. **Directiva de `sanitize.ts` actualizada, `require()` conservado:** la regla `no-var-requires` fue renombrada a `no-require-imports`, lo que dejó la directiva huérfana (warning) y el `require()` marcado por la regla nueva. Se actualizó la directiva al nombre vigente, resolviendo ambos hallazgos a la vez. **No se migró a import ESM** a propósito: `esModuleInterop` está en `false` en el tsconfig de api y `sanitize-html` es CommonJS puro (`export = sanitize`); un `import sanitizeHtml from 'sanitize-html'` compilaría (por `allowSyntheticDefaultImports`) pero emitiría `require(...).default` = `undefined` en runtime, rompiendo silenciosamente la sanitización XSS.
+5. **Constante muerta eliminada:** se borró `ALLOWED_CSV_MIMES` de `upload-validation.ts`. Se verificó que no se referencia en el archivo y que no es un hueco de seguridad: la validación de CSV usa el enfoque correcto (denylist por magic bytes + estructura + anti-inyección de fórmulas), no allowlist de MIME, porque el MIME de un CSV es texto plano y spoofeable. La constante era vestigio de un enfoque descartado.
+
+### Consecuencias
+- `tsc --noEmit` sobre `apps/api/tsconfig.build.json` pasa en verde; quitar símbolos de imports no rompió tipos.
+- El re-lint sin `--fix` reporta 0 hallazgos no-prettier: 0 `no-unused-vars` (incluido que `_score` ya no se marca), 0 `no-require-imports`, 0 de la directiva obsoleta.
+- El error `TS2339` de un fix intermedio mal especificado (clave `_score` en vez de rename) fue atrapado por `tsc` antes del commit; quedó registrado como lección: el lint solo lo habría visto como "variable resuelta" mientras rompía el shape del retorno.
+- El lint sigue con EXIT 1 por los hallazgos `prettier/prettier` de formato, ajenos a esta tarea.
+
+### Archivos
+- `apps/api/eslint.config.mjs` (regla `no-unused-vars` con opciones)
+- `apps/api/src/catalogs/catalogs.controller.ts`
+- `apps/api/src/clients/clients.service.ts`
+- `apps/api/src/common/sanitize.ts`
+- `apps/api/src/common/upload-validation.ts`
+- `apps/api/src/templates/templates.service.ts`
+
+### Commits
+- `9bc5aa4` — fix(api): resolve typescript-eslint findings
+
+### Pendientes
+- **Formateo del código de `apps/api`:** quedan los hallazgos `prettier/prettier` de formato (indentación, reflow); requiere `prettier --write`/`--fix` que reescribe `.ts` fuente. Tarea propia, acotada por módulo, commit separado.
+- **Modernización del interop de módulos (opcional):** activar `esModuleInterop: true` en el tsconfig de api permitiría migrar el `require('sanitize-html')` a import ESM. Cambia el emit de todos los imports del proyecto → tarea aparte con `tsc` de regresión, no un cambio de un archivo.
+- **Push a master:** `9bc5aa4` está local (`ahead 1`), pendiente de push.
