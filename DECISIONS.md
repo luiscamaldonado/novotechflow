@@ -1909,3 +1909,34 @@ Se decidió convertir el config a flat preservando el comportamiento de lint act
 - **6 hallazgos sustantivos de typescript-eslint:** 4 `no-unused-vars`, 1 `no-require-imports`, 1 directiva `eslint-disable` sobrante. Revisar y sanear por separado.
 - **Push a master:** el commit `0a8df31` está local (`ahead 1`), pendiente de push para desplegar.
 - **P2 restantes de la auditoría:** TypeScript 6 (raíz ya en `6.0.2`; falta `apps/api`/`apps/web`) y Turborepo 1→2.
+
+## ADR-046 — Renormalización de fin de línea a LF: cobertura de .gitattributes y re-checkout del working tree
+**Fecha:** 2026-06-18
+**Estado:** Cerrado (cobertura commiteada en `4c55abb`, pendiente push; re-materialización del working tree aplicada en local sin commit asociado)
+
+### Contexto
+Item recurrente de la auditoría: el lint de `apps/api` reportaba cientos de hallazgos `prettier/prettier` de tipo `Delete ␍` (CRLF) tras migrar a ESLint 9 (ADR-045). El diagnóstico con `git ls-files --eol` reveló que el índice ya estaba 100% en LF (516 archivos `i/lf`, 0 `i/crlf` ni `i/mixed`): el repo commiteado nunca estuvo corrupto. El problema era doble y exclusivamente local: (1) un hueco de cobertura en `.gitattributes` —no incluía `*.mjs`/`*.cjs`/`*.sh`, dejando `apps/api/eslint.config.mjs` a merced de `core.autocrlf=true` (heredado del gitconfig de sistema)—, y (2) el working tree tenía 98 archivos materializados en CRLF en disco pese a que el índice y `.gitattributes` mandaban LF, por la optimización de stat-cache de git que daba esos archivos por correctos.
+
+### Decisión
+1. **Cierre del hueco de cobertura en `.gitattributes`:** se agregaron `*.mjs text eol=lf encoding=utf-8`, `*.cjs text eol=lf encoding=utf-8` y `*.sh text eol=lf`. Los dos primeros cierran el hueco comprobado (`eslint.config.mjs`); `*.sh` es preventivo y alineado con el propósito del archivo (evitar CRLF llegando a Alpine, fallo clásico `bad interpreter: ^M`). Se excluyeron `.ps1`/`.bat`/`.cmd` deliberadamente: no existen en el repo y serían la única familia que querría CRLF; una excepción `eol=crlf` rompería la uniformidad "todo LF" sin beneficio presente.
+2. **`--renormalize` NO es la herramienta cuando el índice ya está en LF:** opera sobre el índice; con el índice ya 100% LF, `git add --renormalize .` es un no-op y no toca el working tree. El fix correcto del working tree es forzar un re-checkout desde el índice: `git rm --cached -r . ; git reset --hard`. Esto vacía el índice y obliga a git a re-escribir todos los archivos aplicando los smudge filters de `.gitattributes` (→ LF en disco), derrotando el stat-cache.
+3. **La re-materialización del working tree NO produce commit:** como el índice ya era LF, re-escribir el disco a LF no genera diferencia commiteable; `git status` queda limpio. Es un arreglo puramente local/cosmético, sin impacto en producción ni en el push.
+
+### Consecuencias
+- La re-materialización bajó los archivos en CRLF en disco de 98 a 35. Los 35 restantes tienen `attr/` vacío (extensiones no cubiertas: `.gitignore`, `.dockerignore`, `.prettierrc`, `.toml`, `.conf`, `.webmanifest`, `.txt`, y ruido de `backups/`); son inofensivos para el lint. Cero `.ts`/`.tsx` quedaron en CRLF; ambos `Dockerfile` y `eslint.config.mjs` pasaron a LF.
+- Re-corrido el lint sin `--fix`: los hallazgos de CRLF (`Delete ␍`) cayeron a **0**. El total bajó de 2921 a 2096 problemas.
+- **Corrección de magnitud registrada:** durante la migración ESLint (ADR-045) se caracterizó el grueso de los 2915 `prettier/prettier` como CRLF. El conteo real lo desmiente: el CRLF era ~825 hallazgos (≈28%); los 2090 restantes son violaciones de formato genuinas de prettier (indentación, reflow de imports/parámetros) preexistentes en el código fuente, independientes del fin de línea. La normalización a LF no las toca por diseño.
+- El warning de `autocrlf` "LF will be replaced by CRLF" para `.mjs` desaparece en el próximo checkout.
+
+### Archivos
+- `.gitattributes` (raíz) — agregadas reglas `*.mjs`/`*.cjs`/`*.sh`
+- Working tree (re-materializado a LF; sin cambio en índice ni archivos commiteados)
+
+### Commits
+- `4c55abb` — chore: cover mjs cjs sh line endings in gitattributes
+
+### Pendientes
+- **Formateo del código de `apps/api`:** quedan 2090 hallazgos `prettier/prettier` de formato real (no EOL). Llevar el lint a verde requiere `prettier --write`/eslint `--fix`, que reescribe archivos fuente `.ts` —cambio sustantivo, no cosmético—; se hará en tarea propia, idealmente acotada por módulo para revisar el diff y en commit separado.
+- **6 hallazgos sustantivos de typescript-eslint:** 4 `no-unused-vars`, 1 `no-require-imports`, 1 directiva `eslint-disable` obsoleta (apunta a `no-var-requires`, renombrada). Sanear a mano por separado.
+- **Cobertura opcional adicional en `.gitattributes`:** `apps/web/nginx.conf` sigue en CRLF y va a build Docker/Alpine; candidato a `*.conf text eol=lf` o `nginx.conf text eol=lf`. Otros (`*.toml`, `*.txt`) de baja prioridad (mayoría en `backups/`).
+- **Push a master:** el commit `4c55abb` (y los 3 previos de la sesión) están locales, `ahead 4`.
