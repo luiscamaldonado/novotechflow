@@ -85,7 +85,10 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
     /** Wrapper local que cierra sobre apiBase. Delega en el helper compartido en lib/resolveImageUrl.ts. */
-    const resolveImageUrl = (url: string): string => resolveImageUrlShared(url, apiBase);
+    const resolveImageUrl = useCallback(
+        (url: string): string => resolveImageUrlShared(url, apiBase),
+        [apiBase],
+    );
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
     const economicMeasureRef = useRef<HTMLDivElement>(null);
@@ -372,7 +375,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
         setVisualPages(result);
         setReady(true);
-    }, [pages, apiBase, proposalVars, processedScenarios, consolidation, rowHeights]);
+    }, [pages, proposalVars, processedScenarios, consolidation, rowHeights, resolveImageUrl]);
 
     useEffect(() => {
         // Wait for DOM to be ready
