@@ -77,7 +77,8 @@ export default function ProposalItemsBuilder() {
 
 
     const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        let { name, value } = e.target;
+        const { name } = e.target;
+        let { value } = e.target;
 
         // Convertir coma a punto y dejar solo números y un punto
         if (['unitCost', 'marginPct', 'unitPrice', 'internal.fletePct', 'quantity'].includes(name)) {
@@ -98,7 +99,7 @@ export default function ProposalItemsBuilder() {
         }
 
         setItemForm(prev => {
-            let next = { ...prev };
+            const next = { ...prev };
             
             if (name.startsWith('spec.')) {
                 const specField = name.split('.')[1];
