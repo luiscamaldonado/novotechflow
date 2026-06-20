@@ -2067,3 +2067,53 @@ La documentación de proceso estaba fuertemente acoplada a Antigravity y al patr
 - **Luis debe pegar las Instrucciones de UI nuevas** en la configuración del proyecto en Claude.ai (fuera de git; no queda rastro en el repo).
 - Actualizar la memoria de proyecto de Claude, que aún describe el modelo viejo de tres roles con Antigravity como editor único.
 - Push de la rama a `master` (lo hace Luis tras confirmar que no hay usuarios en producción); a este punto la rama acumula los commits de la sesión: ADR-047, bump TS, ADR-048 y esta migración.
+
+## ADR-050 — Remediación de deuda de lint pre-existente en apps/web: 10 de 12 hallazgos resueltos en 6 commits, 2 diferidos
+
+**Fecha:** 2026-06-20
+**Estado:** Implementada (parcial: 10 de 12 hallazgos resueltos en 6 commits ya en master, `f9998e7`→`515af1c`; 2 diferidos a un refactor dedicado de `useInactivityTimeout`; este ADR pendiente de push)
+
+### Contexto
+
+`pnpm --filter web lint` (script `eslint .`, sin `--fix`) reportaba hallazgos pre-existentes en `apps/web`, **no** introducidos por el bump de TypeScript (ADR-048) ni por la migración a Claude Code (ADR-049): el código era byte-idéntico a HEAD y las reglas provienen de plugins que el bump no cambió.
+
+Toolchain: eslint 9.39.3, typescript-eslint 8.61.1, eslint-plugin-react-hooks 7.0.1 (basado en React Compiler) y eslint-plugin-react-refresh 0.4.26, sobre TypeScript 6.0.2.
+
+Diagnóstico inicial (solo lectura, contra el repo real, HEAD `f9998e7`): 11 hallazgos en 8 archivos — `react-refresh/only-export-components`, `react-hooks/purity`, `react-hooks/exhaustive-deps`, `@typescript-eslint/no-explicit-any`, `no-useless-escape`, `prefer-const` y una directiva `eslint-disable` muerta.
+
+### Decisión
+
+1. **Remediación incremental:** arreglos afines agrupados por commit (no todo en uno), con gate de verificación por commit — los hallazgos objetivo desaparecen, no surgen hallazgos nuevos, `tsc --noEmit` en verde, y prueba manual en browser para los cambios que tocan runtime. Push a master solo tras verificar cada commit.
+2. **Sin silenciar reglas** (`eslint-disable`) y **sin `any` / `as unknown as` / `@ts-ignore`:** cada arreglo resuelve la causa, no la oculta.
+
+### Consecuencias
+
+- **10 de 12 hallazgos resueltos** en 6 commits, ya en master (`f9998e7` → `515af1c`).
+- **Corrección de alcance 11 → 12:** al corregir `react-hooks/purity` en `useInactivityTimeout` afloró un `react-hooks/set-state-in-effect` pre-existente que estaba **enmascarado** — el plugin (React Compiler) aborta el análisis del hook ante la impureza, ocultando hallazgos posteriores del mismo hook. Lección para este toolchain: un hallazgo puede enmascarar a otros dentro del mismo hook, y corregir uno destapa el siguiente (ocurrió en cadena: purity → set-state en la rama `!token` → set-state vía `startTimers()`).
+- **Estado del lint en master tras la remediación:** `pnpm --filter web lint` reporta 1 hallazgo (#4, `react-hooks/purity`); #12 permanece enmascarado hasta que se corrija #4 (reaparecerá al sanear la impureza).
+- **Nota de deuda de tipos (no bloqueante) — `DefaultPagesAdmin`/preview:** la assertion `t.content as ProposalPage['blocks']` (commit `d97c3a3`) genera bloques sin `pageId` (`TemplateBlock` no lo tiene; `PageBlock` sí). Verificado inocuo en runtime: la ruta de render del preview (`PdfPreviewModal` y aguas abajo, en flujo admin y normal) solo lee `blockType` y `content`; ningún punto lee `block.pageId` (grep exhaustivo + barrido adversarial). Quedaría latente como bug del flujo admin si en el futuro se agrega una lectura de `block.pageId` en el preview.
+
+### Archivos
+
+- `apps/web/src/lib/constants.ts` — #6 escape de regex innecesario (`no-useless-escape`)
+- `apps/web/src/lib/proposalVariables.ts` — #7 directiva `eslint-disable` muerta (`max-len` no activa)
+- `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx` — #10/#11 `prefer-const`
+- `apps/web/src/pages/admin/DefaultPagesAdmin.tsx` — #8/#9 dos `as any` reemplazados por `ProposalPage['pageType']` y `ProposalPage['blocks']`
+- `apps/web/src/components/proposals/EconomicProposalTable.tsx`, `apps/web/src/lib/itemDescription.ts` (nuevo) y `apps/web/src/lib/exportProposalExcel.ts` (actualiza el import) — #1/#2 react-refresh: extracción de `buildQuickDescription` y `getUnitOfMeasure`
+- `apps/web/src/components/proposals/SpecFieldsSection.tsx` y `apps/web/src/components/proposals/sectionThemes.ts` (nuevo) — #3 react-refresh: extracción de `SECTION_THEMES`, sus iconos lucide-react y el tipo `SectionTheme`
+- `apps/web/src/components/proposals/PdfPreviewModal.tsx` — #5 `react-hooks/exhaustive-deps`
+- `apps/web/src/hooks/useInactivityTimeout.ts` — #4 + #12 **diferidos** (ver Pendientes)
+
+### Commits
+
+- `458cd72` — chore(web): remove useless regex escape and dead eslint-disable directive (#6 en `constants.ts`, #7 en `proposalVariables.ts`)
+- `a2d9fea` — refactor(web): use const for non-reassigned bindings in ProposalItemsBuilder (#10/#11; #10 requirió partir el destructuring porque `value` sí se reasigna)
+- `d97c3a3` — refactor(web): type admin preview pages instead of casting to any (#8/#9; tipados con `ProposalPage['pageType']` y `ProposalPage['blocks']`)
+- `0bdc2df` — refactor(web): extract item description helpers out of EconomicProposalTable (#1/#2; a `lib/itemDescription.ts`)
+- `8caaacc` — refactor(web): extract SECTION_THEMES out of SpecFieldsSection (#3; a `components/proposals/sectionThemes.ts`)
+- `515af1c` — fix(web): add missing resolveImageUrl dependency in PdfPreviewModal (#5; memoización de `resolveImageUrl` en `useCallback([apiBase])`, inclusión en las deps de `buildVisualPages` y retiro de `apiBase` como dep directa redundante)
+
+### Pendientes
+
+- **Saneamiento de `useInactivityTimeout` (#4 + #12) — refactor del arranque del hook, con prueba de browser.** #4 es `react-hooks/purity` (`Date.now()` en render, L27) y #12 es `react-hooks/set-state-in-effect` (setState síncrono al montar vía `startTimers()`). Diferidos a una intervención dedicada porque: (a) están **acoplados** — #12 solo es visible con #4 aplicado, no hay estado intermedio con lint limpio; (b) el fix de #12 no es de una línea: el effect de actividad llama `startTimers()` síncronamente al montar, y `startTimers` ejecuta `setShowWarning`/`setSecondsLeft`, por lo que resolverlo exige reestructurar el arranque del hook (inicializar el estado a sus valores correctos o reestructurar el reset) y verificarlo en browser (aviso de inactividad + auto-logout + reset por actividad). Es refactor de lógica, no deuda mecánica.
+- **Push de este ADR a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción). Los 6 commits de la remediación ya están en master; este ADR-050 queda local.
