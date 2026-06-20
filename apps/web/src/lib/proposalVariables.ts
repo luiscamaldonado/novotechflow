@@ -170,11 +170,9 @@ export function formatDateSpanish(isoDate: string): string {
 
 // ── Brand-based warranty logic ──────────────────────────────────
 
-/* eslint-disable max-len */
 const LENOVO_LINE = 'Para recibir atenci\u00f3n de garant\u00edas y soporte t\u00e9cnico de soluciones de la marca Lenovo comun\u00edquese con la l\u00ednea de atenci\u00f3n 01-800-917-0541';
 const DELL_LINE = 'Para recibir atenci\u00f3n de garant\u00edas y soporte t\u00e9cnico de soluciones de la marca Dell comun\u00edquese con la l\u00ednea de atenci\u00f3n 01-800-915-5704';
 const GENERAL_LINE = 'Para recibir atenci\u00f3n de garant\u00edas y soporte t\u00e9cnico de soluciones de otras marcas ofrecidas, soluciones de Novotechno y sus compa\u00f1\u00edas asociadas comun\u00edquese con su ejecutivo comercial a las l\u00edneas: Medell\u00edn 604 4440731 o Bogot\u00e1 601 7552549.';
-/* eslint-enable max-len */
 
 /**
  * Genera las lineas de garantia segun las marcas presentes en los items.

@@ -199,7 +199,7 @@ export const ACQUISITION_OPTIONS: { value: AcquisitionMode; label: string }[] = 
 export const EXCEL_SHEET_NAME_MAX_LENGTH = 31;
 
 /** Characters forbidden in XLSX worksheet names (format limit). */
-export const EXCEL_SHEET_NAME_FORBIDDEN_CHARS = /[\\/?*\[\]:]/g;
+export const EXCEL_SHEET_NAME_FORBIDDEN_CHARS = /[\\/?*[\]:]/g;
 
 // ── Inactivity timeout constants ─────────────────────────────
 
