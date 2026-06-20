@@ -12,6 +12,7 @@ import { api } from '../../lib/api';
 import { validateImageFile, ACCEPT_IMAGES } from '../../lib/file-validation';
 import RichTextEditor from '../../components/proposals/RichTextEditor';
 import PdfPreviewModal from '../../components/proposals/PdfPreviewModal';
+import type { ProposalPage } from '../../hooks/useProposalPages';
 
 /** Template shape from the API */
 interface TemplateBlock {
@@ -315,12 +316,12 @@ export default function DefaultPagesAdmin() {
                         pages={templates.map(t => ({
                             id: t.id,
                             proposalId: 'admin-preview',
-                            pageType: t.templateType as any,
+                            pageType: t.templateType as ProposalPage['pageType'],
                             title: t.name,
                             variables: null,
                             isLocked: true,
                             sortOrder: t.sortOrder,
-                            blocks: t.content as any
+                            blocks: t.content as ProposalPage['blocks']
                         }))}
                         onClose={() => setShowPreview(false)}
                     />
