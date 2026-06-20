@@ -2023,3 +2023,47 @@ Hecho de método que permitió medir sin riesgo: el root pinea `6.0.2` y las app
 - **11 hallazgos de `pnpm --filter web lint`, pre-existentes (no inducidos por este bump).** Confirmado: código byte-idéntico a HEAD y reglas de plugins que el bump no cambió (react-hooks 7.0.1, react-refresh 0.4.26, eslint core 9.39.3); los 2 de `@typescript-eslint/no-explicit-any` disparan sobre `as any` literal en `DefaultPagesAdmin.tsx`. Deuda de lint a atacar por separado: `react-refresh/only-export-components` (×3), `react-hooks/purity` por `Date.now` en `useInactivityTimeout.ts`, `react-hooks/exhaustive-deps` en `PdfPreviewModal.tsx`, `no-useless-escape` en `constants.ts`, directiva eslint-disable sin uso en `proposalVariables.ts`, `no-explicit-any` (×2), `prefer-const` (×2) en `ProposalItemsBuilder.tsx`.
 - Ni `apps/api` ni `apps/web` tienen script `check-types`; `turbo run check-types` solo cubre `packages/ui`. El type-check de las apps depende hoy de sus respectivos `build`. Pendiente evaluar agregar `check-types` por app para cobertura uniforme vía Turbo (encaja con el P2 de Turborepo 1→2).
 - Endurecer strictness en `apps/api` (`strict`/`strictNullChecks`) queda como decisión futura separada de la unificación de versión.
+
+## ADR-049 — Eliminación de Antigravity del modelo de trabajo: Claude Code asume toda la ejecución salvo el push a producción
+
+**Fecha:** 2026-06-19
+**Estado:** Cerrado (documentos del repo commiteados; Instrucciones de UI pendientes de pegar por Luis; pendiente push)
+
+### Contexto
+
+El modelo de trabajo del proyecto era de tres roles: Claude (chat) planeaba y redactaba prompts, Antigravity era el único editor de código fuente y de `DECISIONS.md`, y Claude Code hacía diagnósticos de solo lectura, búsquedas y git local hasta el commit. Antigravity tenía un contrato de ejecución restrictivo (prohibido buscar en el filesystem, ejecutar comandos o instalar dependencias) codificado en la Sección 0 de `CONVENTIONS.md` y desarrollado en `INSTRUCTIVO_CLAUDE.md`.
+
+Luis decidió eliminar Antigravity (deja de pagarlo) y consolidar toda la ejecución en Claude Code, para no alternar entre dos herramientas. El modelo pasa a dos roles más Luis: Claude (chat) planea y decide; Claude Code ejecuta todo en el entorno (lectura, escritura, búsqueda, instalación de dependencias, builds, `tsc`, migraciones, git hasta el commit); Luis valida cada paso y es el único que hace el `push` a `master`.
+
+La documentación de proceso estaba fuertemente acoplada a Antigravity y al patrón "Luis corre los comandos en PowerShell", repartida en tres lugares con contenido que debía quedar consistente: `CONVENTIONS.md` (= `AGENTS.md`), `INSTRUCTIVO_CLAUDE.md` y las Instrucciones del proyecto en la UI de Claude.
+
+### Decisión
+
+1. **Reescritura de la Sección 0 de `CONVENTIONS.md`** (replicada idéntica en `AGENTS.md`, que es su espejo byte a byte). El "Contrato de Ejecución para Agentes de IA" pasa de prohibir búsqueda/ejecución/instalación a un modelo de dos roles. Se conservan las salvaguardas que no dependían de Antigravity: alcance acotado, "ante la duda párate", diff antes de aplicar, autoverificación. El único límite absoluto es el `push` a producción, que lo hace Luis.
+2. **Reescritura completa de `INSTRUCTIVO_CLAUDE.md`** (de la versión de 139 líneas a una nueva de 9 secciones). Sale la sección de reglas de prompts a Antigravity; entra una sección de modelo de dos roles y otra de cómo se redacta un prompt para Claude Code. El protocolo de ADR pasa a indicar que la escritura del ADR la hace Claude Code con el método sin-BOM, no Antigravity. Se conservan la regla madre, la tabla de encoding y los comandos PowerShell de referencia.
+3. **Reescritura de las Instrucciones del proyecto en la UI de Claude** (texto entregado a Luis para pegar manualmente; no es archivo del repo). Autosuficiente en lo esencial (modelo de dos roles + flujo de cinco pasos), remitiendo a `INSTRUCTIVO_CLAUDE.md` para el detalle operativo.
+4. **Flujo de cinco pasos confirmado:** Claude (chat) redacta el prompt → Luis lo pega en Claude Code → Claude Code ejecuta y reporta (salida, diffs, hallazgos), sin decidir el siguiente paso → Luis pega el resultado en el chat → Claude evalúa y decide el siguiente paso. Claude Code reporta; el chat evalúa.
+
+### Consecuencias
+
+- **La disciplina de revisión gana peso, no lo pierde.** Como Claude Code ahora ejecuta, instala y borra de verdad, el alcance de un error es mayor; por eso "alcance acotado", "diff antes de aplicar" y "ante la duda párate" se mantienen como red de seguridad principal, reforzados explícitamente en la §0 nueva.
+- **`CONVENTIONS.md` y `AGENTS.md` siguen byte-idénticos** (verificado por hash SHA256 antes y después; `AGENTS.md` se regeneró con `Copy-Item` desde `CONVENTIONS.md` para no arriesgar divergencia por doble edición).
+- **Encoding preservado:** los tres archivos del repo quedaron UTF-8 sin BOM y LF; verificado con conteo de bytes BOM, conteo de CR y conteo de U+FFFD en cero. La reescritura de `INSTRUCTIVO_CLAUDE.md` se hizo con `[System.IO.File]::WriteAllText` + `UTF8Encoding($false)`.
+- **Tres documentos a mantener consistentes** en adelante: `CONVENTIONS.md`/`AGENTS.md` e `INSTRUCTIVO_CLAUDE.md` en el repo, y las Instrucciones de UI fuera de git. Lo esencial del modelo vive en los tres (poco texto, sincronizable); el detalle operativo solo en `INSTRUCTIVO_CLAUDE.md`.
+
+### Archivos
+
+- `CONVENTIONS.md` — Sección 0 reescrita al modelo de dos roles
+- `AGENTS.md` — espejo byte-idéntico de `CONVENTIONS.md` (regenerado con `Copy-Item`)
+- `INSTRUCTIVO_CLAUDE.md` — reescritura completa (9 secciones; sin Antigravity salvo una mención histórica en §2)
+- Instrucciones del proyecto en la UI de Claude — reescritas (NO es archivo del repo; lo pega Luis manualmente)
+
+### Commits
+
+- `25c8ac9` — docs: drop Antigravity from workflow; Claude Code executes all but push
+
+### Pendientes
+
+- **Luis debe pegar las Instrucciones de UI nuevas** en la configuración del proyecto en Claude.ai (fuera de git; no queda rastro en el repo).
+- Actualizar la memoria de proyecto de Claude, que aún describe el modelo viejo de tres roles con Antigravity como editor único.
+- Push de la rama a `master` (lo hace Luis tras confirmar que no hay usuarios en producción); a este punto la rama acumula los commits de la sesión: ADR-047, bump TS, ADR-048 y esta migración.
