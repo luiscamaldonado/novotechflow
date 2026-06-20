@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver';
 import { ITEM_TYPE_LABELS, SPEC_FIELDS_BY_ITEM_TYPE } from './constants';
 import type { ConsolidatedTechItem } from './consolidateTechnicalItems';
 import type { ProcessedScenario } from '../hooks/useProposalScenarios';
-import { buildQuickDescription, getUnitOfMeasure } from '../components/proposals/EconomicProposalTable';
+import { buildQuickDescription, getUnitOfMeasure } from './itemDescription';
 
 // ── Brand colours (same palette as exportExcel.ts) ──────────
 const INDIGO_600 = 'FF4F46E5';
