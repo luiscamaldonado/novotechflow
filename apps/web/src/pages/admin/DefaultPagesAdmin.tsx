@@ -321,7 +321,7 @@ export default function DefaultPagesAdmin() {
                             variables: null,
                             isLocked: true,
                             sortOrder: t.sortOrder,
-                            blocks: t.content as ProposalPage['blocks']
+                            blocks: t.content.map(block => ({ ...block, pageId: t.id }))
                         }))}
                         onClose={() => setShowPreview(false)}
                     />
