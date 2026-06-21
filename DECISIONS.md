@@ -2117,3 +2117,41 @@ Diagnóstico inicial (solo lectura, contra el repo real, HEAD `f9998e7`): 11 hal
 
 - **Saneamiento de `useInactivityTimeout` (#4 + #12) — refactor del arranque del hook, con prueba de browser.** #4 es `react-hooks/purity` (`Date.now()` en render, L27) y #12 es `react-hooks/set-state-in-effect` (setState síncrono al montar vía `startTimers()`). Diferidos a una intervención dedicada porque: (a) están **acoplados** — #12 solo es visible con #4 aplicado, no hay estado intermedio con lint limpio; (b) el fix de #12 no es de una línea: el effect de actividad llama `startTimers()` síncronamente al montar, y `startTimers` ejecuta `setShowWarning`/`setSecondsLeft`, por lo que resolverlo exige reestructurar el arranque del hook (inicializar el estado a sus valores correctos o reestructurar el reset) y verificarlo en browser (aviso de inactividad + auto-logout + reset por actividad). Es refactor de lógica, no deuda mecánica.
 - **Push de este ADR a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción). Los 6 commits de la remediación ya están en master; este ADR-050 queda local.
+
+## ADR-051 — Convención de selección de modelo de Claude Code por prompt y refinamiento del flujo decisión-primero
+
+**Fecha:** 2026-06-21
+**Estado:** Implementada (INSTRUCTIVO_CLAUDE.md §1, §5 y §6 ya en local, commits `b96b822` y `79a861c`; instrucciones del proyecto en Claude.ai a cargo de Luis, fuera de git; este ADR pendiente de push)
+
+### Contexto
+
+El modelo de dos roles (ADR-049) fija que el chat decide y Claude Code ejecuta, pero no normaba qué modelo de Claude Code usar en cada prompt ni cuándo el flujo exige un esbozo explícito. En la práctica esto quedaba implícito: el chat indicaba sesión `NUEVA|MISMA` pero no el modelo, y el "esbozo + espera de visto bueno" se aplicaba como paso fijo incluso para tareas mecánicas (un `grep`, correr `tsc`), agregando ceremonia sin valor. Luis trabaja en Claude.ai en Opus para el razonamiento de decisión y diseño; Claude Code corre con el modelo que Luis seleccione (`/model` o `claude --model`).
+
+### Decisión
+
+1. **Modelo explícito por prompt.** Cada prompt para Claude Code se encabeza con `Modelo: <x> · Sesión: NUEVA|MISMA`. El modelo es hermano del indicador de sesión ya existente. Se justifica solo cuando no es el default.
+2. **Regla de niveles** (criterio: cuánto se delega decidir y cuánto cuesta rehacer si falla): **Haiku** para mecánico puro y bajo riesgo (`grep`/`Select-String`, `tsc`/build, `str_replace` verbatim sobre código); **Sonnet** (default) para buscar-y-reportar con juicio, ediciones que Claude Code arma desde la descripción, leer código para confirmar estado y migraciones rutinarias; **Opus** (pensamiento alto/ultra, justificado) para ejecución compleja o irreversible que cruce capas o pueda dar estados inesperados.
+3. **Piso Sonnet para markdown del repo.** Todo cambio en `DECISIONS.md`, `CONVENTIONS.md` e `INSTRUCTIVO_CLAUDE.md` corre en Sonnet como mínimo, aunque sea un `str_replace` verbatim. Razón: si el `old_str` no calza exacto, un modelo más débil improvisa, y un acento o un molde mal escrito en una fuente de verdad es deuda invisible. No es que Haiku corrompa UTF-8; es el costo asimétrico del error en estos archivos.
+4. **Esbozo solo ante decisión real.** El esbozo explícito (objetivo + archivos + reglas) se reserva para cuando hay una decisión que tomar; para mecánica obvia el prompt va directo. Tras aprobar el plan, la ceremonia colapsa: prompt → ejecución → resultado → veredicto + siguiente prompt en el mismo mensaje, sin "¿avanzo?" entre pasos previstos. Los gates no se tocan: un paso a la vez, `tsc`, mojibake en `DECISIONS.md`, diffs antes de aplicar, push solo de Luis.
+5. **`opusplan` no aplica.** El plan se arma en el chat; Claude Code solo ejecuta. El nivel de pensamiento arrastra con el modelo.
+
+### Consecuencias
+
+- Los prompts ganan una dimensión de control (modelo) que ajusta costo y riesgo por tarea sin que Claude Code decida nada por su cuenta.
+- El flujo decisión-primero reduce ceremonia en tareas mecánicas y concentra el análisis a fondo donde está el criterio, sin debilitar los gates de validación.
+- Reafirma ADR-049: el diseño y la estrategia viven en el chat; Claude Code participa como "ojos" vía prompts de solo lectura (incluido reconocimiento amplio para cortar idas y vueltas), nunca en un loop donde decida y ejecute.
+- Refuerzo de tono y entrega (conversación concisa orientada a objetivos, prompts y ADR finales sin borrador, documentos entregados completos): vive en las instrucciones del proyecto en Claude.ai, fuera de git.
+
+### Archivos
+
+- `INSTRUCTIVO_CLAUDE.md` — §1 (esbozo → "solución o el esbozo"), §5 (flujo decisión-primero reescrito), §6 (viñeta de modelo + subsección "Selección de modelo (por prompt)" con tabla de niveles)
+
+### Commits
+
+- `b96b822` — docs: align esbozo flow with decision-first dynamic
+- `79a861c` — docs: add Claude Code model-selection convention to prompt guide
+
+### Pendientes
+
+- **Push de este ADR a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción). Junto con los commits `b96b822` y `79a861c` de esta sesión.
+- **Luis pega las instrucciones del proyecto actualizadas** en la configuración de Claude.ai (fuera de git) y **re-sube la copia de `INSTRUCTIVO_CLAUDE.md`** al conocimiento del proyecto, reemplazando la versión previa.
