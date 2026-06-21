@@ -12,7 +12,7 @@ Este archivo existe porque el riesgo más caro de Claude en este proyecto no es 
 
 Leer este instructivo es obligatorio en dos momentos:
 
-- **Al arrancar una feature** — antes de proponer el esbozo.
+- **Al arrancar una feature** — antes de proponer la solución o el esbozo.
 - **Antes de tocar `DECISIONS.md`** — crear un ADR nuevo o modificar uno existente.
 
 No reemplaza el flujo de trabajo de las instrucciones del proyecto. Es la capa de "no asumas, confirma".
@@ -107,13 +107,13 @@ docs: ADR-0XX <descripcion corta>
 
 ## 5. Flujo de una feature
 
-Paso a paso, **sin afanes**. Una fase → Luis valida → siguiente fase.
+Paso a paso, **sin afanes**. La fase de decisión es a fondo; la ejecución, sin ceremonia.
 
 1. **Diagnóstico.** Claude entiende el estado actual leyendo código real (vía Claude Code), no memoria.
-2. **Esbozo.** Claude propone objetivo + archivos + reglas relevantes y **espera el visto bueno explícito** de Luis ("ok", "sigue", "confirmado"). No avanza sin él.
-3. **Prompt(s) de Claude Code.** Claude redacta el/los prompt(s) de ejecución. Si la feature cruza capas o toca muchos archivos, se parte (ver §6).
+2. **Decisión.** Luis plantea; Claude analiza impacto, coherencia de lo pedido y alternativas, y recomienda; Luis decide. El **esbozo explícito** (objetivo + archivos + reglas) se usa **solo cuando hay una decisión real que tomar**, no para mecánica obvia (un grep, correr `tsc`); para esa mecánica el prompt va directo. Excepción: reescrituras grandes de documentos se muestran completas para aprobar antes de escribir. Claude **espera el visto bueno explícito** de Luis ("ok", "sigue", "confirmado") para pasar de la decisión a la ejecución. El plan aprobado queda vigente.
+3. **Prompt(s) de Claude Code.** Claude redacta el/los prompt(s) de ejecución, **finales y listos para pegar** (sin borrador del prompt). Si la feature cruza capas o toca muchos archivos, se parte (ver §6).
 4. **Ejecución y reporte.** Luis corre el prompt en Claude Code; Claude Code muestra los diffs antes de aplicar y reporta la salida; **no decide el siguiente paso**. Luis pega el resultado en el chat.
-5. **Evaluación.** Claude (chat) evalúa lo reportado y decide el siguiente paso. La validación de cada comando (`tsc`, migraciones, lint) es de Luis + Claude, no de Claude Code.
+5. **Evaluación.** Claude (chat) evalúa lo reportado y, **en el mismo mensaje**, da veredicto + el siguiente prompt. Sin "¿avanzo?" entre pasos previstos. La validación de cada comando (`tsc`, migraciones, lint) es de Luis + Claude, no de Claude Code. Si algo se sale del plan, Claude se para y se re-decide.
 6. **Commit limpio.** Claude Code commitea (atómico, mensaje ASCII) solo cuando el diff staged está limpio y `tsc` pasa. **Sin pushear.**
 7. **Push.** Lo hace Luis, tras verificar en local, cuando Claude confirma que es el momento.
 
