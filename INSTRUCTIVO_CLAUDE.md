@@ -132,6 +132,19 @@ Claude Code corre en el entorno de Luis (Windows + PowerShell) y **sí puede bus
 - **Recordatorios de entorno cuando apliquen:** sin BOM, `pnpm exec` nunca `npx`, `;` en vez de `&&`.
 - **Alcance acotado:** si es solo lectura/búsqueda, decirlo ("solo lee y reporta, no modifiques nada"). Si no debe commitear ni pushear, decirlo.
 - **Indicar siempre si el prompt es para una sesión NUEVA o la MISMA** de Claude Code (y por qué).
+- **Indicar siempre el modelo** (Haiku/Sonnet/Opus) en la misma línea de encabezado del prompt, con el formato `Modelo: <x> · Sesión: NUEVA|MISMA`. Justificar el modelo solo cuando no es el default (ver tabla abajo).
+
+### Selección de modelo (por prompt)
+
+Cada prompt se encabeza con `Modelo: <x> · Sesión: NUEVA|MISMA`. Criterio del nivel: cuánto se le delega decidir y cuánto cuesta rehacer si falla. Luis aplica el modelo con `/model haiku|sonnet|opus` antes de pegar, o `claude --model <x>` al abrir sesión nueva.
+
+| Nivel | Cuándo |
+|---|---|
+| **Haiku** | Mecánico puro y bajo riesgo: `grep`/`Select-String`, correr `tsc`/build, aplicar un `str_replace` ya redactado verbatim **sobre código**. |
+| **Sonnet** (default) | Buscar-y-reportar con juicio de relevancia, ediciones que Claude Code arma desde la descripción, leer código para confirmar estado, migraciones rutinarias. **Piso obligatorio para todo markdown del repo** (`DECISIONS.md`, `CONVENTIONS.md`, `INSTRUCTIVO_CLAUDE.md`): aunque el cambio sea un `str_replace` verbatim, no va en Haiku. |
+| **Opus** | Ejecución compleja o irreversible: migración delicada, cambio multi-archivo que cruza capas, donde puedan surgir estados inesperados y haya que razonar. Se reserva con pensamiento **alto/ultra** y se justifica por qué. |
+
+El nivel de pensamiento arrastra con el modelo: Sonnet/Haiku usan pensamiento normal; Opus, alto/ultra. `opusplan` (Opus planea, Sonnet ejecuta) **no aplica**: el plan se arma en el chat; Claude Code solo ejecuta.
 
 **Split:** si el cambio toca **muchos archivos** o **cruza capas** (backend + frontend, o + PDF), Claude lo divide en prompts/pasos separados, y **anuncia cómo lo va a partir antes de redactar** el primero. Los comandos de validación van junto a su paso, no batcheados.
 
