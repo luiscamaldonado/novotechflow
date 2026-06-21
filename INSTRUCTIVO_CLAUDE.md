@@ -132,19 +132,26 @@ Claude Code corre en el entorno de Luis (Windows + PowerShell) y **sí puede bus
 - **Recordatorios de entorno cuando apliquen:** sin BOM, `pnpm exec` nunca `npx`, `;` en vez de `&&`.
 - **Alcance acotado:** si es solo lectura/búsqueda, decirlo ("solo lee y reporta, no modifiques nada"). Si no debe commitear ni pushear, decirlo.
 - **Indicar siempre si el prompt es para una sesión NUEVA o la MISMA** de Claude Code (y por qué).
-- **Indicar siempre el modelo** (Haiku/Sonnet/Opus) en la misma línea de encabezado del prompt, con el formato `Modelo: <x> · Sesión: NUEVA|MISMA`. Justificar el modelo solo cuando no es el default (ver tabla abajo).
+- **Modelo y esfuerzo: se fijan al abrir la sesión, nunca dentro del prompt.** Claude Code no arranca si el pegado empieza con slash commands, así que el modelo y el esfuerzo no van en el texto del prompt. Se fijan con el flag de arranque o con slashes en su propio Enter (ver subsección). El prompt se pega limpio.
 
-### Selección de modelo (por prompt)
+### Selección de modelo y esfuerzo (por prompt)
 
-Cada prompt se encabeza con `Modelo: <x> · Sesión: NUEVA|MISMA`. Criterio del nivel: cuánto se le delega decidir y cuánto cuesta rehacer si falla. Luis aplica el modelo con `/model haiku|sonnet|opus` antes de pegar, o `claude --model <x>` al abrir sesión nueva.
+Claude Code tiene dos perillas: **modelo** (qué tan capaz) y **esfuerzo** (cuánto razona antes de actuar). El esfuerzo es una escala **propia de cada modelo** — se elige el peldaño según la tarea, no hay acoplamiento fijo entre modelo y esfuerzo. Criterio: cuánto se le delega decidir y cuánto cuesta rehacer si falla.
 
-| Nivel | Cuándo |
-|---|---|
-| **Haiku** | Mecánico puro y bajo riesgo: `grep`/`Select-String`, correr `tsc`/build, aplicar un `str_replace` ya redactado verbatim **sobre código**. |
-| **Sonnet** (default) | Buscar-y-reportar con juicio de relevancia, ediciones que Claude Code arma desde la descripción, leer código para confirmar estado, migraciones rutinarias. **Piso obligatorio para todo markdown del repo** (`DECISIONS.md`, `CONVENTIONS.md`, `INSTRUCTIVO_CLAUDE.md`): aunque el cambio sea un `str_replace` verbatim, no va en Haiku. |
-| **Opus** | Ejecución compleja o irreversible: migración delicada, cambio multi-archivo que cruza capas, donde puedan surgir estados inesperados y haya que razonar. Se reserva con pensamiento **alto/ultra** y se justifica por qué. |
+**Cómo se aplican** (Claude Code no arranca si el pegado empieza con `/`):
+- **Sesión NUEVA:** abrir con `claude --model <x> --effort <y>` y pegar el prompt limpio. Haiku no tiene esfuerzo: `claude --model haiku` (sin `--effort`).
+- **Sesión MISMA, solo si cambia modelo o esfuerzo:** enviar `/model <x>` y `/effort <y>` (cada uno en su propio Enter) y luego el prompt. Si no cambia nada, el prompt va limpio — el esfuerzo persiste en la sesión (`max` se resetea al cambiar de modelo, ahí se re-pone).
+- **Patrón normal:** si toda la tarea corre en el mismo modelo+esfuerzo, abrir la sesión una vez con el flag y pegar limpio cada prompt. El chat indica encima del bloque la sesión (NUEVA|MISMA) y, si cambió, qué arrancar o qué slashes mandar.
 
-El nivel de pensamiento arrastra con el modelo: Sonnet/Haiku usan pensamiento normal; Opus, alto/ultra. `opusplan` (Opus planea, Sonnet ejecuta) **no aplica**: el plan se arma en el chat; Claude Code solo ejecuta.
+| Modelo | Cuándo | Escala | Peldaño típico |
+|---|---|---|---|
+| **Haiku** | Mecánico puro y bajo riesgo: `grep`/`Select-String`, correr `tsc`/build, `str_replace` verbatim **sobre código**. | — (sin esfuerzo) | — |
+| **Sonnet** (default) | Buscar-y-reportar con juicio, ediciones que Claude Code arma desde la descripción, leer código para confirmar estado, migraciones rutinarias. **Piso obligatorio para todo markdown del repo** (`DECISIONS.md`, `CONVENTIONS.md`, `INSTRUCTIVO_CLAUDE.md`), aunque sea un `str_replace` verbatim. | low · medium · high · max | `high`; sube a `max` para juicio pesado, baja para lo mecánico |
+| **Opus** | Ejecución compleja o irreversible: migración delicada, cambio multi-archivo que cruza capas, donde puedan surgir estados inesperados y haya que razonar. | low · medium · high · xhigh · max · **ultracode** | `xhigh`; `max` para lo más difícil; `ultracode` solo en refactor grande aprobado |
+
+**`ultracode` (solo Opus):** manda `xhigh` al modelo **y además** deja que Claude Code orqueste workflows multi-agente por su cuenta. Eso afloja el gate del proyecto (un paso a la vez, diff antes de aplicar, Claude Code no decide), por lo que **no es default**: se usa solo cuando Luis aprueba explícitamente un refactor grande aceptando ese trade-off. Es session-only y no es valor de `--effort` — se prende con `/effort ultracode` (en su Enter) tras abrir `claude --model opus`.
+
+**`opusplan`:** disponible pero de nicho. Solo hace algo en **Plan Mode** (Opus planea → Sonnet ejecuta), que el flujo normalmente evita porque el plan se arma en el chat. Aplica únicamente si se decide meter a Claude Code en Plan Mode para una tarea multi-archivo espinosa ya aprobada, con el plan de vuelta al chat para el OK de Luis.
 
 **Split:** si el cambio toca **muchos archivos** o **cruza capas** (backend + frontend, o + PDF), Claude lo divide en prompts/pasos separados, y **anuncia cómo lo va a partir antes de redactar** el primero. Los comandos de validación van junto a su paso, no batcheados.
 
