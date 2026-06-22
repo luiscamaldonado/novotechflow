@@ -10,7 +10,7 @@ import {
 import { cn } from '../../lib/utils';
 import type { ProposalItem, ProposalDetail } from '../../lib/types';
 import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../../lib/constants';
-import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '../../lib/pricing-engine';
+import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '@repo/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import PrefillModal from './components/PrefillModal';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';

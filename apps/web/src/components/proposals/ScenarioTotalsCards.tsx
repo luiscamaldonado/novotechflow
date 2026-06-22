@@ -1,4 +1,4 @@
-import type { ScenarioTotals } from '../../lib/pricing-engine';
+import type { ScenarioTotals } from '@repo/pricing-engine';
 
 interface ScenarioTotalsCardsProps {
     totals: ScenarioTotals;

@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import type { Scenario, ProposalCalcItem } from '../hooks/useScenarios';
 import { ITEM_TYPE_LABELS, EXCEL_SHEET_NAME_MAX_LENGTH, EXCEL_SHEET_NAME_FORBIDDEN_CHARS } from './constants';
-import { calculateItemDisplayValues } from './pricing-engine';
+import { calculateItemDisplayValues } from '@repo/pricing-engine';
 
 // ── Types ──────────────────────────────────────────────
 interface ExportOptions {

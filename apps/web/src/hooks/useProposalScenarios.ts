@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { IVA_RATE } from '../lib/constants';
-import { calculateItemDisplayValues, calculateScenarioTotals } from '../lib/pricing-engine';
+import { calculateItemDisplayValues, calculateScenarioTotals } from '@repo/pricing-engine';
 
 // ── Types ────────────────────────────────────────────────────
 

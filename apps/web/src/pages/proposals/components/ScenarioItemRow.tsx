@@ -5,7 +5,7 @@ import {
 import { cn } from '../../../lib/utils';
 import type { ScenarioItem } from '../../../hooks/useScenarios';
 import type { ProposalCalcItem } from '../../../hooks/useScenarios';
-import { calculateItemDisplayValues, type ItemDisplayValues } from '../../../lib/pricing-engine';
+import { calculateItemDisplayValues, type ItemDisplayValues } from '@repo/pricing-engine';
 import {
     formatNumberWithThousands,
     formatDecimalWithThousands,
