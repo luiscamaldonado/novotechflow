@@ -2155,3 +2155,56 @@ El modelo de dos roles (ADR-049) fija que el chat decide y Claude Code ejecuta, 
 
 - **Push de este ADR a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción). Junto con los commits `b96b822` y `79a861c` de esta sesión.
 - **Luis pega las instrucciones del proyecto actualizadas** en la configuración de Claude.ai (fuera de git) y **re-sube la copia de `INSTRUCTIVO_CLAUDE.md`** al conocimiento del proyecto, reemplazando la versión previa.
+
+## ADR-052 — Extracción del pricing-engine a package compartido `@repo/pricing-engine` para consumo por web y api
+
+**Fecha:** 2026-06-22
+**Estado:** Implementada y verificada en runtime, en la rama `feature/external-api` (sin commitear al redactar este ADR; el commit del refactor y el push los hace Luis). Primer paso (Fase 1) de la feature de API externa de lectura.
+
+### Contexto
+
+La feature de API externa (otra aplicación web que, con login de NovoTechFlow, lee las propuestas ganadas del usuario con el valor de venta de cada item por escenario) exige que `apps/api` (NestJS) calcule el valor de venta del lado del servidor. El diagnóstico confirmó que el precio de venta automático **no se persiste**: se recomputa siempre en el frontend con `pricing-engine.ts` (costo + margen + TRM); en la DB solo viven `unitPriceOverride` y `marginPctOverride`. No hay un precio final guardado que la API pueda devolver directamente.
+
+Como el valor de venta debe entregarse en vivo y calculado (no los insumos crudos), la API tiene que ejecutar la misma lógica financiera. Esa lógica vive en `apps/web/src/lib/pricing-engine.ts`, y CONVENTIONS.md §J la fija como fuente única: ningún archivo puede implementar cálculos financieros por fuera del pricing-engine, y replicarlos es un bug. `apps/api` no puede importar de `apps/web/src`. Las alternativas (replicar el cálculo en el backend, o empujarlo a la otra app) violan §J o arriesgan que la otra app muestre un precio distinto al de NovoTechFlow — el riesgo asimétrico "precio bajo = catastrófico" que el proyecto cuida.
+
+La única vía que respeta §J es extraer el pricing-engine a un package compartido del monorepo que web y api consuman: centralizar, no replicar.
+
+### Decisión
+
+1. **Package nuevo `@repo/pricing-engine`** en `packages/pricing-engine/`, siguiendo el patrón de workspace del monorepo (name `@repo/*`, `workspace:*`, tsconfig que extiende `@repo/typescript-config/base.json`).
+
+2. **Desvío del molde de `@repo/ui`: este package lleva build.** `@repo/ui` se consume como fuente `.tsx` cruda sin build porque solo lo usa web (vía Vite). `@repo/pricing-engine` también lo consumirá `apps/api` (NestJS), que compila con `tsc` a `dist/` y corre en Node sin bundler: necesita JS emitido + `.d.ts`. El package tiene script `build` (`tsc`) con `main`/`types`/`exports` apuntando a `dist/`.
+
+3. **Emit CommonJS** para que NestJS lo consuma vía `require`. Se logra heredando `module/moduleResolution: NodeNext` de `base.json` (sin override) más `package.json` **sin** `"type": "module"`: NodeNext resuelve el archivo como CJS y emite `require`/`exports`. Verificado en el `index.js` emitido (`"use strict"`, `Object.defineProperty(exports, "__esModule")`, `exports.xxx =`). Se descartó fijar `module: CommonJS` + `moduleResolution: Node` explícitos porque `Node` (= `node10`) está deprecado y TypeScript 6 lo eleva a error duro (TS5107); heredar NodeNext da el mismo emit CJS sin la deuda hacia TS 7.0.
+
+4. **Reparto del archivo original.** Las 16 funciones puras (operan solo sobre `PricingItem`/`PricingScenarioItem` y primitivos) van al package. `computeMinSubtotal` y `getDashboardAmount` **se quedan en `apps/web`** porque dependen de `ProposalSummary` (tipo del dominio web) y son consumo exclusivo del dashboard; el backend no las necesita. El archivo `apps/web/src/lib/pricing-engine.ts` queda como residuo que re-exporta todo el package (`export * from '@repo/pricing-engine'`, para no romper a los consumidores que importan tipos/constantes desde la ruta antigua) y conserva esas dos funciones más `CurrencyCode` y `MinSubtotalResult`. De los consumidores, 7 reapuntan a `@repo/pricing-engine`; `useDashboard.ts` sigue importando del residuo (usa `getDashboardAmount`/`MinSubtotalResult`).
+
+5. **Integración con Vite (frontend ESM consumiendo package CJS).** `apps/web` es ESM (`"type": "module"`); el package emite CJS. En dev, Vite servía el `dist` CJS como ESM nativo y fallaba (`does not provide an export named 'calculateScenarioTotals'`). Se resuelve declarando el package en `optimizeDeps.include` (prebundle de esbuild en dev, expone los named exports) y en `build.commonjsOptions.include` con regex del package + `node_modules` (conversión CJS→ESM de Rollup en prod, necesaria porque el package es un symlink del workspace y el plugin commonjs por defecto solo procesa `node_modules`). Se mantiene un solo artefacto CJS — el que NestJS requiere en Fase 2.
+
+### Consecuencias
+
+- El cálculo financiero queda centralizado en `@repo/pricing-engine`, fuente única que web y api consumen. §J se respeta: no se replica en ningún lado. El dashboard de web queda idéntico (las dos funciones que se quedaron no se movieron).
+- `apps/api` puede consumir el package compilado en Fase 2 sin tocar nada más del lado del engine.
+- Web compila (`tsc --noEmit` exit 0) y corre idéntico (login y carga de cálculos verificados en browser tras regenerar el prebundle de Vite).
+- Turborepo encadena el build del package antes que el de web automáticamente vía `dependsOn ["^build"]` (web ya declara el package como dependencia); no se tocó `turbo.json`.
+- Lección de toolchain registrada: `tsc --noEmit` valida tipos contra el `.d.ts` y pasa en verde, pero no captura la incompatibilidad de carga CJS/ESM en runtime de Vite — esta apareció solo al cargar la app en el browser. La verificación funcional en browser es la red de seguridad para extracciones que cruzan la frontera de módulos.
+
+### Archivos
+
+- `packages/pricing-engine/package.json` (nuevo) — name `@repo/pricing-engine`, build con tsc, exports a `dist/`, sin `"type": "module"` (emit CJS)
+- `packages/pricing-engine/tsconfig.json` (nuevo) — extiende `base.json`, hereda NodeNext, `outDir: dist` / `rootDir: src`
+- `packages/pricing-engine/src/index.ts` (nuevo) — las 16 funciones puras (constantes, `convertCost`, interfaces `PricingItem`/`PricingScenarioItem`/`ScenarioTotals`/`ItemDisplayValues`, 13 funciones de cálculo) copiadas verbatim del original
+- `apps/web/package.json` — declara `@repo/pricing-engine: workspace:*`
+- `apps/web/src/lib/pricing-engine.ts` — reescrito como residuo: `export *` del package + `computeMinSubtotal`/`getDashboardAmount`/`CurrencyCode`/`MinSubtotalResult`
+- `apps/web/vite.config.ts` — `optimizeDeps.include` y `build.commonjsOptions.include` para el package CJS
+- 7 consumidores reapuntados a `@repo/pricing-engine`: `lib/exportExcel.ts`, `components/proposals/ScenarioTotalsCards.tsx`, `pages/proposals/components/ScenarioItemRow.tsx`, `pages/proposals/ProposalCalculations.tsx` (2 imports), `hooks/useScenarios.ts`, `pages/proposals/ProposalItemsBuilder.tsx`, `hooks/useProposalScenarios.ts`
+
+### Commits
+
+- Pendiente — `refactor: extract pricing-engine to @repo/pricing-engine package` (extracción + residuo + reapunte de imports + integración Vite, en un commit atómico; lo deja Claude Code, lo pushea Luis)
+
+### Pendientes
+
+- **Commit del refactor** (lo hace Claude Code tras este ADR) y **push a `master`** (lo hace Luis tras verificar que no hay usuarios en producción). El push dispara `migrate deploy` en Railway, aunque esta fase no incluye migración.
+- **Fase 2 — módulo `/external` en `apps/api`:** auth scoped con `EXTERNAL_JWT_SECRET` separado (login 2FA externo + estrategia + guard propios), endpoints solo-GET filtrados por `req.user.sub` (ownership §K), consumo de `@repo/pricing-engine` para calcular el valor de venta, sumar el origen de la otra app a `CORS_ORIGIN`. ADR propio al cerrarse.
+- **Verificación numérica en browser** (dashboard y totales de escenario idénticos al estado pre-refactor): pendiente de confirmación explícita de Luis antes del merge a `master`.
