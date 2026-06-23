@@ -48,7 +48,7 @@ export class AuthService {
   async login(user: {
     id: string;
     email: string;
-    role: 'ADMIN' | 'COMMERCIAL';
+    role: 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
     nomenclature: string;
     name: string;
   }): Promise<VerificationPendingResponse> {
