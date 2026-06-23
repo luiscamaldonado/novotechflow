@@ -3,14 +3,17 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthModule } from '../auth/auth.module';
 import { UsersModule } from '../users/users.module';
+import { PrismaModule } from '../prisma/prisma.module';
 import { ExternalController } from './external.controller';
 import { ExternalAuthService } from './external-auth.service';
 import { ExternalJwtStrategy } from './external-jwt.strategy';
+import { ExternalProposalsService } from './external-proposals.service';
 
 @Module({
   imports: [
     AuthModule,
     UsersModule,
+    PrismaModule,
     PassportModule,
     JwtModule.register({
       secret: (() => {
@@ -22,6 +25,6 @@ import { ExternalJwtStrategy } from './external-jwt.strategy';
     }),
   ],
   controllers: [ExternalController],
-  providers: [ExternalAuthService, ExternalJwtStrategy],
+  providers: [ExternalAuthService, ExternalJwtStrategy, ExternalProposalsService],
 })
 export class ExternalModule {}
