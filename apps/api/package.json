@@ -33,6 +33,7 @@
         "@nestjs/swagger": "^11.4.4",
         "@nestjs/throttler": "^6.5.0",
         "@prisma/client": "5.10.2",
+        "@repo/pricing-engine": "workspace:*",
         "axios": "^1.13.6",
         "bcrypt": "^6.0.0",
         "cheerio": "^1.2.0",

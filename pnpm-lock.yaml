@@ -44,6 +44,9 @@ importers:
       '@prisma/client':
         specifier: 5.10.2
         version: 5.10.2(prisma@5.10.2)
+      '@repo/pricing-engine':
+        specifier: workspace:*
+        version: link:../../packages/pricing-engine
       axios:
         specifier: ^1.13.6
         version: 1.13.6

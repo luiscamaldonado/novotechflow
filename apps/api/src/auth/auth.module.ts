@@ -22,6 +22,6 @@ import { EmailVerificationService } from './email-verification.service';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, EmailVerificationService],
-  exports: [AuthService],
+  exports: [AuthService, EmailVerificationService],
 })
 export class AuthModule {}
