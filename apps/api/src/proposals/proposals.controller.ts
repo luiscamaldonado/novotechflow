@@ -31,6 +31,7 @@ import { PagesService } from './pages.service';
 import { TrmService } from './trm.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { ReporterReadOnlyGuard } from '../common/guards/reporter.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import {
   validateImageMagicBytes,
@@ -67,6 +68,7 @@ import {
  */
 @ApiTags('Proposals')
 @ApiBearerAuth()
+@UseGuards(ReporterReadOnlyGuard)
 @Controller('proposals')
 export class ProposalsController {
   constructor(

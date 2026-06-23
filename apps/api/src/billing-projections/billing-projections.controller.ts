@@ -17,10 +17,12 @@ import {
   UpdateBillingProjectionDto,
 } from './billing-projections.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ReporterReadOnlyGuard } from '../common/guards/reporter.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 
 @ApiTags('Billing Projections')
 @ApiBearerAuth()
+@UseGuards(ReporterReadOnlyGuard)
 @Controller('billing-projections')
 export class BillingProjectionsController {
   constructor(private readonly service: BillingProjectionsService) {}
