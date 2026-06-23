@@ -499,7 +499,8 @@ export class ProposalsService {
    * @returns Lista de propuestas con datos del comercial asociado.
    */
   async findAll(user: AuthenticatedUser) {
-    const accessFilter = user.role === 'ADMIN' ? {} : { userId: user.id };
+    const accessFilter =
+      user.role === 'ADMIN' || user.role === 'REPORTER' ? {} : { userId: user.id };
 
     return this.prisma.proposal.findMany({
       where: { ...accessFilter, deletedAt: null },
