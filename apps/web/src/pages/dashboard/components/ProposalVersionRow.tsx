@@ -51,38 +51,40 @@ export default function ProposalVersionRow({
     return (
         <tr className={`hover:bg-gray-50/50 transition-colors group ${isChild ? 'bg-indigo-50/20' : ''}`}>
             <td className="px-4 py-4 text-center">
-                <div className="flex items-center justify-center space-x-1">
-                    <button
-                        onClick={() => onEdit(p.id)}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                        title="Editar"
-                    >
-                        <Edit2 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        onClick={() => onClone(p.id, 'NEW_VERSION')}
-                        disabled={cloning === p.id}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        title="Clonar versión"
-                    >
-                        <Copy className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        onClick={() => onClone(p.id, 'NEW_PROPOSAL')}
-                        disabled={cloning === p.id}
-                        className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
-                        title="Clonar como nueva propuesta"
-                    >
-                        <PlusCircle className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                        onClick={() => onDelete(p.id, p.proposalCode || '')}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title="Eliminar"
-                    >
-                        <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                </div>
+                {userRole !== 'REPORTER' && (
+                    <div className="flex items-center justify-center space-x-1">
+                        <button
+                            onClick={() => onEdit(p.id)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Editar"
+                        >
+                            <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                            onClick={() => onClone(p.id, 'NEW_VERSION')}
+                            disabled={cloning === p.id}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                            title="Clonar versión"
+                        >
+                            <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                            onClick={() => onClone(p.id, 'NEW_PROPOSAL')}
+                            disabled={cloning === p.id}
+                            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                            title="Clonar como nueva propuesta"
+                        >
+                            <PlusCircle className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                            onClick={() => onDelete(p.id, p.proposalCode || '')}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Eliminar"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                )}
             </td>
             <td className="px-5 py-4" style={isChild ? { paddingLeft: '2.5rem' } : undefined}>
                 <div className="flex items-center gap-1.5">
@@ -116,33 +118,43 @@ export default function ProposalVersionRow({
                 usdEstimate={usdEst}
             />
             <td className="px-4 py-4 text-center">
-                <select
-                    value={p.acquisitionType || ''}
-                    onChange={(e) => onAcquisitionChange(p.id, e.target.value as AcquisitionType)}
-                    disabled={!isActiveVersion}
-                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 disabled:opacity-50 disabled:cursor-not-allowed ${
-                        p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType]
-                            ? `${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`
-                            : 'bg-gray-50 text-gray-400 border-gray-200'
-                    }`}
-                >
-                    <option value="">— Seleccionar —</option>
-                    <option value="VENTA">Venta</option>
-                    <option value="DAAS">DaaS</option>
-                </select>
+                {userRole !== 'REPORTER' ? (
+                    <select
+                        value={p.acquisitionType || ''}
+                        onChange={(e) => onAcquisitionChange(p.id, e.target.value as AcquisitionType)}
+                        disabled={!isActiveVersion}
+                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 disabled:opacity-50 disabled:cursor-not-allowed ${
+                            p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType]
+                                ? `${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`
+                                : 'bg-gray-50 text-gray-400 border-gray-200'
+                        }`}
+                    >
+                        <option value="">— Seleccionar —</option>
+                        <option value="VENTA">Venta</option>
+                        <option value="DAAS">DaaS</option>
+                    </select>
+                ) : p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType] ? (
+                    <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`}>{ACQUISITION_CONFIG[p.acquisitionType].label}</span>
+                ) : (
+                    <span className="text-[10px] text-gray-300">—</span>
+                )}
             </td>
             <td className="px-4 py-4 text-center">
-                <select
-                    value={p.status}
-                    onChange={(e) => onStatusChange(p.id, e.target.value as ProposalStatus)}
-                    disabled={!isActiveVersion}
-                    className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                    {ALL_STATUSES.map(s => (
-                        <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                    ))}
-                </select>
-                {needsBillingDate && (
+                {userRole !== 'REPORTER' ? (
+                    <select
+                        value={p.status}
+                        onChange={(e) => onStatusChange(p.id, e.target.value as ProposalStatus)}
+                        disabled={!isActiveVersion}
+                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                        {ALL_STATUSES.map(s => (
+                            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                        ))}
+                    </select>
+                ) : (
+                    <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border}`}>{cfg.label}</span>
+                )}
+                {userRole !== 'REPORTER' && needsBillingDate && (
                     <div className="mt-2">
                         <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-0.5">Fecha de facturación</span>
                         <input
