@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────────────────
 
 /** Roles de usuario en el sistema. */
-export type UserRole = 'ADMIN' | 'COMMERCIAL';
+export type UserRole = 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
 
 /** Posibles estados de una propuesta. */
 export type ProposalStatus = 'ELABORACION' | 'PROPUESTA' | 'GANADA' | 'PERDIDA' | 'PENDIENTE_FACTURAR' | 'FACTURADA';

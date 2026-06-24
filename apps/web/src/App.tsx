@@ -1,7 +1,7 @@
 import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
-import { PrivateRoute, AdminRoute } from './components/auth/PrivateRoutes';
+import { PrivateRoute, AdminRoute, ReporterRoute } from './components/auth/PrivateRoutes';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import AppLayout from './layouts/AppLayout';
 import Login from './pages/Login';
@@ -69,10 +69,14 @@ function App() {
             <Route element={<PrivateRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/proposals/new" element={<NewProposal />} />
-                <Route path="/proposals/:id/builder" element={<ProposalItemsBuilder />} />
-                <Route path="/proposals/:id/calculations" element={<ProposalCalculations />} />
-                <Route path="/proposals/:id/document" element={<ProposalDocBuilder />} />
+
+                {/* Rutas de propuestas: vetadas para REPORTER (solo lectura del dashboard) */}
+                <Route element={<ReporterRoute />}>
+                  <Route path="/proposals/new" element={<NewProposal />} />
+                  <Route path="/proposals/:id/builder" element={<ProposalItemsBuilder />} />
+                  <Route path="/proposals/:id/calculations" element={<ProposalCalculations />} />
+                  <Route path="/proposals/:id/document" element={<ProposalDocBuilder />} />
+                </Route>
 
                 {/* Rutas exclusivas de Administrador */}
                 <Route element={<AdminRoute />}>
