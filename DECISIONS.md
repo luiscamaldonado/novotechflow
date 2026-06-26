@@ -2155,3 +2155,54 @@ El modelo de dos roles (ADR-049) fija que el chat decide y Claude Code ejecuta, 
 
 - **Push de este ADR a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción). Junto con los commits `b96b822` y `79a861c` de esta sesión.
 - **Luis pega las instrucciones del proyecto actualizadas** en la configuración de Claude.ai (fuera de git) y **re-sube la copia de `INSTRUCTIVO_CLAUDE.md`** al conocimiento del proyecto, reemplazando la versión previa.
+
+## ADR-054 — Rol REPORTER de solo lectura: acceso global a propuestas y proyecciones, blindaje deny-by-default en backend y dashboard de solo lectura
+**Fecha:** 2026-06-24
+**Estado:** Implementada y verificada en local, en la rama `feature/reporter-role` (sin pushear). La rama tiene como base los 5 commits de `feature/external-api` (ADR-052 y ADR-053), por lo que el orden de merge a `master` es: primero `feature/external-api`, luego `feature/reporter-role`. El push queda diferido por el incidente de produccion abierto.
+
+### Contexto
+Se necesitaba un tipo de usuario que pudiera consultar todas las oportunidades del dashboard y generar los dos reportes de Excel (exportacion del dashboard y reporte de proyeccion), sin capacidad de editar, crear ni navegar a ninguna otra pantalla. El objetivo de negocio es habilitar perfiles de consulta y reporteria sin darles acceso de escritura ni a los modulos operativos.
+
+El enum de roles tenia solo `ADMIN` y `COMMERCIAL`. Los dos `findAll` relevantes (`proposals.service` y `billing-projections.service`) filtraban por dueno para todo lo que no fuera `ADMIN`. La proteccion de escritura de los controladores de `proposals` y `billing-projections` se apoyaba solo en `JwtAuthGuard` a nivel de metodo: cualquier usuario autenticado podia mutar. Las rutas de propuestas del frontend eran accesibles para cualquier rol no-admin. Un requisito central —"no puede entrar a ver ninguna otra cosa"— exigia blindaje real en el backend, no solo ocultar controles en la UI: un usuario con token podria pegar a los endpoints de mutacion directamente.
+
+### Decisión
+1. **Rol REPORTER en el enum y en los tipos.** Se agrego `REPORTER` al enum `Role` de Prisma (migracion `20260623223750_add_reporter_role`) y a las uniones de tipo del JWT (`JwtPayload`, `AuthenticatedUser` en `auth.dto.ts`, y la firma de `login` en `auth.service.ts`), mas `UserRole` en el frontend (`lib/types.ts`).
+2. **Acceso de lectura global.** Los dos `findAll` ahora eximen del filtro por dueno tanto a `ADMIN` como a `REPORTER` (`user.role === 'ADMIN' || user.role === 'REPORTER' ? {} : { userId: user.id }`). REPORTER ve todas las propuestas y proyecciones, igual que ADMIN.
+3. **Blindaje deny-by-default via guard a nivel de clase.** Se creo `ReporterReadOnlyGuard` (`common/guards/reporter.guard.ts`), que calca a `AdminGuard`: extiende `JwtAuthGuard`, autentica con `super.canActivate` y lanza `ForbiddenException` si `request.user.role === 'REPORTER'` y `request.method !== 'GET'`. Se aplico a nivel de clase en `proposals.controller` y `billing-projections.controller`. REPORTER pasa en los GET (lo que el dashboard y los reportes necesitan leer) y rebota con 403 en toda mutacion, incluidas las que se agreguen a futuro en esos controladores.
+4. **Eliminacion de la redundancia de guards.** Como el guard de clase ya autentica, se quitaron los ~33 `@UseGuards(JwtAuthGuard)` redundantes de nivel de metodo en ambos controladores (mas el import sin uso). Esto evita que Passport corra `validate()` —que consulta la DB— dos veces por request. Los dos `@UseGuards(AdminGuard)` de papelera/restore se conservan intactos.
+5. **Encierro de rutas en el frontend.** Se agrego `ReporterRoute` (espejo de `AdminRoute`) que rebota a REPORTER a `/dashboard`. Envuelve solo las 4 rutas de propuestas; `/dashboard` queda accesible para los tres roles y las rutas admin siguen bajo `AdminRoute` (que ya rebota a REPORTER por no ser ADMIN).
+6. **Dashboard de solo lectura.** Se corrigio el ternario de `Dashboard.tsx` que colapsaba todo rol no-ADMIN en `COMMERCIAL` (ahora `user?.role ?? 'COMMERCIAL'`). Se ocultaron para REPORTER todos los controles de mutacion (botones del header, botones de fila, selects de estado/adquisicion, inputs de fecha, en propuestas y proyecciones). Estado y Adquisicion se muestran como badge de solo lectura replicando el formato de `ProposalGroupHeaderRow`. Se conservan filtros, las dos exportaciones y el campo TRM.
+7. **Asignacion del rol en gestion de usuarios.** Se agrego la opcion REPORTER a los dropdowns de crear y editar usuario, se amplio la interface local `UserData`, y se cambio el badge binario de la tabla a tres casos (REPORTER con color propio). El backend no requirio cambios: el payload manda el rol como string, validado por `CreateUserDto` con `@IsEnum(Role)`, y el enum de Prisma ya incluye REPORTER.
+
+### Consecuencias
+- REPORTER lee todo, no muta nada (blindado en backend), y solo navega el dashboard (blindado en frontend). Las dos exportaciones funcionan porque consumen datos ya en memoria; no requirieron endpoints nuevos.
+- El whitelist efectivo de REPORTER es el conjunto de endpoints que el dashboard dispara solo por loguearse: `login`, `verify-code`, `GET /proposals`, `GET /billing-projections`, `GET /app-settings/maintenance-banner`, `POST /presence/heartbeat`, `GET /app-settings/inactivity-timeout`. La TRM es externa al API.
+- **Regla a recordar (limitacion consciente del deny-by-default por controlador):** el guard de clase cierra las mutaciones de `proposals` y `billing-projections`, y la lectura de otros modulos ya esta cerrada por `AdminGuard`. Pero si a futuro se agrega un modulo no-admin nuevo con un GET sin guard de rol, REPORTER podria leerlo hasta que se le aplique su propio guard. Hoy no existe ese hueco (proposals y billing-projections son los unicos no-admin, y sus GET son justo lo que REPORTER debe ver).
+- Beneficio colateral de rendimiento: al quitar los `JwtAuthGuard` redundantes de metodo, los endpoints de esos dos controladores hacen una sola consulta de auth por request en lugar de dos.
+- Verificado en local: creacion de usuario REPORTER, acceso solo al dashboard, ambas exportaciones operativas, controles de mutacion ausentes, rebote desde rutas de propuestas. El boton de reporte de proyeccion depende de que existan proyecciones y TRM cargada (no del rol).
+
+### Archivos
+- `apps/api/prisma/schema.prisma` — `REPORTER` en enum `Role`.
+- `apps/api/prisma/migrations/20260623223750_add_reporter_role/` — migracion del enum.
+- `apps/api/src/auth/dto/auth.dto.ts`, `apps/api/src/auth/auth.service.ts` — `REPORTER` en las uniones de rol del JWT.
+- `apps/api/src/proposals/proposals.service.ts`, `apps/api/src/billing-projections/billing-projections.service.ts` — acceso global de lectura para REPORTER en `findAll`.
+- `apps/api/src/common/guards/reporter.guard.ts` — `ReporterReadOnlyGuard` (nuevo).
+- `apps/api/src/proposals/proposals.controller.ts`, `apps/api/src/billing-projections/billing-projections.controller.ts` — guard de clase aplicado, `JwtAuthGuard` redundante de metodo removido.
+- `apps/web/src/lib/types.ts` — `UserRole` ampliado.
+- `apps/web/src/components/auth/PrivateRoutes.tsx`, `apps/web/src/App.tsx` — `ReporterRoute` y su uso.
+- `apps/web/src/pages/Dashboard.tsx`, `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` — dashboard de solo lectura.
+- `apps/web/src/pages/Users.tsx` — opcion REPORTER en el formulario y badge.
+
+### Commits
+- `8facda9` — `feat(api): add REPORTER role to enum and JWT types`
+- `97564b0` — `feat(api): grant REPORTER read access to all proposals and projections`
+- `69b19bc` — `feat(api): block REPORTER from mutations via controller-level guard`
+- `64359a4` — `refactor(api): drop redundant method-level JwtAuthGuard now covered by class guard`
+- `8604e17` — `feat(web): add ReporterRoute guard to lock REPORTER out of proposal routes`
+- `62e7df5` — `feat(web): make dashboard read-only for REPORTER role`
+- `a6970da` — `feat(web): add REPORTER role option to user management form`
+- Pendiente — commit de este ADR-054 (`docs: ADR-054 REPORTER read-only role`)
+
+### Pendientes
+- **Push diferido.** La feature esta aislada en `feature/reporter-role` sin pushear. El merge a `master` espera a la resolucion (o decision consciente) del incidente de produccion abierto. Orden de merge: `feature/external-api` primero, luego esta rama.
+- **Commit de merge ajeno a la feature.** La rama tiene mergeado localmente el commit del modo-dev 2FA (`fix/local-2fa-dev-mode`, log del codigo en consola en desarrollo) para poder probar en local. Ese cambio es infraestructura de desarrollo, no parte de REPORTER; debe resolverse su destino (rama propia / no arrastrarlo al merge de REPORTER a produccion) antes del push.
