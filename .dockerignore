@@ -1,0 +1,13 @@
+# Build context exclusions: mantienen el build rapido y reproducible, y evitan
+# que node_modules/dist locales (con junctions de Windows) entren al build via COPY.
+# Railway clona desde git y nunca tuvo esto; esto hace que el docker build local
+# coincida con el contexto limpio de Railway.
+**/node_modules
+**/dist
+.git
+**/.env
+!**/.env.example
+backups
+apps/api/uploads
+**/.turbo
+**/*.log
