@@ -2206,3 +2206,34 @@ El enum de roles tenia solo `ADMIN` y `COMMERCIAL`. Los dos `findAll` relevantes
 ### Pendientes
 - **Push diferido.** La feature esta aislada en `feature/reporter-role` sin pushear. El merge a `master` espera a la resolucion (o decision consciente) del incidente de produccion abierto. Orden de merge: `feature/external-api` primero, luego esta rama.
 - **Commit de merge ajeno a la feature.** La rama tiene mergeado localmente el commit del modo-dev 2FA (`fix/local-2fa-dev-mode`, log del codigo en consola en desarrollo) para poder probar en local. Ese cambio es infraestructura de desarrollo, no parte de REPORTER; debe resolverse su destino (rama propia / no arrastrarlo al merge de REPORTER a produccion) antes del push.
+
+## ADR-055 — Protocolo de depuración: diagnóstico antes de cambio, sección 10 del instructivo y skills de Claude.ai
+**Fecha:** 2026-07-04
+**Estado:** Implementada. La sección 10 quedó insertada en `INSTRUCTIVO_CLAUDE.md` en `master` (commit `888a231`, sin pushear). Los skills `depuracion-web` (nuevo) y `novotechflow` (actualizado) y las instrucciones del proyecto viven en Claude.ai, fuera de git.
+
+### Contexto
+Las prácticas de depuración del proyecto (diagnóstico primero, aislar la capa antes de tocar código, no declarar resuelto sin evidencia) se aplicaban por criterio pero no estaban en ninguna fuente de verdad, por lo que dependían de la memoria de cada sesión. Dos hechos motivaron formalizarlas: (1) el incidente de producción abierto desde junio mostró el costo de la disciplina — la señal apunta a capa de transporte y el fix de código propuesto quedó pausado justamente por falta de evidencia de causa raíz; (2) el redespliegue de Claude Fable 5 (2026-07-01), cuya ventaja documentada es bug-finding recall y cuya metodología (medir, loggear, verificar antes de cerrar) coincide con la práctica del proyecto, pero cuyo clasificador reenruta tareas benignas de depuración a Opus 4.8 si el framing es inadecuado. Fable está incluido en el plan hasta 2026-07-07; después pasa a créditos.
+
+### Decisión
+1. **Sección 10 nueva en `INSTRUCTIVO_CLAUDE.md`** como protocolo operativo de depuración: regla madre (diagnóstico ≠ cambio — ningún fix sin aprobación explícita de Luis), fases 0–6 (reproducir/evidencia, explorar solo lectura, aislar la capa, fix mínimo con criterio de verificación previo, ejecutar, verificar, registrar), tabla de aislamiento de capa (código / transporte / config / datos / dependencias), selección de modelos en depuración (Fable 5 para prompts de diagnóstico de solo lectura mientras esté incluido; fixes con la tabla normal de §6), checklist post-cambio como gate, bloque obligatorio de tres líneas para todo prompt de diagnóstico, y pasadas de auditoría para bugs ocultos (una pasada = un invariante, sesión NUEVA, solo lectura, hallazgos a `docs/audits/`, demostrar antes de arreglar).
+2. **Skill `depuracion-web` (Claude.ai, nuevo):** método general de depuración, portable a otros proyectos; en NovoTechFlow convive con el skill `novotechflow`.
+3. **Skill `novotechflow` (Claude.ai, actualizado):** incorpora REPORTER, la API externa (rama `feature/external-api`), la referencia al protocolo de depuración y tres reglas duraderas ya aprendidas por incidentes (DATABASE_URL de Railway siempre por referencia, `pg_dump` antes de migraciones de schema a producción, `prisma generate` tras cambiar de rama con migraciones).
+4. **Instrucciones del proyecto actualizadas** (Claude.ai): bug reportado → primero diagnóstico con evidencia; y todo `.md` que Luis reemplaza a mano se entrega como archivo descargable completo.
+
+### Consecuencias
+- Ningún fix de bug se aplica sin diagnóstico aprobado: la primera entrega ante un bug es causa raíz + evidencia + fix mínimo propuesto.
+- Todo prompt de diagnóstico lleva el bloque de 10.5 y se encabeza `Modelo: Fable 5 · Sesión: NUEVA` hasta 2026-07-07; después, diagnóstico complejo en Opus y el resto en Sonnet.
+- La sección 10 es la fuente operativa dentro del repo; los skills duplican el método por diseño para chats fuera del proyecto. En conflicto, gana `CONVENTIONS.md` y gana el disco.
+- Los skills viven fuera de git y no se versionan aquí: se actualizan solo ante cambios estructurales (modelo de trabajo, regla no negociable, glosario).
+
+### Archivos
+- `INSTRUCTIVO_CLAUDE.md` — sección 10 nueva (única modificación en el repo).
+- Fuera de git: skills `depuracion-web` y `novotechflow`, e instrucciones del proyecto, en Claude.ai.
+
+### Commits
+- `888a231` — `docs: agrega protocolo de depuracion (seccion 10) al instructivo`
+- Pendiente — commit de este ADR-055 (`docs: ADR-055 protocolo de depuracion`)
+
+### Pendientes
+- **Push de ambos commits a `master`** (lo hace Luis; Claude pregunta antes si es el momento — puede haber usuarios en producción). El attachment de `INSTRUCTIVO_CLAUDE.md` en Claude.ai ya quedó reemplazado con contenido idéntico al del disco.
+- **Piloto de pasada de auditoría** (10.6) sobre el invariante de REPORTER, con Fable 5 y solo lectura, idealmente antes de 2026-07-07.
