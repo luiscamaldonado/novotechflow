@@ -2158,7 +2158,7 @@ El modelo de dos roles (ADR-049) fija que el chat decide y Claude Code ejecuta, 
 
 ## ADR-054 — Rol REPORTER de solo lectura: acceso global a propuestas y proyecciones, blindaje deny-by-default en backend y dashboard de solo lectura
 **Fecha:** 2026-06-24
-**Estado:** Implementada y verificada en local, en la rama `feature/reporter-role` (sin pushear). La rama tiene como base los 5 commits de `feature/external-api` (ADR-052 y ADR-053), por lo que el orden de merge a `master` es: primero `feature/external-api`, luego `feature/reporter-role`. El push queda diferido por el incidente de produccion abierto.
+**Estado:** Implementada y en produccion (`origin/master`). El rol REPORTER y su guard base se desplegaron por la rama `feature/reporter-role-clean`. Nota (ADR-056, 2026-07-04): esta linea corrige el estado previo, que decia "sin pushear en rama": el despliegue ya ocurrio. El endurecimiento posterior de dos endpoints de lectura quedo registrado en el ADR-056.
 
 ### Contexto
 Se necesitaba un tipo de usuario que pudiera consultar todas las oportunidades del dashboard y generar los dos reportes de Excel (exportacion del dashboard y reporte de proyeccion), sin capacidad de editar, crear ni navegar a ninguna otra pantalla. El objetivo de negocio es habilitar perfiles de consulta y reporteria sin darles acceso de escritura ni a los modulos operativos.
@@ -2237,3 +2237,38 @@ Las prácticas de depuración del proyecto (diagnóstico primero, aislar la capa
 ### Pendientes
 - **Push de ambos commits a `master`** (lo hace Luis; Claude pregunta antes si es el momento — puede haber usuarios en producción). El attachment de `INSTRUCTIVO_CLAUDE.md` en Claude.ai ya quedó reemplazado con contenido idéntico al del disco.
 - **Piloto de pasada de auditoría** (10.6) sobre el invariante de REPORTER, con Fable 5 y solo lectura, idealmente antes de 2026-07-07.
+
+## ADR-056 — Endurecimiento de la superficie de lectura de REPORTER: auditoria de invariante y cierre de dos endpoints fuera del whitelist
+**Fecha:** 2026-07-04
+**Estado:** Implementada. Fix en `master` (commit `e1da449`), verificado en local. Auditoria en `docs/audits/reporter-invariant.md` (commit `9630371`). Ambos commits pendientes de push a `origin/master`.
+
+### Contexto
+El rol REPORTER (ADR-054) ya estaba en produccion (`origin/master`). Aplicando el protocolo de depuracion (INSTRUCTIVO_CLAUDE.md §10.6), se corrio una pasada de auditoria de un invariante con Claude Fable 5, solo lectura, sobre la rama `feature/reporter-role`: "un REPORTER autenticado no puede mutar ningun dato por ninguna ruta, y solo lee los endpoints que el dashboard necesita". La clausula de no-mutacion se cumple en los 13 controladores. La clausula de superficie de lectura no se cumplia en forma estricta: REPORTER podia leer 5 GET adicionales y ejecutar 1 POST de computo (sin mutacion de datos) fuera del whitelist, todo atribuible a la limitacion consciente del ADR-054 (endpoints con solo `JwtAuthGuard` quedan legibles). Dos de esos exponian datos sensibles.
+
+### Decisión
+1. **Cerrar los dos hallazgos de severidad media** con el patron allowlist ya existente en el proyecto (`@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(Role.ADMIN, Role.COMMERCIAL)`, usado en users y templates): `POST /spec-prefill/extract` (parseo de archivos, sin mutacion de datos pero fuera del alcance de solo-lectura) y `GET /clients/search` (enumeracion de nombres y NIT de clientes). Se eligio el patron allowlist y no `ReporterReadOnlyGuard` porque este ultimo solo bloquea no-GET, y uno de los dos endpoints es un GET.
+2. **Aceptar y registrar como bajo impacto** los hallazgos #3 a #6: `GET /proposals/client-history` (no amplia la exposicion real: REPORTER ya ve todas las propuestas por el findAll global del ADR-054), `GET /app-settings/price-thresholds`, `GET /catalogs/*` y `GET /spec-options/suggest` (datos de referencia/config de bajo valor; cerrarlos no justifica el cambio).
+3. **Diferir** el hallazgo #7 (el rol se toma del payload del JWT y no de la DB): no rompe el invariante en la direccion auditada (un token REPORTER siempre lleva REPORTER); su fix es estructural.
+4. **Corregir el Estado del ADR-054**, que habia quedado desactualizado ("sin pushear en rama") cuando el rol ya estaba en produccion.
+
+### Consecuencias
+- REPORTER queda denegado con 403 en los dos endpoints cerrados; ADMIN y COMMERCIAL siguen accediendo.
+- La superficie de lectura de REPORTER fuera del dashboard se reduce a datos de referencia de bajo impacto (#4-#6), documentados y aceptados.
+- El fix reusa un patron ya presente; no introduce un guard nuevo.
+- Verificacion funcional en local (CONVENTIONS §H): sobre `feature/reporter-role` con `e1da449` cherry-pickeado (`8bf4da1`) y el modo-consola de 2FA, login como usuario REPORTER real, dashboard con sus restricciones esperadas y sin acceso a otras pantallas.
+- Limitacion vigente del ADR-054: si a futuro se agrega un modulo no-admin con un GET sin guard de rol, REPORTER podria leerlo hasta aplicarle su guard.
+
+### Archivos
+- `apps/api/src/spec-prefill/spec-prefill.controller.ts`, `apps/api/src/clients/clients.controller.ts` — patron @Roles(ADMIN, COMMERCIAL) + RolesGuard (commit `e1da449`, master).
+- `docs/audits/reporter-invariant.md` — auditoria completa (commit `9630371`).
+- `DECISIONS.md` — correccion del Estado del ADR-054 (este commit).
+
+### Commits
+- `e1da449` — `fix(api): deny REPORTER on spec-prefill extract and clients search`
+- `9630371` — `docs: audit reporter read-only invariant`
+- Pendiente — commit de este ADR-056 (`docs: ADR-056 harden REPORTER read surface`)
+
+### Pendientes
+- **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): incluye `e1da449`, `9630371` y el commit de este ADR-056.
+- La rama de prueba `feature/reporter-role` conserva el cherry-pick `8bf4da1` (solo para verificacion local); no se mergea.
+- Hallazgos #4-#6 aceptados; #7 diferido por ser estructural.
