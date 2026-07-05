@@ -2289,3 +2289,50 @@ Tres restricciones definieron el diseño. Primera, la app de Felipe vive en otro
 - **Documento de contrato de la API** para Felipe (endpoints, flujo 2FA, formato del token, payload completo de `GET /external/proposals`, header `ngrok-skip-browser-warning`). Documentación operativa, fuera del repo.
 - **Configuración de producción para `/external`** al desplegar: agregar `EXTERNAL_JWT_SECRET` (hex 64 chars distinto del de local) a Railway, sumar el origen público de la app de Felipe a `CORS_ORIGIN` de Railway, y validar el flujo extremo a extremo en producción tras el push.
 - **Limpieza de duplicado de `RESEND_API_KEY` y `RESEND_FROM`** en el `.env` local detectada durante el paso 4 (no afecta funcionalidad: Node usa la última definición). Tarea menor de higiene, no bloquea nada.
+
+## ADR-057 — Adopción del Railway CLI en el flujo de trabajo para lectura de variables y logs de producción, con manejo estricto de secretos
+
+**Fecha:** 2026-07-05
+**Estado:** Aceptado
+
+### Contexto
+
+El diagnóstico de incidentes de producción y la inspección de configuración en Railway (variables de entorno, logs de build y deploy) se venían haciendo a mano por Luis en el dashboard, copiando y pegando salidas al chat. Eso es lento y, en el caso de las variables, arriesgado: la salida cruda expone secretos reales (`JWT_SECRET`, `DATABASE_URL`, `RESEND_API_KEY`, etc.).
+
+Railway publica un MCP server oficial que envuelve su CLI, lo que abre la posibilidad de que Claude Code lea variables y logs por sí mismo. Antes de montar el MCP se decidió establecer y verificar la capa base —el Railway CLI— en modo estrictamente de lectura, y fijar por escrito las reglas de manejo de secretos que el MCP deberá respetar después.
+
+Restricción de entorno: el CLI no está en winget, y la regla del proyecto (§8, §6 de las instrucciones) prohíbe `npx`/`npm` global para herramientas del proyecto. El one-liner oficial (`curl ... | sh`) es solo macOS/Linux o Windows por WSL, y aquí se usa PowerShell nativo.
+
+### Decisión
+
+1. **Instalación del Railway CLI por binario pre-compilado, no por npm ni Scoop.** Se descargó el asset oficial `railway-v5.23.3-x86_64-pc-windows-msvc.zip` del release de GitHub y se dejó `railway.exe` en `C:\Users\admin\.local\bin` (ya en PATH, donde vive `claude.exe`). Cero `npm`/`npx`, cero cambio de execution policy, cero tooling nuevo. Contrapartida aceptada: los updates futuros son manuales (re-descargar).
+
+2. **Autenticación y link.** `railway login` (OAuth por navegador, lo aprueba Luis; scope `workspace:admin project:admin` — el CLI no ofrece scope de solo-lectura) y `railway link` al servicio `novotechflow` en el entorno `production` (la API NestJS; los otros servicios del proyecto son `web`, `Postgres`, `api-external`, `postgres-external`).
+
+3. **Etapa base = solo lectura.** Se habilitan tres lecturas, todas verificadas: nombres de variables, logs de deploy y logs de build. Ningún comando de escritura (`up`, `variable set`, `redeploy`) se corre en esta etapa. La barrera es disciplina; el gate técnico (deny-rules) se monta con el MCP (ver Pendientes).
+
+4. **Regla de manejo de secretos en variables (no negociable).** Nunca se usa `--kv` ni se pega el JSON crudo de `railway variable list` (el help advierte que ambos imprimen valores crudos). Para listar, se parsea el `--json` en PowerShell extrayendo solo los nombres de las propiedades (`$obj.PSObject.Properties.Name`), envuelto en try/catch para que ni un fallo de parseo vuelque el JSON crudo. Al chat llegan solo keys, nunca valores.
+
+5. **Regla de manejo de secretos en logs (no negociable).** Un log es texto libre y no se puede "filtrar a nombres". Se traen acotados en modo no-streaming (`-n <N>`, que desactiva el seguimiento en vivo; `railway logs` por defecto hace streaming y cuelga la sesión de agente) y se pasan por un wrapper de redacción que tapa connection strings, Bearer tokens, pares `key|token|secret|password=valor` y JWT antes de imprimir, con timeout por si `-n` no frena el streaming. `-d` para deploy/runtime, `-b` para build.
+
+### Consecuencias
+
+- Claude Code puede leer variables (solo keys), logs de deploy y logs de build de producción sin que Luis toque el dashboard y sin filtrar secretos al chat. Es capacidad de Claude Code corriendo el CLI, no de Claude (chat).
+- El límite absoluto "solo Luis despliega" queda intacto: crear o cambiar una variable en Railway dispara un redeploy automático del servicio (confirmado en doc de Railway: no hay forma de que un deploy vivo tome variables nuevas sin un deploy nuevo), por lo que toda escritura de variables sobre un servicio de producción es, de hecho, un despliegue — reservado a Luis.
+- Detalle operativo registrado: `-n` cuenta entradas de log lógicas, no renglones de texto; una corrida de `-n 100` de build devolvió 153 líneas por los bloques multilínea (Prisma Client, warnings de npm). No es un fallo del filtro.
+- Observación al pasar durante la lectura de logs de deploy (no diagnosticada aquí): se ven transacciones `BEGIN`/`COMMIT` sobre `app_settings`, consistente con el doble-upsert de `getMaintenanceBanner` ya marcado como deuda.
+- Las reglas 4 y 5 quedan como contrato que el MCP de Railway deberá respetar cuando se monte.
+
+### Archivos
+
+- Ninguno del repo. La instalación (binario en `.local\bin`), el login y el link son estado local de la máquina de Luis, fuera de versión. Este ADR es el único artefacto versionado del cambio.
+
+### Commits
+
+- Pendiente — commit de este ADR-057 (`docs: ADR-057 adopt railway cli for read-only variables and logs`)
+
+### Pendientes
+
+- **Montar el MCP de Railway en Claude Code**, decidiendo el modo de cableado que respete la regla `npx`/`npm` (evaluar `railway mcp install` vía CLI vs. apuntar a un binario), y agregando deny-rules explícitas en `.claude/settings.local.json` para las tools de escritura (`variable set`, `up`, `redeploy`, `accept-deploy`), igual que el deny ya existente de `git push`. Verificar que Claude Code no pueda disparar un redeploy antes de darlo por cerrado.
+- **Reglas de manejo de secretos aplicadas al MCP:** trasladar las reglas 4 y 5 de este ADR al uso del MCP (variables solo por nombre, logs redactados y acotados).
+- **Habilitación de escrituras seguras (etapa futura, si se decide):** crear variables solo en entornos no-prod, o en prod con confirmación explícita de Luis (equivalente al gate del push). Fuera de alcance de este ADR.
