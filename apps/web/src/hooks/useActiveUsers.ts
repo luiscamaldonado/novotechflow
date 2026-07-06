@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 
 /** Intervalo (ms) de refresco de la lista de usuarios activos. */
-const ACTIVE_USERS_REFRESH_MS = 30 * 1000;
+const ACTIVE_USERS_REFRESH_MS = 60 * 1000;
 
 /** Usuario con sesión activa devuelto por GET /presence/active. */
 export interface ActiveUser {
