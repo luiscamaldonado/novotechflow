@@ -87,33 +87,22 @@ export class AppSettingsService {
   }
 
   /**
-   * Obtiene el banner de mantenimiento. Crea ambas keys con valores por defecto
-   * si no existen (idempotente), igual que el timeout de inactividad.
+   * Obtiene el banner de mantenimiento. Lectura pura: si alguna key no existe
+   * aun, devuelve los defaults en memoria sin escribir en la base de datos.
    */
   async getMaintenanceBanner(): Promise<MaintenanceBanner> {
-    const messageSetting = await this.prisma.appSetting.upsert({
-      where: { key: MAINTENANCE_BANNER_MESSAGE_KEY },
-      update: {},
-      create: {
-        key: MAINTENANCE_BANNER_MESSAGE_KEY,
-        value: '',
-        description: 'Mensaje del banner de mantenimiento programado',
+    const settings = await this.prisma.appSetting.findMany({
+      where: {
+        key: { in: [MAINTENANCE_BANNER_MESSAGE_KEY, MAINTENANCE_BANNER_ACTIVE_KEY] },
       },
     });
 
-    const activeSetting = await this.prisma.appSetting.upsert({
-      where: { key: MAINTENANCE_BANNER_ACTIVE_KEY },
-      update: {},
-      create: {
-        key: MAINTENANCE_BANNER_ACTIVE_KEY,
-        value: 'false',
-        description: 'Indica si el banner de mantenimiento est\u00e1 visible',
-      },
-    });
+    const messageSetting = settings.find((s) => s.key === MAINTENANCE_BANNER_MESSAGE_KEY);
+    const activeSetting = settings.find((s) => s.key === MAINTENANCE_BANNER_ACTIVE_KEY);
 
     return {
-      message: messageSetting.value,
-      active: activeSetting.value === 'true',
+      message: messageSetting?.value ?? '',
+      active: activeSetting?.value === 'true',
     };
   }
 
@@ -128,14 +117,26 @@ export class AppSettingsService {
     active: boolean,
     userId: string,
   ): Promise<MaintenanceBanner> {
-    await this.prisma.appSetting.update({
+    await this.prisma.appSetting.upsert({
       where: { key: MAINTENANCE_BANNER_MESSAGE_KEY },
-      data: { value: message, updatedById: userId },
+      update: { value: message, updatedById: userId },
+      create: {
+        key: MAINTENANCE_BANNER_MESSAGE_KEY,
+        value: message,
+        description: 'Mensaje del banner de mantenimiento programado',
+        updatedById: userId,
+      },
     });
 
-    await this.prisma.appSetting.update({
+    await this.prisma.appSetting.upsert({
       where: { key: MAINTENANCE_BANNER_ACTIVE_KEY },
-      data: { value: String(active), updatedById: userId },
+      update: { value: String(active), updatedById: userId },
+      create: {
+        key: MAINTENANCE_BANNER_ACTIVE_KEY,
+        value: String(active),
+        description: 'Indica si el banner de mantenimiento está visible',
+        updatedById: userId,
+      },
     });
 
     return { message, active };
