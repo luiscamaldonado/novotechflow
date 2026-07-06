@@ -24,7 +24,7 @@ export function useInactivityTimeout(): InactivityState & { dismissWarning: () =
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef(0);
 
   const clearAllTimers = useCallback(() => {
     if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
@@ -35,15 +35,13 @@ export function useInactivityTimeout(): InactivityState & { dismissWarning: () =
     countdownRef.current = null;
   }, []);
 
-  const startTimers = useCallback(() => {
+  const scheduleTimers = useCallback(() => {
     const minutes = inactivityTimeoutMinutes ?? INACTIVITY_TIMEOUT_FALLBACK_MINUTES;
     const inactivityLimitMs = minutes * 60 * 1000;
     const warningAtMs = inactivityLimitMs - INACTIVITY_WARNING_BEFORE_MS;
 
     clearAllTimers();
     lastActivityRef.current = Date.now();
-    setShowWarning(false);
-    setSecondsLeft(60);
 
     // Timer 1: show warning 1 minute before logout
     warningTimerRef.current = setTimeout(() => {
@@ -69,13 +67,19 @@ export function useInactivityTimeout(): InactivityState & { dismissWarning: () =
     }, inactivityLimitMs);
   }, [clearAllTimers, logout, inactivityTimeoutMinutes]);
 
+  const restartTimers = useCallback(() => {
+    setShowWarning(false);
+    setSecondsLeft(60);
+    scheduleTimers();
+  }, [scheduleTimers]);
+
   const handleActivity = useCallback(() => {
     // Throttle: only reset if more than 1 second since last reset
     const now = Date.now();
     if (now - lastActivityRef.current < 1000) return;
     lastActivityRef.current = now;
-    startTimers();
-  }, [startTimers]);
+    restartTimers();
+  }, [restartTimers]);
 
   const dismissWarning = useCallback(() => {
     handleActivity();
@@ -85,11 +89,10 @@ export function useInactivityTimeout(): InactivityState & { dismissWarning: () =
     // Only run if user is logged in
     if (!token) {
       clearAllTimers();
-      setShowWarning(false);
       return;
     }
 
-    startTimers();
+    scheduleTimers();
 
     ACTIVITY_EVENTS.forEach((event) => {
       window.addEventListener(event, handleActivity, { passive: true });
@@ -101,7 +104,8 @@ export function useInactivityTimeout(): InactivityState & { dismissWarning: () =
         window.removeEventListener(event, handleActivity);
       });
     };
-  }, [token, startTimers, handleActivity, clearAllTimers]);
+  }, [token, scheduleTimers, handleActivity, clearAllTimers]);
 
-  return { showWarning, secondsLeft, dismissWarning };
+  const isWarningVisible = showWarning && Boolean(token);
+  return { showWarning: isWarningVisible, secondsLeft, dismissWarning };
 }
