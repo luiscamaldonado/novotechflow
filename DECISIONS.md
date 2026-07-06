@@ -2272,3 +2272,41 @@ El rol REPORTER (ADR-054) ya estaba en produccion (`origin/master`). Aplicando e
 - **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): incluye `e1da449`, `9630371` y el commit de este ADR-056.
 - La rama de prueba `feature/reporter-role` conserva el cherry-pick `8bf4da1` (solo para verificacion local); no se mergea.
 - Hallazgos #4-#6 aceptados; #7 diferido por ser estructural.
+
+## ADR-057 — getMaintenanceBanner a lectura pura: fin de la escritura en un GET y ajuste de intervalos de polling
+**Fecha:** 2026-07-06
+**Estado:** Implementada. Backend (commit `f383288`) y frontend (commit `42d19b4`) en local, `tsc` verde en ambos proyectos. Los dos commits mas el de este ADR quedan pendientes de push a `origin/master`.
+
+### Contexto
+Durante el incidente de lentitud intermitente del 23 de junio (`ERR_HTTP2_PROTOCOL_ERROR` + 502 esporadicos en `apps/web` y `apps/api`), la evidencia apunto a un blip de la capa compartida de Railway (edge/HTTP2): el error aparecio en los dos servicios, incluido un `.png` estatico del front, con CPU ~0, RAM plana, Error Rate 0.0% y sin `P2024`. El incidente no volvio a ocurrir y se calmo solo; era transitorio y global, no atribuible a codigo del proyecto.
+
+En el mismo diagnostico se confirmo, por los logs de Prisma, un defecto real e independiente del incidente: `getMaintenanceBanner()` abria dos transacciones `upsert` (BEGIN/COMMIT sostenido 1-3s) en cada `GET /app-settings/maintenance-banner`. Un endpoint de lectura escribia en cada llamada. El front pollea ese endpoint cada 60s (`useMaintenanceBanner.ts`, montado ademas en dos componentes en paralelo) y `/presence/active` cada 30s (`useActiveUsers.ts`). Ese patron (Opcion A: endurecer el getter + bajar el ruido de polling) quedo pausado en su momento para no venderlo como cura del incidente. Cerrado el incidente por autoresolucion, se retomo como hardening.
+
+### Decisión
+1. **`getMaintenanceBanner()` pasa a lectura pura:** un unico `findMany` de las dos keys (`maintenance_banner_message`, `maintenance_banner_active`) con defaults en memoria (`message: ''`, `active: false`) cuando alguna no existe. Cero escritura en el GET.
+2. **La unica escritura se mueve al `PATCH` del admin:** `updateMaintenanceBanner()` pasa de `update` plano a `upsert`, para que la fila se cree la primera vez que un admin toca el banner. Se descarto sembrar con `onModuleInit` o `seed.ts`: agrega piezas y una escritura al arranque sin beneficio: el getter ya resuelve el default en memoria y la lectura queda garantizada sin escrituras en cualquier entorno.
+3. **Subir los intervalos de polling** (hardening, sin cambio de UX): banner de 60s a 5 min (el banner solo cambia cuando un admin programa mantenimiento); active-users de 30s a 60s (panel solo-admin, volumen bajo).
+
+### Consecuencias
+- El `GET /app-settings/maintenance-banner` deja de abrir transacciones; se elimina el par de `upsert` sostenidos por request y el ruido asociado.
+- La fila de cada key no existe en DB hasta el primer `PATCH` del admin; irrelevante para la lectura, que ya devuelve el default.
+- El antipatron upsert-en-getter sigue presente en `getInactivityTimeoutMinutes()` y en price-thresholds; no se toca (no se pollean como el banner). Deuda registrada, no corregida aqui.
+- `useMaintenanceBanner` se sigue montando en dos componentes (banner global + control de admin), con dos timers en paralelo cuando el admin esta en el dashboard; subir el intervalo mitiga, deduplicar queda como mejora futura.
+- El write de `last_seen_at` por heartbeat de presencia (era la Opcion B) no se toca: subir el intervalo de `useActiveUsers` baja lecturas del panel, no los writes del heartbeat.
+- Verificacion funcional en navegador (CONVENTIONS §H) pendiente a cargo de Luis: banner visible/oculto segun estado, edicion del banner por admin persiste, panel de usuarios activos refresca.
+
+### Archivos
+- `apps/api/src/app-settings/app-settings.service.ts` — `getMaintenanceBanner()` a `findMany` + defaults en memoria; `updateMaintenanceBanner()` de `update` a `upsert`; JSDoc actualizado (commit `f383288`).
+- `apps/web/src/hooks/useMaintenanceBanner.ts` — intervalo 60s a 5 min (commit `42d19b4`).
+- `apps/web/src/hooks/useActiveUsers.ts` — intervalo 30s a 60s (commit `42d19b4`).
+- `DECISIONS.md` — este ADR (este commit).
+
+### Commits
+- `f383288` — `fix(app-settings): make getMaintenanceBanner a pure read`
+- `42d19b4` — `perf(web): raise app-settings polling intervals`
+- Pendiente — commit de este ADR-057 (`docs: ADR-057 maintenance banner pure read`)
+
+### Pendientes
+- **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): incluye `f383288`, `42d19b4` y el commit de este ADR-057.
+- Verificacion funcional en navegador a cargo de Luis (banner, edicion admin, panel de activos).
+- Deuda registrada, no abordada: upsert-en-getter en inactivity y price-thresholds; doble timer de `useMaintenanceBanner`; write de `last_seen_at` del heartbeat.
