@@ -7,7 +7,7 @@ import type { ProductoPrefill, PrefillTipoInput, PrefillSource } from '../../../
 import type { TechnicalSpecs } from '../../../lib/types';
 
 /** Fuente seleccionada en la UI (Archivo agrupa Excel y PDF, se distingue por extensión). */
-type FuenteUI = 'TEXTO' | 'LENOVO' | 'HP' | 'ARCHIVO';
+type FuenteUI = 'TEXTO' | 'LENOVO' | 'ARCHIVO';
 
 interface PrefillModalProps {
     isOpen: boolean;
@@ -18,14 +18,12 @@ interface PrefillModalProps {
 const FUENTES: ReadonlyArray<{ id: FuenteUI; label: string }> = [
     { id: 'TEXTO', label: 'Texto' },
     { id: 'LENOVO', label: 'Part Number Lenovo' },
-    { id: 'HP', label: 'Part Number HP' },
     { id: 'ARCHIVO', label: 'Archivo (Excel/PDF)' },
 ];
 
 const FUENTE_A_TIPO: Record<Exclude<FuenteUI, 'ARCHIVO'>, PrefillTipoInput> = {
     TEXTO: 'TEXTO_PLANO',
     LENOVO: 'PART_NUMBER',
-    HP: 'HP_PART_NUMBER',
 };
 
 /** Campos mostrados en el grid de cada equipo (fabricante/formato/modelo van en el encabezado; estado lo elige el usuario). */
@@ -235,7 +233,7 @@ export default function PrefillModal({ isOpen, onClose, onApply }: PrefillModalP
                                         type="text"
                                         value={texto}
                                         onChange={(e) => setTexto(e.target.value)}
-                                        placeholder={fuente === 'LENOVO' ? 'Ej: 21QD001CLM' : 'Ej: D66V3LT'}
+                                        placeholder="Ej: 21QD001CLM"
                                         className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-slate-100 focus:border-indigo-600 focus:ring-0 text-sm font-bold text-slate-800"
                                     />
                                 )}
