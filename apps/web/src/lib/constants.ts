@@ -89,6 +89,13 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, SpecFieldDe
     },
 } as const;
 
+// Formato (detectado por la IA) que dispara garantia de bateria automatica.
+// Unico formato inequivocamente movil de FORMATO_VALUES; Workstation es ambiguo
+// (escritorio o portatil) y no se incluye para evitar falsos positivos.
+export const BATTERY_WARRANTY_FORMAT = 'Laptop';
+// Valor por defecto de "Garantia Bateria" para equipos portatiles.
+export const DEFAULT_BATTERY_WARRANTY = '1 a\u00f1o';
+
 /**
  * Determina si un spec field es visible según su regla visibleWhen.
  * Campo controlador vacío (legacy) cuenta como visible.

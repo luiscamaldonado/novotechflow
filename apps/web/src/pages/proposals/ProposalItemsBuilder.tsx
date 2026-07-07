@@ -8,8 +8,8 @@ import {
     Cpu, DollarSign
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import type { ProposalItem, ProposalDetail } from '../../lib/types';
-import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../../lib/constants';
+import type { ProposalItem, ProposalDetail, TechnicalSpecs } from '../../lib/types';
+import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY } from '../../lib/constants';
 import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '../../lib/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import PrefillModal from './components/PrefillModal';
@@ -167,6 +167,16 @@ export default function ProposalItemsBuilder() {
                 [field]: value
             }
         }));
+    };
+
+    const handlePrefillApply = (specs: TechnicalSpecs) => {
+        setItemForm((prev) => {
+            const nextSpecs: TechnicalSpecs = { estado: prev.technicalSpecs?.estado, ...specs };
+            if (nextSpecs.formato === BATTERY_WARRANTY_FORMAT) {
+                nextSpecs.garantiaBateria = DEFAULT_BATTERY_WARRANTY;
+            }
+            return { ...prev, technicalSpecs: nextSpecs };
+        });
     };
 
     const handleSaveItem = async (e: React.FormEvent) => {
@@ -641,12 +651,7 @@ export default function ProposalItemsBuilder() {
             <PrefillModal
                 isOpen={isPrefillOpen}
                 onClose={() => setIsPrefillOpen(false)}
-                onApply={(specs) =>
-                    setItemForm((prev) => ({
-                        ...prev,
-                        technicalSpecs: { ...prev.technicalSpecs, ...specs },
-                    }))
-                }
+                onApply={handlePrefillApply}
             />
         </div>
     );
