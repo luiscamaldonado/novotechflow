@@ -62,6 +62,8 @@ interface SpecFieldsSectionProps {
     fetchSuggestions: (fieldName: string, query: string) => Promise<AutocompleteSuggestion[]>;
     /** Si true, todos los campos se renderizan deshabilitados */
     isReadOnly?: boolean;
+    /** Callback para borrar todos los campos de especificaciones del item */
+    onClear: () => void;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -80,6 +82,7 @@ export default function SpecFieldsSection({
     onSelectSuggestion,
     fetchSuggestions,
     isReadOnly = false,
+    onClear,
 }: SpecFieldsSectionProps) {
     const theme = SECTION_THEMES[itemType];
     const specFields = SPEC_FIELDS_BY_ITEM_TYPE[itemType];
@@ -113,18 +116,29 @@ export default function SpecFieldsSection({
             )}
         >
             {/* Header */}
-            <div className={cn('flex items-center space-x-3 mb-2', theme.cols === 4 ? 'md:col-span-4 lg:col-span-4' : 'md:col-span-3')}>
-                <div className={cn('p-2 rounded-xl shadow-md', theme.iconBg)}>
-                    <Icon className="h-5 w-5 text-white" />
+            <div className={cn('flex items-center justify-between mb-2', theme.cols === 4 ? 'md:col-span-4 lg:col-span-4' : 'md:col-span-3')}>
+                <div className="flex items-center space-x-3">
+                    <div className={cn('p-2 rounded-xl shadow-md', theme.iconBg)}>
+                        <Icon className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                        <h4 className={cn('text-[11px] font-black uppercase tracking-widest', theme.titleColor)}>
+                            {theme.title}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                            {theme.subtitle}
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h4 className={cn('text-[11px] font-black uppercase tracking-widest', theme.titleColor)}>
-                        {theme.title}
-                    </h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-                        {theme.subtitle}
-                    </p>
-                </div>
+                {!isReadOnly && (
+                    <button
+                        type="button"
+                        onClick={onClear}
+                        className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                        Limpiar campos
+                    </button>
+                )}
             </div>
 
             {/* Campos de especificación */}

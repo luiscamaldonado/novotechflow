@@ -179,6 +179,11 @@ export default function ProposalItemsBuilder() {
         });
     };
 
+    const handleClearSpecs = () => {
+        if (!window.confirm('Esto borrar\u00e1 todos los campos de caracter\u00edsticas de este \u00edtem. \u00bfContinuar?')) return;
+        setItemForm((prev) => ({ ...prev, technicalSpecs: {} }));
+    };
+
     const handleSaveItem = async (e: React.FormEvent) => {
         e.preventDefault();
         const success = await saveItem(itemForm, editingItemId);
@@ -407,6 +412,7 @@ export default function ProposalItemsBuilder() {
                                             onSelectSuggestion={selectSuggestion}
                                             fetchSuggestions={fetchSpecSuggestions}
                                             isReadOnly={isReadOnly}
+                                            onClear={handleClearSpecs}
                                         />
 
                                         {/* Descripción General */}
