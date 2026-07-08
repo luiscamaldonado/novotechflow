@@ -55,6 +55,10 @@ export default function ConflictPanel({
                     <div className="space-y-3">
                         {conflicts.map((item) => (
                             <div key={item.id} className="p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-sm">
+                                <div className="text-xs flex items-center text-gray-500 mb-1.5">
+                                    <span className="font-medium mr-1">Cliente:</span>
+                                    <span className="font-semibold text-gray-900">{item.clientName}</span>
+                                </div>
                                 <div className="flex justify-between items-start mb-1">
                                     <span className="font-semibold text-gray-900">{item.proposalCode}</span>
                                     <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600">

@@ -263,6 +263,7 @@ export type ManualConsecutiveValidation =
 export interface ConflictRecord {
     id: string;
     proposalCode: string;
+    clientName: string;
     issueDate: string;
     subject: string;
     status: string;
