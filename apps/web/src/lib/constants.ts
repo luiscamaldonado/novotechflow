@@ -8,7 +8,7 @@ import {
     Cpu, DollarSign,
     Image as ImageIcon,
 } from 'lucide-react';
-import type { ProposalStatus, SpecFieldDef } from './types';
+import type { ItemType, ProposalStatus, SpecFieldDef, TechnicalSpecs } from './types';
 
 /** Tasa de IVA colombiano (19%). */
 export const IVA_RATE = 0.19;
@@ -88,6 +88,21 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, SpecFieldDe
         unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
     },
 } as const;
+
+/**
+ * Campos de "informacion rapida" por tipo de item — el mismo subconjunto de
+ * specs que la tabla de Configuracion de Item del Constructor de Propuesta
+ * muestra como chips. Subconjunto acotado de SPEC_FIELDS_BY_ITEM_TYPE; se
+ * anexa bajo las Notas Tecnicas en la columna DESCRIPCION del Excel.
+ */
+export const QUICK_SPEC_FIELDS_BY_ITEM_TYPE: Partial<Record<ItemType, (keyof TechnicalSpecs)[]>> = {
+    PCS: ['fabricante', 'modelo', 'procesador', 'memoriaRam', 'almacenamiento', 'garantiaEquipo'],
+    ACCESSORIES: ['tipo', 'fabricante', 'garantia'],
+    PC_SERVICES: ['tipo', 'responsable', 'unidadMedida'],
+    SOFTWARE: ['tipo', 'fabricante', 'unidadMedida'],
+    INFRASTRUCTURE: ['tipo', 'fabricante', 'garantia'],
+    INFRA_SERVICES: ['tipo', 'responsable', 'unidadMedida'],
+};
 
 // Formato (detectado por la IA) que dispara garantia de bateria automatica.
 // Unico formato inequivocamente movil de FORMATO_VALUES; Workstation es ambiguo

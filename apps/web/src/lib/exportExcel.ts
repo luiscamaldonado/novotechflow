@@ -1,7 +1,8 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import type { Scenario, ProposalCalcItem } from '../hooks/useScenarios';
-import { ITEM_TYPE_LABELS, EXCEL_SHEET_NAME_MAX_LENGTH, EXCEL_SHEET_NAME_FORBIDDEN_CHARS } from './constants';
+import type { ItemType } from './types';
+import { ITEM_TYPE_LABELS, EXCEL_SHEET_NAME_MAX_LENGTH, EXCEL_SHEET_NAME_FORBIDDEN_CHARS, QUICK_SPEC_FIELDS_BY_ITEM_TYPE } from './constants';
 import { calculateItemDisplayValues } from './pricing-engine';
 
 // ── Types ──────────────────────────────────────────────
@@ -33,6 +34,16 @@ function getTypeField(specs?: Record<string, string | undefined>): string {
 function getManufacturerField(specs?: Record<string, string | undefined>): string {
     if (!specs) return '';
     return specs.fabricante || specs.responsable || '';
+}
+
+// ── Helper: "informacion rapida" (mismos chips que la tabla de Config. de Item) ──
+function getQuickSpecs(specs: Record<string, string | undefined> | undefined, itemType: string): string {
+    if (!specs) return '';
+    const fields = QUICK_SPEC_FIELDS_BY_ITEM_TYPE[itemType as ItemType] ?? [];
+    return fields
+        .map((field) => specs[field])
+        .filter(Boolean)
+        .join(' \u00b7 ');
 }
 
 // ── Helper: build a unique, XLSX-safe sheet name ──────
@@ -199,6 +210,8 @@ export async function exportToExcel(opts: ExportOptions) {
                 const tipoField = getTypeField(specs);
                 const fabricanteField = getManufacturerField(specs);
                 const descriptionField = piFromArchitect?.description || (item as unknown as { description?: string }).description || '';
+                const quickSpecs = getQuickSpecs(specs, item.itemType);
+                const descriptionCell = [quickSpecs, descriptionField].filter(Boolean).join('\n');
 
                 const costCurrencyLabel = item.costCurrency || 'COP';
                 const trmConversionValue = scenario.conversionTrm ?? null;
@@ -210,7 +223,7 @@ export async function exportToExcel(opts: ExportOptions) {
                     item.name,
                     tipoField,
                     fabricanteField,
-                    descriptionField,
+                    descriptionCell,
                     costCurrencyLabel,
                     si.quantity,
                     dv.effectiveLandedCost,
@@ -235,7 +248,9 @@ export async function exportToExcel(opts: ExportOptions) {
                         left:   { style: 'hair', color: { argb: 'FFE2E8F0' } },
                         right:  { style: 'hair', color: { argb: 'FFE2E8F0' } },
                     };
-                    cell.alignment = { vertical: 'middle', wrapText: colNumber === 6 };
+                    cell.alignment = colNumber === 6
+                        ? { vertical: 'top', wrapText: true }
+                        : { vertical: 'middle' };
 
                     // Numeric columns: right alignment + currency format
                     if ([9, 11, 12, 16, 17, 18].includes(colNumber)) {
