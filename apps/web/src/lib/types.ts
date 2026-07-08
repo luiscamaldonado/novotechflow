@@ -255,3 +255,18 @@ export type ManualConsecutiveValidation =
           suggestion: number | null;
       };
 
+// ──────────────────────────────────────────────────────────
+// Cruce de cuentas
+// ──────────────────────────────────────────────────────────
+
+/** Registro de historial para cruce de cuentas. */
+export interface ConflictRecord {
+    id: string;
+    proposalCode: string;
+    issueDate: string;
+    subject: string;
+    status: string;
+    validityDays: number;
+    user?: { name: string };
+}
+

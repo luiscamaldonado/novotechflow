@@ -28,6 +28,12 @@ export const SUGGESTION_BLUR_DELAY_MS = 200;
 /** Máximo de sugerencias a mostrar en autocompletados. */
 export const MAX_SUGGESTIONS = 20;
 
+/** Tiempo de debounce para la búsqueda de cruce de cuentas (ms). */
+export const CONFLICT_SEARCH_DEBOUNCE_MS = 500;
+
+/** Longitud mínima del nombre del cliente para activar la búsqueda de conflictos. */
+export const MIN_CONFLICT_SEARCH_LENGTH = 3;
+
 /** Labels legibles para cada tipo de ítem. */
 export const ITEM_TYPE_LABELS: Record<string, string> = {
     PCS: 'PCs',
