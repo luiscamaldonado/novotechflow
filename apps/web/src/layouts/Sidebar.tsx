@@ -7,6 +7,7 @@ import {
     LogOut,
     X,
     PlusCircle,
+    Search,
     BookOpen,
     Database,
     Trash2
@@ -31,6 +32,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
         { icon: PlusCircle, label: 'Nueva Propuesta', path: '/proposals/new' },
+        { icon: Search, label: 'Cruce de Cuentas', path: '/tools/account-cross-check' },
     ];
 
     const adminItems = [

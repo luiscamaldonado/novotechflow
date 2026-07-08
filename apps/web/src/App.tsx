@@ -13,6 +13,7 @@ const NewProposal = lazy(() => import('./pages/proposals/NewProposal'));
 const ProposalItemsBuilder = lazy(() => import('./pages/proposals/ProposalItemsBuilder'));
 const ProposalCalculations = lazy(() => import('./pages/proposals/ProposalCalculations'));
 const ProposalDocBuilder = lazy(() => import('./pages/proposals/ProposalDocBuilder'));
+const AccountCrossCheck = lazy(() => import('./pages/tools/AccountCrossCheck'));
 const DefaultPagesAdmin = lazy(() => import('./pages/admin/DefaultPagesAdmin'));
 const SpecOptionsAdmin = lazy(() => import('./pages/admin/SpecOptionsAdmin'));
 const ClientsAdmin = lazy(() => import('./pages/admin/ClientsAdmin'));
@@ -69,6 +70,7 @@ function App() {
             <Route element={<PrivateRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/tools/account-cross-check" element={<AccountCrossCheck />} />
 
                 {/* Rutas de propuestas: vetadas para REPORTER (solo lectura del dashboard) */}
                 <Route element={<ReporterRoute />}>
