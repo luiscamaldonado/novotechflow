@@ -2310,3 +2310,43 @@ En el mismo diagnostico se confirmo, por los logs de Prisma, un defecto real e i
 - **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): incluye `f383288`, `42d19b4` y el commit de este ADR-057.
 - Verificacion funcional en navegador a cargo de Luis (banner, edicion admin, panel de activos).
 - Deuda registrada, no abordada: upsert-en-getter en inactivity y price-thresholds; doble timer de `useMaintenanceBanner`; write de `last_seen_at` del heartbeat.
+
+## ADR-058 — Cruce de Cuentas como herramienta suelta con ruta propia
+**Fecha:** 2026-07-07
+**Estado:** Implementado en master (commits 9e07d29 + 72e9c37), pendiente de push a origin/master y deploy de apps/web en Railway.
+
+### Contexto
+El "cruce de cuentas" (deteccion de solapamiento comercial: al teclear el nombre del cliente, lista propuestas del ultimo ano de cualquier comercial que coincidan, para no cruzar cuentas) existia unicamente embebido en la pantalla de creacion de propuesta (NewProposal.tsx): un useEffect debounced mas un panel lateral, ambos inline. Para consultarlo habia que entrar al flujo de crear una propuesta, aun cuando la intencion fuera solo verificar si un cliente ya lo trabaja alguien. Se pidio exponer esa consulta como funcion independiente accesible desde el sidebar del Dashboard, debajo de "Nueva Propuesta", para todos los roles, sin alterar el comportamiento actual dentro de NewProposal.
+
+El endpoint que alimenta la consulta ya existia: GET /proposals/client-history -> findPotentialConflicts(), lectura pura (Prisma findMany, contains case-insensitive sobre clientName o subject, ultimo ano, max 10), sin filtro por comercial (comportamiento intencional, revisado en auditoria 2026-04-05). Bajo ReporterReadOnlyGuard a nivel de clase, que deja pasar GETs. No se necesito backend nuevo, endpoint nuevo ni migracion.
+
+### Decision
+1. Extraer las piezas inline de cruce de cuentas de NewProposal.tsx a unidades reutilizables, sin cambio de comportamiento (refactor puro): hook useAccountConflicts (la busqueda debounced), componente ConflictPanel en components/proposals/, interface ConflictRecord a lib/types.ts, y las constantes CONFLICT_SEARCH_DEBOUNCE_MS / MIN_CONFLICT_SEARCH_LENGTH a lib/constants.ts. NewProposal pasa a consumir el hook y el componente, y su panel se mantiene identico (mismo lugar, mismo debounce, misma UI). Fuente unica, sin duplicar codigo.
+2. Crear la pantalla suelta pages/tools/AccountCrossCheck.tsx, que reusa el mismo hook y el mismo panel con un input de cliente propio. Cero logica de negocio nueva, cero llamada api nueva.
+3. Registrar la ruta /tools/account-cross-check en App.tsx FUERA del bloque ReporterRoute, hermana de /dashboard, dentro de AppLayout + PrivateRoute. Al ser una consulta de solo lectura y pedirse para todos los roles, REPORTER debe poder usarla; ponerla bajo ReporterRoute (como estan las rutas de /proposals/*) lo habria rebotado al dashboard. Esta es la diferencia deliberada con "Nueva Propuesta": esa es mutacion y sigue vetada a REPORTER; el cruce es lectura y va para todos.
+4. Agregar el item "Cruce de Cuentas" (icono Search) al array navItems de Sidebar.tsx, despues de "Nueva Propuesta", visible para todos los roles (no en adminItems).
+
+### Consecuencias
+- El cruce de cuentas queda con una sola implementacion consumida en dos lugares (NewProposal y la herramienta suelta); un cambio futuro en la busqueda o el panel se hace una sola vez.
+- REPORTER ahora ve y usa "Cruce de Cuentas" sin rebote; es coherente con que REPORTER ya ve todas las propuestas (ADR-054) y el endpoint es un GET permitido por su guard. No expone dato nuevo.
+- Queda un patron nuevo en el proyecto: herramientas sueltas de solo-lectura bajo /tools/, fuera de ReporterRoute, reutilizando piezas extraidas de un flujo mayor.
+- El match del endpoint tambien pega contra subject, por lo que puede traer propuestas de otros clientes cuyo asunto contenga el texto; comportamiento preexistente heredado, no modificado aqui.
+
+### Archivos
+- `apps/web/src/hooks/useAccountConflicts.ts` — hook nuevo con la busqueda debounced (commit `9e07d29`).
+- `apps/web/src/components/proposals/ConflictPanel.tsx` — panel extraido, reutilizable (commit `9e07d29`).
+- `apps/web/src/lib/types.ts` — interface ConflictRecord (commit `9e07d29`).
+- `apps/web/src/lib/constants.ts` — CONFLICT_SEARCH_DEBOUNCE_MS, MIN_CONFLICT_SEARCH_LENGTH (commit `9e07d29`).
+- `apps/web/src/pages/proposals/NewProposal.tsx` — consume hook + panel, sin cambio de comportamiento (commit `9e07d29`).
+- `apps/web/src/pages/tools/AccountCrossCheck.tsx` — pantalla suelta nueva (commit `72e9c37`).
+- `apps/web/src/App.tsx` — ruta /tools/account-cross-check fuera de ReporterRoute (commit `72e9c37`).
+- `apps/web/src/layouts/Sidebar.tsx` — item Cruce de Cuentas en navItems (commit `72e9c37`).
+
+### Commits
+- `9e07d29` — `refactor(web): extract cruce de cuentas to reusable hook and component`
+- `72e9c37` — `feat(web): add Cruce de Cuentas standalone tool with own route`
+- Pendiente — commit de este ADR-058 (`docs: ADR-058 cruce de cuentas standalone tool`)
+
+### Pendientes
+- **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): dispara deploy de apps/web en Railway. Cambio 100% frontend; api no se toca.
+- Verificacion en navegador con un usuario REPORTER real confirmada por Luis (item entra sin rebote, panel funciona).
