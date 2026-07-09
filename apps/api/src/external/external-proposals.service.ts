@@ -15,6 +15,7 @@ import type {
   ExternalItemOut,
   ExternalChildItemOut,
 } from './dto/external-proposals.dto';
+import { buildQuickDescription, pickSpecString, resolveItemTypeLabel } from './external-spec-fields';
 
 type ScenarioItemRel =
   ExternalProposalWithRelations['scenarios'][number]['scenarioItems'][number];
@@ -84,14 +85,19 @@ function toPricingScenarioItem(si: ScenarioItemRel): PricingScenarioItem {
 }
 
 function mapChildOut(child: ChildItemRel): ExternalChildItemOut {
+  const specs = toTechnicalSpecs(child.item.technicalSpecs);
   return {
     scenarioItemId: child.id,
     itemId: child.item.id,
     itemType: child.item.itemType,
+    itemTypeLabel: resolveItemTypeLabel(child.item.itemType),
     name: child.item.name,
     description: child.item.description,
-    brand: child.item.brand,
-    partNumber: child.item.partNumber,
+    brand: pickSpecString(specs, 'fabricante'),
+    partNumber: pickSpecString(specs, 'numeroParte'),
+    formato: pickSpecString(specs, 'formato'),
+    modelo: pickSpecString(specs, 'modelo'),
+    quickSpecs: buildQuickDescription(child.item.itemType, specs),
     quantity: child.quantity,
     unitCost: Number(child.item.unitCost),
     costCurrency: child.item.costCurrency,
@@ -100,7 +106,7 @@ function mapChildOut(child: ChildItemRel): ExternalChildItemOut {
     proveedor: extractProveedor(child.item.internalCosts),
     isTaxable: child.item.isTaxable,
     deliveryDays: child.item.deliveryDays,
-    technicalSpecs: toTechnicalSpecs(child.item.technicalSpecs),
+    technicalSpecs: specs,
   };
 }
 
@@ -152,14 +158,19 @@ export class ExternalProposalsService {
         s.currency,
         s.conversionTrm,
       );
+      const specs = toTechnicalSpecs(si.item.technicalSpecs);
       return {
         scenarioItemId: si.id,
         itemId: si.item.id,
         itemType: si.item.itemType,
+        itemTypeLabel: resolveItemTypeLabel(si.item.itemType),
         name: si.item.name,
         description: si.item.description,
-        brand: si.item.brand,
-        partNumber: si.item.partNumber,
+        brand: pickSpecString(specs, 'fabricante'),
+        partNumber: pickSpecString(specs, 'numeroParte'),
+        formato: pickSpecString(specs, 'formato'),
+        modelo: pickSpecString(specs, 'modelo'),
+        quickSpecs: buildQuickDescription(si.item.itemType, specs),
         quantity: si.quantity,
         unitCost: Number(si.item.unitCost),
         costCurrency: si.item.costCurrency,
@@ -172,7 +183,7 @@ export class ExternalProposalsService {
         isTaxable: si.item.isTaxable,
         deliveryDays: si.item.deliveryDays,
         isDiluted: si.isDiluted,
-        technicalSpecs: toTechnicalSpecs(si.item.technicalSpecs),
+        technicalSpecs: specs,
         unitSalePrice: display.unitPrice,
         children: si.children.map(mapChildOut),
       };
