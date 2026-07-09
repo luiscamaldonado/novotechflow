@@ -2382,7 +2382,7 @@ El DTO del backend se deja como `@IsOptional()`: `PATCH /proposals/:id` es un up
 
 ### Archivos
 
-- `apps/api/prisma/migrations/<timestamp>_backfill_issue_city_default/migration.sql` — backfill de datos.
+- `apps/api/prisma/migrations/20260709005733_backfill_issue_city_default/migration.sql` — backfill de datos.
 - `apps/web/src/pages/proposals/components/CityCombobox.tsx` — prop `required`, asterisco, borde de aviso.
 - `apps/web/src/pages/proposals/ProposalDocBuilder.tsx` — eliminación de los defaults, paso de `required`, bloqueo del botón PDF.
 
