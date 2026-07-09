@@ -118,6 +118,7 @@ export function useScenarios(proposalId: string | undefined) {
             const res = await api.post(`/proposals/${proposalId}/scenarios`, {
                 name,
                 description: '',
+                conversionTrm: trm?.valor,
             });
             setScenarios(prev => [...prev, { ...res.data, scenarioItems: [] }]);
             setActiveScenarioId(res.data.id);
