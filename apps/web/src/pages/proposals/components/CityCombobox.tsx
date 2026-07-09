@@ -8,9 +8,10 @@ interface CityComboboxProps {
     value: string;
     onChange: (v: string) => void;
     disabled?: boolean;
+    required?: boolean;
 }
 
-function CityCombobox({ value, onChange, disabled = false }: CityComboboxProps) {
+function CityCombobox({ value, onChange, disabled = false, required = false }: CityComboboxProps) {
     const [query, setQuery] = useState(value);
     const [open, setOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -47,6 +48,7 @@ function CityCombobox({ value, onChange, disabled = false }: CityComboboxProps) 
         <div ref={wrapperRef} className="relative">
             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
                 Ciudad de emisión
+                {required && <span className="text-red-400 ml-0.5">*</span>}
             </label>
             <div className="flex items-center mt-0.5">
                 <input
@@ -64,7 +66,10 @@ function CityCombobox({ value, onChange, disabled = false }: CityComboboxProps) 
                         }
                     }}
                     placeholder="Buscar ciudad..."
-                    className="bg-transparent border-none text-sm font-bold text-slate-800 focus:ring-0 p-0 w-44 placeholder:text-slate-300 placeholder:font-normal disabled:opacity-60 disabled:cursor-not-allowed"
+                    className={cn(
+                        "bg-transparent text-sm font-bold text-slate-800 focus:ring-0 p-0 w-44 placeholder:text-slate-300 placeholder:font-normal disabled:opacity-60 disabled:cursor-not-allowed",
+                        required && !value ? "border-b-2 border-red-400" : "border-none"
+                    )}
                     autoComplete="off"
                 />
                 {!disabled && (
