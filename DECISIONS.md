@@ -2336,3 +2336,47 @@ Restricción de entorno: el CLI no está en winget, y la regla del proyecto (§8
 - **Montar el MCP de Railway en Claude Code**, decidiendo el modo de cableado que respete la regla `npx`/`npm` (evaluar `railway mcp install` vía CLI vs. apuntar a un binario), y agregando deny-rules explícitas en `.claude/settings.local.json` para las tools de escritura (`variable set`, `up`, `redeploy`, `accept-deploy`), igual que el deny ya existente de `git push`. Verificar que Claude Code no pueda disparar un redeploy antes de darlo por cerrado.
 - **Reglas de manejo de secretos aplicadas al MCP:** trasladar las reglas 4 y 5 de este ADR al uso del MCP (variables solo por nombre, logs redactados y acotados).
 - **Habilitación de escrituras seguras (etapa futura, si se decide):** crear variables solo en entornos no-prod, o en prod con confirmación explícita de Luis (equivalente al gate del push). Fuera de alcance de este ADR.
+
+## ADR-059 — Enriquecimiento del contrato de la API externa: marca, número de parte, formato, modelo y quick specs derivados de technicalSpecs
+
+**Fecha:** 2026-07-08
+**Estado:** Aceptado
+
+### Contexto
+
+La API externa de solo lectura (módulo `/external` en `apps/api`, rama `feature/external-api`) expone las propuestas GANADA para consumo de Felipe. El contrato por ítem (`ExternalItemOut` / `ExternalChildItemOut`) traía `brand` y `partNumber` leídos directamente de las columnas escalares de `ProposalItem`. Al verificar la respuesta real contra la DB local se encontró que esas columnas venían vacías (`""`), mientras el dato real —marca, número de parte, formato, modelo— vivía dentro del JSON `technicalSpecs`, bajo las claves `fabricante`, `numeroParte`, `formato`, `modelo`. El consumidor tenía que entrar al blob `technicalSpecs` (tipado `Record<string, unknown>`, sin contrato) para leer esos valores, y la "descripción rápida" (quick specs) no se exponía en absoluto: se calcula solo en `apps/web` con `buildQuickDescription`.
+
+Regla de fondo acordada con Luis: la fuente de verdad de marca, número de parte, formato y modelo es **lo que el usuario ve en la UI de specs**, es decir `technicalSpecs`, no las columnas del `ProposalItem`. En la UI no existe un campo "Marca"; lo que el usuario captura es **Fabricante** (`technicalSpecs.fabricante`).
+
+### Decisión
+
+Enriquecer el contrato de la API externa tomando el dato desde `technicalSpecs`, sin introducir un paquete compartido (Opción A: cambio contenido en `apps/api/src/external`):
+
+1. **`brand` y `partNumber`** pasan a leerse de `technicalSpecs` (`fabricante` y `numeroParte` respectivamente) vía `pickSpecString`, en lugar de las columnas del `ProposalItem`. Se rellenan los campos que Felipe ya conocía, ahora con el dato real, sin cambiar sus nombres.
+2. **Campos nuevos de primer nivel**: `formato`, `modelo` (desde `technicalSpecs`), `quickSpecs` (derivado con `buildQuickDescription`) e `itemTypeLabel` (etiqueta legible del `itemType` vía `ITEM_TYPE_LABELS`, p. ej. `PCS` → `PCs`).
+3. Mismo tratamiento en `ExternalChildItemOut` (sub-ítems).
+4. La lógica de display (`buildQuickDescription`, `ITEM_TYPE_LABELS`, más el helper `pickSpecString`) se replica en un archivo nuevo `apps/api/src/external/external-spec-fields.ts`, adaptada al tipado `Record<string, unknown>` del backend (coerción `typeof === 'string'`, sin `any`).
+
+Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente de la rama (que ya arrastra la colisión del ADR-057); no toca estructura de paquetes.
+
+### Consecuencias
+
+- El consumidor externo recibe marca, número de parte, formato, modelo y quick specs como campos planos con contrato explícito, alineados con lo que el usuario ve en la UI, sin tener que parsear el blob `technicalSpecs`.
+- `technicalSpecs` se sigue exponiendo crudo, por compatibilidad.
+- **Deuda registrada**: `buildQuickDescription` e `ITEM_TYPE_LABELS` quedan duplicados entre `apps/web` y `apps/api`. Si el mapa `itemType → campos` o las etiquetas cambian en web, la API externa queda desincronizada en silencio. Como es lógica de display read-only, el impacto de un drift es bajo. **Follow-up**: extraer esta lógica a un paquete compartido (patrón de `@repo/pricing-engine`, ADR-052) que consuman web y api, al estabilizar/mergear la rama.
+
+### Archivos
+
+- `apps/api/src/external/external-spec-fields.ts` (nuevo) — `resolveItemTypeLabel`, `pickSpecString`, `buildQuickDescription`.
+- `apps/api/src/external/dto/external-proposals.dto.ts` — `itemTypeLabel`, `formato`, `modelo`, `quickSpecs` en `ExternalItemOut` y `ExternalChildItemOut`.
+- `apps/api/src/external/external-proposals.service.ts` — `brand`/`partNumber` desde `technicalSpecs`; campos derivados en el ítem top-level y en `mapChildOut`.
+
+### Commits
+
+- `ba476c3` — feat(external): expose brand, part number, format, model and quick specs from technical specs
+- Pendiente — commit de este ADR-059 (`docs: ADR-059 enrich external api contract from technical specs`)
+
+### Pendientes
+
+- **Extracción a paquete compartido** de `buildQuickDescription` / `ITEM_TYPE_LABELS` (elimina el duplicado web/api), al mergear la rama.
+- **Renumeración del ADR-057 de esta rama** (Railway CLI) al mergear a master, por colisión con el ADR-057 de master (getMaintenanceBanner).
