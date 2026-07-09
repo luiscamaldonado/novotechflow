@@ -2350,3 +2350,47 @@ El endpoint que alimenta la consulta ya existia: GET /proposals/client-history -
 ### Pendientes
 - **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): dispara deploy de apps/web en Railway. Cambio 100% frontend; api no se toca.
 - Verificacion en navegador con un usuario REPORTER real confirmada por Luis (item entra sin rebote, panel funciona).
+
+## ADR-059 — Ciudad de emisión obligatoria en el constructor del documento
+
+**Fecha:** 2026-07-09
+**Estado:** Aceptado
+
+### Contexto
+
+El campo "Ciudad de emisión" del constructor del documento (`ProposalDocBuilder`) tenía un valor por defecto hardcodeado `'Bogotá D.C.'` en tres sitios: los estados locales `selectedCity` y `savedCity`, y como fallback al cargar la propuesta (`data.issueCity || 'Bogotá D.C.'`). No existía validación de obligatoriedad en ninguna capa: ni marca visual en el campo, ni bloqueo de la generación del PDF, ni restricción en el DTO (`@IsOptional()`) o el schema (`issueCity String?`).
+
+Esto producía dos problemas. Primero, la persistencia de la ciudad es manual (botón "✓ Guardar", que solo aparece si el valor cambió); una propuesta donde el usuario dejaba el default sin tocar quedaba con `issue_city` NULL en la base, mostrando "Bogotá D.C." solo por el default en memoria. Segundo, la ciudad alimenta el marcador `µCiudad` del documento vía `replaceMarkers`, que no sustituye valores vacíos: una ciudad en `""` dejaría el literal `µCiudad` sin reemplazar en el PDF final.
+
+### Decisión
+
+Hacer la ciudad de emisión obligatoria y vacía por defecto en documentos nuevos, forzando una elección explícita del usuario:
+
+1. **Backfill de datos.** Migración de datos (no de schema) que rellena `issue_city = 'Bogotá D.C.'` en todas las propuestas con el campo NULL, preservando el valor que ya venían mostrando. Idempotente (`WHERE "issue_city" IS NULL`).
+2. **Vacío por defecto.** Eliminados los tres defaults hardcodeados en `ProposalDocBuilder`; el campo arranca en `''` para documentos nuevos. Tras el backfill, toda propuesta existente ya trae su ciudad, así que el cambio solo afecta a documentos nuevos.
+3. **Marca visual de obligatorio.** `CityCombobox` recibe una prop `required`; muestra un asterisco rojo en el label y un borde inferior rojo cuando el campo está vacío. Se activa solo en propuestas editables (`required={!isReadOnly}`).
+4. **Bloqueo del PDF.** El botón "Vista Previa PDF" se deshabilita mientras la ciudad esté vacía, con tooltip explicativo. Esto impide llegar a la generación del documento sin ciudad, evitando el marcador `µCiudad` sin reemplazar.
+
+El DTO del backend se deja como `@IsOptional()`: `PATCH /proposals/:id` es un update parcial y forzar la presencia del campo rompería otros updates de la propuesta. La obligatoriedad se garantiza en el frontend (default vacío + bloqueo del PDF), no en el contrato del PATCH.
+
+### Consecuencias
+
+- Los documentos nuevos exigen una elección explícita de ciudad antes de generar el PDF; se elimina la clase de bug del marcador `µCiudad` sin reemplazar por ciudad vacía.
+- Las propuestas existentes (incluidas las cerradas/solo-lectura, que no se pueden editar) conservan su ciudad gracias al backfill; ninguna queda con el PDF roto.
+- La migración modifica datos de producción. Es idempotente y fue precedida de `pg_dump`.
+- La obligatoriedad vive solo en el frontend. Un cliente de la API que haga PATCH directo aún puede dejar `issueCity` nulo; se aceptó por no romper la naturaleza parcial del endpoint.
+
+### Archivos
+
+- `apps/api/prisma/migrations/<timestamp>_backfill_issue_city_default/migration.sql` — backfill de datos.
+- `apps/web/src/pages/proposals/components/CityCombobox.tsx` — prop `required`, asterisco, borde de aviso.
+- `apps/web/src/pages/proposals/ProposalDocBuilder.tsx` — eliminación de los defaults, paso de `required`, bloqueo del botón PDF.
+
+### Commits
+
+- `eec6fdd` — chore(db): backfill issueCity for existing proposals
+- `6ef618e` — feat(proposals): make issue city required, empty by default
+
+### Pendientes
+
+Ninguno.
