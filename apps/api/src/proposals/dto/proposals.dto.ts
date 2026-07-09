@@ -426,3 +426,13 @@ export class ReorderScenarioItemsDto {
   @IsString({ each: true })
   itemIds: string[];
 }
+
+// ── Scenarios Reorder DTO ────────────────────────────────────
+
+/**
+ * DTO para reordenar escenarios dentro de una propuesta.
+ */
+export class ReorderScenariosDto {
+  @IsString({ each: true })
+  scenarioIds: string[];
+}

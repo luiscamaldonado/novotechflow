@@ -56,6 +56,7 @@ import {
   UpdateBlockDto,
   ReorderBlocksDto,
   ReorderScenarioItemsDto,
+  ReorderScenariosDto,
 } from './dto/proposals.dto';
 
 /**
@@ -237,6 +238,19 @@ export class ProposalsController {
     @Request() req: { user: AuthenticatedUser },
   ) {
     return this.scenariosService.cloneScenario(scenarioId, req.user);
+  }
+
+  @Patch(':id/scenarios/reorder')
+  async reorderScenarios(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: ReorderScenariosDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.reorderScenarios(
+      id,
+      data.scenarioIds,
+      req.user,
+    );
   }
 
   @Post('scenarios/:scenarioId/items')
