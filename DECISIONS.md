@@ -2436,3 +2436,47 @@ El campo `Scenario.conversionTrm` se mantiene nullable (sin migración de schema
 - Backfill de escenarios existentes con `conversionTrm` NULL (estampar la TRM del día para congelarlos en el valor que Cálculos ya muestra). Requiere conteo previo contra producción para dimensionar alcance por estado de propuesta. El caso reportado, COT-LM01525-2 / Escenario 2 (GANADA, USD), es uno de ellos.
 - `changeCurrency` (toggle de moneda en `ScenarioHeader`) no estampa TRM al cambiar la moneda; un escenario que cambia a USD sin TRM persistida reproduce la condición NULL. Fuera de alcance de este fix.
 - Guarda de `convertCost` en `pricing-engine.ts`: la condición `!trm || trm <= 0` mezcla "misma moneda, no convertir" (correcto) con "hay que convertir pero falta TRM" (devuelve sin convertir, silencioso). El segundo caso debería fallar ruidoso en vez de producir un número plausible pero falso. Cambio de mayor alcance en el pricing-engine, evaluar por separado.
+
+## ADR-061 — Reordenamiento de escenarios en el constructor de cálculos
+
+**Fecha:** 2026-07-09
+**Estado:** Aceptado
+
+### Contexto
+
+El sidebar de escenarios (ScenarioSidebar) permitía crear, clonar y borrar escenarios, pero no cambiar su orden. El modelo Scenario ya tenía el campo `sortOrder Int @default(0)` y `getScenariosByProposalId` ya ordenaba por él (`orderBy: { sortOrder: 'asc' }`), pero no existía forma de persistir un cambio de orden: el DTO y el servicio de update genérico (`updateScenario`) no incluían `sortOrder` en su whitelist, y no había endpoint ni método de hook para reordenar. El reordenamiento de ítems dentro de un escenario (`reorderScenarioItems`, `reorderItems`) ya existía end-to-end y sirvió de plantilla.
+
+### Decisión
+
+Reordenamiento end-to-end espejando el patrón ya probado del reorder de ítems, sin tocar el update genérico de escenarios.
+
+Backend: nuevo endpoint dedicado `PATCH /proposals/:id/scenarios/reorder` (body `{ scenarioIds: string[] }`), con `ReorderScenariosDto` y método `reorderScenarios` en scenarios.service.ts. El método verifica ownership de la propuesta reusando `verifyProposalOwnership` (el mismo mecanismo que `getScenariosByProposalId`), valida que el payload sea una permutación exacta de los escenarios de la propuesta (misma longitud y mismo conjunto, rechazando duplicados) y lanza BadRequestException si no lo es, y asigna `sortOrder` por índice en una `$transaction` atómica. Devuelve los escenarios de la propuesta con sus ítems ordenados, mismo shape que `GET /proposals/:id/scenarios`. La escritura queda automáticamente negada a REPORTER por el `ReporterReadOnlyGuard` de clase, sin decorador extra.
+
+Frontend: método `reorderScenarios(orderedScenarioIds)` en useScenarios.ts, con actualización optimista que reordena el array `scenarios` en estado (lo que dispara la animación `layout` del sidebar) y persistencia fire-and-forget con debounce (`SCENARIO_REORDER_DEBOUNCE_MS`, reusada) sobre un ref/timer dedicado, paralelo al de ítems, con flush-on-unmount. En ScenarioSidebar, botones Subir/Bajar (ChevronUp/ChevronDown) por fila, deshabilitados en los extremos, con un helper `moveScenario` que intercambia el id adyacente y llama al hook.
+
+### Consecuencias
+
+1. El orden de los escenarios es persistente y editable desde la UI; el reorden se refleja al recargar.
+2. Se decidió NO agregar `sortOrder` al `updateScenario`/`UpdateScenarioDto` genérico: el reordenamiento va por su propio endpoint, manteniendo el update genérico acotado a los campos editables por el usuario (name, currency, description, conversionTrm).
+3. El endpoint dedicado es atómico (una `$transaction`) y de paso normaliza la secuencia de `sortOrder`, que create/clone/delete dejan con huecos. No se reindexó create/clone/delete: quedan fuera de alcance.
+4. La interfaz local `Scenario` del hook no recibió `sortOrder`: el orden lo determina la posición en el array, no un campo tipado en el frontend.
+
+### Archivos
+
+- `apps/api/src/proposals/dto/proposals.dto.ts` — nuevo `ReorderScenariosDto`
+- `apps/api/src/proposals/scenarios.service.ts` — nuevo método `reorderScenarios`
+- `apps/api/src/proposals/proposals.controller.ts` — nueva ruta `PATCH :id/scenarios/reorder`
+- `apps/web/src/hooks/useScenarios.ts` — método `reorderScenarios`, refs dedicados y flush-on-unmount
+- `apps/web/src/pages/proposals/components/ScenarioSidebar.tsx` — botones Subir/Bajar y helper `moveScenario`
+- `apps/web/src/pages/proposals/ProposalCalculations.tsx` — enhebrado del prop `reorderScenarios`
+
+### Commits
+
+- `cccc649` — feat(scenarios): add reorder endpoint
+- `bb6448d` — feat(scenarios): add reorder UI
+
+### Pendientes
+
+- Verificación en navegador (Luis): reordenar, persistencia tras F5, botones deshabilitados en extremos, escenario activo preservado.
+- El endpoint asigna `sortOrder` base 1 (`i + 1`), homogéneo con `reorderScenarioItems` y `createScenario`. Sin acción pendiente; se deja registrado por si se audita la consistencia de `sortOrder`.
+- Revisar la regla de encoding "escapes Unicode en strings JS/TS" (INSTRUCTIVO §7, instrucciones del proyecto §5) frente a la realidad del código: scenarios.service.ts y el resto usan acentos UTF-8 reales en literales y compilan/despliegan bien. Definir en una pasada dedicada si se actualiza la regla o se convierten los stragglers; no tocar ahora.
