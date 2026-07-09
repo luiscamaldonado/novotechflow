@@ -2394,3 +2394,45 @@ El DTO del backend se deja como `@IsOptional()`: `PATCH /proposals/:id` es un up
 ### Pendientes
 
 Ninguno.
+
+## ADR-060 — Persistencia de la TRM del día al crear el escenario: fin de la TRM flotante en memoria
+
+**Fecha:** 2026-07-09
+**Estado:** Aceptado
+
+### Contexto
+
+La TRM de conversión de un escenario (`Scenario.conversionTrm`, `Float?` nullable) nacía en NULL: `createScenario` en el backend acepta el campo (`CreateScenarioDto` con `@IsOptional() @IsNumber()`) y lo persiste (`data.conversionTrm ?? undefined`), pero el frontend nunca lo enviaba — el POST de `createScenario` en `useScenarios.ts` mandaba solo `{ name, description }`. La TRM del día, obtenida por fetch a `co.dolarapi.com`, vivía únicamente como estado local de React (`trm.valor`) y solo se persistía si el usuario editaba el campo a mano o pulsaba "Hoy" en el `ScenarioHeader` (`updateConversionTrm` → PATCH).
+
+Esto producía un escenario con `conversionTrm` NULL en la base pese a mostrar un precio "correcto" en pantalla. La ventana de Cálculos (`useScenarios`) lo enmascaraba con un fallback en memoria: `effectiveConversionTrm = conversionTrm ?? trm?.valor`, que cae a la TRM del día en vivo cuando el campo persistido es NULL. La ventana de Construcción (`useProposalScenarios`) NO tiene ese fallback: pasa `scenario.conversionTrm` crudo al pricing-engine. Con TRM NULL, la guarda de `convertCost` (`if (itemCurrency === scenarioCurrency || !trm || trm <= 0) return unitCost`) devuelve el costo en COP sin dividir; en un escenario USD, un costo de ~6.111.111 COP se rotulaba como USD 6.111.111 y disparaba una falsa alarma de precio techo ("Revisa antes de continuar"). La aritmética confirma la causa: 6.111.111 / 1.829,87 ≈ 3.340, la TRM del día sin aplicar. La validación piso/techo es correcta y no viola CONVENTIONS §J; el defecto era la TRM NULL que recibía aguas arriba.
+
+El diseño original (ADR-003) preveía el campo TRM "pre-poblado con la TRM del día", pero esa pre-población se implementó solo como el fallback en memoria de Cálculos —display-only, nunca persistido—, no como un valor real en la base.
+
+### Decisión
+
+Persistir la TRM del día en el escenario desde su creación, en lugar de dejarla flotar en memoria. Cambio mínimo en el frontend: `createScenario` en `apps/web/src/hooks/useScenarios.ts` agrega `conversionTrm: trm?.valor` al payload del POST. El optional chaining produce `undefined` cuando `trm` es NULL, de modo que el backend crea sin TRM igual que antes (sin persistir 0 ni NULL explícito); no hay regresión en el camino sin TRM disponible.
+
+No se tocó el backend: el DTO ya aceptaba el campo y `createScenario` ya lo persistía. No se tocó el fallback de Cálculos (`effectiveConversionTrm`): sigue cubriendo escenarios que aún no tienen TRM persistida. `cloneScenario` ya copia `conversionTrm` del origen, así que una vez que las fuentes dejen de nacer en NULL, los clones heredan un valor real sin cambios adicionales.
+
+El campo `Scenario.conversionTrm` se mantiene nullable (sin migración de schema): escenarios creados antes de este cambio siguen en NULL y el fallback de Cálculos los cubre mientras tanto.
+
+### Consecuencias
+
+- Todo escenario nuevo nace con la TRM del día persistida; la falsa alarma de precio techo por TRM NULL no vuelve a aparecer en escenarios creados a partir de este cambio.
+- Cálculos, Construcción y el PDF ven el mismo número para escenarios nuevos: la TRM deja de recalcularse sola al pasar de día, y el precio USD de una propuesta nueva queda determinista una vez creado el escenario.
+- Escenarios preexistentes con `conversionTrm` NULL no se corrigen con este cambio (es hacia adelante). Siguen mostrándose bien en Cálculos por el fallback, pero disparan la falsa alarma en Construcción hasta que el usuario fije la TRM a mano (editar el campo o botón "Hoy") o se ejecute el backfill pendiente.
+- El cambio es de una sola línea en el frontend; el backend quedó intacto.
+
+### Archivos
+
+- `apps/web/src/hooks/useScenarios.ts` — `createScenario` agrega `conversionTrm: trm?.valor` al payload del POST.
+
+### Commits
+
+- `22bf7ed` — fix(scenarios): persist daily TRM on scenario creation
+
+### Pendientes
+
+- Backfill de escenarios existentes con `conversionTrm` NULL (estampar la TRM del día para congelarlos en el valor que Cálculos ya muestra). Requiere conteo previo contra producción para dimensionar alcance por estado de propuesta. El caso reportado, COT-LM01525-2 / Escenario 2 (GANADA, USD), es uno de ellos.
+- `changeCurrency` (toggle de moneda en `ScenarioHeader`) no estampa TRM al cambiar la moneda; un escenario que cambia a USD sin TRM persistida reproduce la condición NULL. Fuera de alcance de este fix.
+- Guarda de `convertCost` en `pricing-engine.ts`: la condición `!trm || trm <= 0` mezcla "misma moneda, no convertir" (correcto) con "hay que convertir pero falta TRM" (devuelve sin convertir, silencioso). El segundo caso debería fallar ruidoso en vez de producir un número plausible pero falso. Cambio de mayor alcance en el pricing-engine, evaluar por separado.
