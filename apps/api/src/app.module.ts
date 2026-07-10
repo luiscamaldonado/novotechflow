@@ -13,6 +13,7 @@ import { TemplatesModule } from './templates/templates.module';
 import { BillingProjectionsModule } from './billing-projections/billing-projections.module';
 import { SpecOptionsModule } from './spec-options/spec-options.module';
 import { SpecPrefillModule } from './spec-prefill/spec-prefill.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -29,6 +30,7 @@ import { APP_GUARD } from '@nestjs/core';
     BillingProjectionsModule,
     SpecOptionsModule,
     SpecPrefillModule,
+    SuppliersModule,
     PresenceModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }]),
   ],
