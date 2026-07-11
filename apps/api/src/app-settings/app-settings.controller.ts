@@ -7,9 +7,11 @@ import { AppSettingsService } from './app-settings.service';
 import { UpdateInactivityTimeoutDto } from './dto/update-inactivity-timeout.dto';
 import { UpdateMaintenanceBannerDto } from './dto/update-maintenance-banner.dto';
 import { UpdatePriceThresholdsDto } from './dto/update-price-thresholds.dto';
+import { UpdateSupplierFieldRequirementsDto } from './dto/update-supplier-field-requirements.dto';
 import type {
   MaintenanceBanner,
   PriceThresholds,
+  SupplierFieldRequirements,
 } from './app-settings.service';
 
 /** Typed request after JWT authentication — mirrors the pattern in users.controller.ts */
@@ -95,6 +97,31 @@ export class AppSettingsController {
     return this.appSettingsService.updatePriceThresholds(
       dto.copMinUnitPrice,
       dto.usdMaxUnitPrice,
+      req.user.id,
+    );
+  }
+
+  @Get('supplier-field-requirements')
+  @SkipThrottle()
+  @ApiOperation({
+    summary: 'Obtener obligatoriedad de campos de contacto de proveedor',
+  })
+  async getSupplierFieldRequirements(): Promise<SupplierFieldRequirements> {
+    return this.appSettingsService.getSupplierFieldRequirements();
+  }
+
+  @Patch('supplier-field-requirements')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary:
+      'Actualizar obligatoriedad de campos de contacto de proveedor (solo admin)',
+  })
+  async updateSupplierFieldRequirements(
+    @Body() dto: UpdateSupplierFieldRequirementsDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<SupplierFieldRequirements> {
+    return this.appSettingsService.updateSupplierFieldRequirements(
+      dto,
       req.user.id,
     );
   }
