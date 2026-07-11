@@ -2480,3 +2480,58 @@ Frontend: método `reorderScenarios(orderedScenarioIds)` en useScenarios.ts, con
 - Verificación en navegador (Luis): reordenar, persistencia tras F5, botones deshabilitados en extremos, escenario activo preservado.
 - El endpoint asigna `sortOrder` base 1 (`i + 1`), homogéneo con `reorderScenarioItems` y `createScenario`. Sin acción pendiente; se deja registrado por si se audita la consistencia de `sortOrder`.
 - Revisar la regla de encoding "escapes Unicode en strings JS/TS" (INSTRUCTIVO §7, instrucciones del proyecto §5) frente a la realidad del código: scenarios.service.ts y el resto usan acentos UTF-8 reales en literales y compilan/despliegan bien. Definir en una pasada dedicada si se actualiza la regla o se convierten los stragglers; no tocar ahora.
+
+## ADR-062 — Catálogo global de proveedores con contactos y toggles de obligatoriedad de campos
+
+**Fecha:** 2026-07-10
+**Estado:** Aceptado
+
+### Contexto
+
+El constructor de propuestas registraba el "origen" de cada ítem (MAYORISTA / FABRICANTE / NOVOTECHNO / OTROS) como texto suelto dentro del JSON `internalCosts` del ítem, que además dispara el flete (solo MAYORISTA suma 1.5%). Ese origen no identifica al tercero concreto ni a su contacto comercial. El objetivo del negocio es trazabilidad: si el comercial que llevaba la relación se va, el que llega debe encontrar con quién se cotizó. Se requería una base de proveedores compartida entre los ~6 usuarios, deduplicada, que se fuera enriqueciendo con el uso. Se disponía de un CSV inicial de ~2000 terceros (nombre + NIT), sin contactos.
+
+### Decisión
+
+Se agrega un catálogo global de proveedores como entidad propia, separado del origen del ítem (que se conserva intacto en `internalCosts`, junto con su acople al flete). Dos tablas nuevas: `SupplierCompany` (nombre normalizado, `nit` opcional y único donde exista, `source` CSV/MANUAL para separar los dos pozos, auditoría de creación) y `SupplierContact` (1—N por empresa: nombre obligatorio, teléfono y correo opcionales). El ítem (`ProposalItem`) referencia empresa y contacto vía dos FK nullable (`supplierCompanyId`, `supplierContactId`), con `ON DELETE SET NULL` para que borrar un proveedor nunca borre ítems; los contactos caen en cascada con su empresa.
+
+El módulo `suppliers` expone el catálogo como global compartido: GET de lista alfabética con contactos anidados y POST de creación (empresa y contacto), todo para cualquier usuario autenticado. Es una excepción consciente al patrón de ownership/IDOR del resto de la app: un catálogo compartido no tiene dueño por fila. La creación de empresas es solo para el pozo MANUAL (origen OTROS): sin NIT (se captura fuera de esta app), con el nombre normalizado server-side (trim, colapsar espacios, quitar puntos, MAYÚSCULAS, acentos conservados) y dedup por nombre normalizado idéntico que responde 409. Las empresas del CSV entran por seed aparte y quedan duras por el `@unique` del NIT.
+
+Adicionalmente, se agregan tres toggles en `app_settings` (`supplier_contact_name_required`, `supplier_contact_phone_required`, `supplier_contact_email_required`), con default `true`, para que un admin pueda relajar la obligatoriedad de los campos de contacto si generan fricción a los comerciales. Se calca el patrón de settings existente (GET para cualquier autenticado con upsert idempotente; PATCH solo admin), con el PATCH en `upsert` (no `update`) para no depender de que el GET haya sembrado la key antes.
+
+Este ADR cubre solo el backend (schema + módulo + toggles). El consumo en el constructor y la UI de administración de los toggles son trabajo de frontend posterior.
+
+### Consecuencias
+
+1. El origen del ítem y su acople al flete quedan intactos: el catálogo es aditivo y no toca el pricing-engine ni el JSON `internalCosts`.
+2. La migración es estrictamente aditiva (enum nuevo, dos columnas nullable en `proposal_items`, dos tablas, índices, cinco FK). Las columnas nuevas nacen 100% NULL; sin backfill ni pérdida de datos.
+3. El dedup de empresas MANUAL se apoya en `findFirst` por nombre normalizado (no hay `@@unique([name])` en el schema). Es una limitación conocida: existe una ventana de carrera teórica entre dos POST idénticos concurrentes, despreciable con ~6 usuarios y resultado fusionable, no corrupción. Upgrade path si aparece presión de duplicados: agregar `@@unique([name])` y atrapar P2002→409. No se hizo hoy para no arriesgar el seed (dos nombres normalizados idénticos con NIT distinto) ni encadenar otra migración.
+4. Las empresas del CSV con NIT distinto pero mismo nombre normalizado conviven sin problema (el dedup MANUAL es por nombre; el del CSV es por NIT). El NIT se persiste como dígitos crudos (sin puntos ni guion) para que el `@unique` sea robusto.
+5. El FK `supplier_contact_id` no tiene índice (solo `supplier_company_id`); por diseño, dado que hoy las columnas están vacías. Si los lookups o borrados por contacto se vuelven ruta caliente, evaluar `@@index([supplierContactId])`.
+6. Al desplegar a producción, el `CREATE INDEX` y los `ADD FOREIGN KEY` sobre `proposal_items` toman locks de escritura breves (Prisma no usa CONCURRENTLY); sub-segundo con el volumen actual, pero conviene el push en baja carga.
+
+### Archivos
+
+- `apps/api/prisma/schema.prisma` — enum `SupplierSource`, modelos `SupplierCompany` y `SupplierContact`, dos FK nullable + índice en `ProposalItem`, relaciones inversas en `User`
+- `apps/api/prisma/migrations/20260710230645_add_supplier_catalog/migration.sql` — migración aditiva del catálogo
+- `apps/api/src/suppliers/suppliers.service.ts` — normalización de nombre, `findAll`, `createCompany` (dedup 409), `createContact`
+- `apps/api/src/suppliers/suppliers.controller.ts` — GET lista / POST empresa / POST contacto, JWT a nivel clase, sin ownership
+- `apps/api/src/suppliers/suppliers.module.ts` — módulo del catálogo
+- `apps/api/src/suppliers/dto/create-supplier-company.dto.ts` — DTO de empresa (solo nombre)
+- `apps/api/src/suppliers/dto/create-supplier-contact.dto.ts` — DTO de contacto (nombre obligatorio, teléfono/correo opcionales)
+- `apps/api/src/app.module.ts` — registro de `SuppliersModule`
+- `apps/api/src/app-settings/app-settings.service.ts` — tres keys, interfaz `SupplierFieldRequirements`, getter idempotente y setter en upsert
+- `apps/api/src/app-settings/app-settings.controller.ts` — GET (SkipThrottle) / PATCH (AdminGuard) de los toggles
+- `apps/api/src/app-settings/dto/update-supplier-field-requirements.dto.ts` — DTO de los toggles (tres booleanos opcionales)
+
+### Commits
+
+- `626732b` — feat(suppliers): add supplier company and contact catalog schema
+- `11db726` — feat(suppliers): add suppliers module with global catalog endpoints
+- `1a16f7f` — feat(app-settings): add supplier contact field requirement toggles
+
+### Pendientes
+
+- Limpieza y seed del CSV de ~2000 terceros a `SupplierCompany` (source CSV, NIT como dígitos crudos), como pasada aparte antes de exponer el catálogo. Decisiones abiertas del CSV: casos sin NIT colombiano válido (extranjeras/placeholder) y una entrada hondureña (BANCO FICOHSA) cuyo NIT recortado quedó en rango por coincidencia.
+- Frontend del constructor (fase posterior): picker de empresa con creación gated a OTROS, difuso "¿quisiste decir X?" en cliente, captura de contactos, lectura de los toggles para pintar obligatoriedad. Campo OC (texto, obligatorio en NOVOTECHNO) como concern aparte.
+- UI de administración de los tres toggles en /admin/settings.
+- Verificación en navegador (Luis) una vez exista el frontend.
