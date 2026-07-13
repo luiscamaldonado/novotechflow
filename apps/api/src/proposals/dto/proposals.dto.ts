@@ -363,6 +363,31 @@ export class CloneProposalDto {
   @IsOptional()
   @IsDateString()
   closeDate?: string;
+
+  @IsOptional()
+  @IsString()
+  clientId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  clientName?: string;
+
+  @IsOptional()
+  @IsString()
+  subject?: string;
+
+  @IsOptional()
+  @IsDateString()
+  issueDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  validityDays?: number;
+
+  @IsOptional()
+  @IsDateString()
+  validityDate?: string;
 }
 
 // ── Proposal Pages DTOs ──────────────────────────────────────

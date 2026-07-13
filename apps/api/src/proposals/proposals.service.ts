@@ -527,7 +527,11 @@ export class ProposalsService {
    * NEW_VERSION: incrementa la version (COT-LM0001-1 -> COT-LM0001-2), conserva consecutiveSource.
    * NEW_PROPOSAL: genera nuevo codigo secuencial (COT-LM0002-1), siempre AUTO.
    */
-  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser, overrides?: { status?: ProposalStatus; acquisitionType?: AcquisitionType; closeDate?: string }) {
+  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser, overrides?: {
+    status?: ProposalStatus; acquisitionType?: AcquisitionType; closeDate?: string;
+    clientId?: string; clientName?: string; subject?: string;
+    issueDate?: string; validityDays?: number; validityDate?: string;
+  }) {
     await this.verifyProposalOwnership(id, user);
     const original = await this.prisma.proposal.findUnique({
       where: { id },
@@ -571,13 +575,13 @@ export class ProposalsService {
           proposalCode: newCode,
           consecutiveSource: clonedConsecutiveSource,
           userId: ownerUserId,
-          clientId: original.clientId,
-          clientName: original.clientName,
-          subject: original.subject,
-          issueDate: new Date(),
+          clientId: cloneType === 'NEW_PROPOSAL' && overrides?.clientId !== undefined ? overrides.clientId : original.clientId,
+          clientName: cloneType === 'NEW_PROPOSAL' && overrides?.clientName !== undefined ? overrides.clientName : original.clientName,
+          subject: cloneType === 'NEW_PROPOSAL' && overrides?.subject !== undefined ? overrides.subject : original.subject,
+          issueDate: cloneType === 'NEW_PROPOSAL' && overrides?.issueDate ? new Date(overrides.issueDate) : new Date(),
           issueCity: original.issueCity,
-          validityDays: original.validityDays,
-          validityDate: original.validityDate,
+          validityDays: cloneType === 'NEW_PROPOSAL' && overrides?.validityDays !== undefined ? overrides.validityDays : original.validityDays,
+          validityDate: cloneType === 'NEW_PROPOSAL' && overrides?.validityDate ? new Date(overrides.validityDate) : original.validityDate,
           status: overrides?.status ?? ProposalStatus.ELABORACION,
           acquisitionType: overrides?.acquisitionType ?? null,
           closeDate: overrides?.closeDate ? new Date(overrides.closeDate) : null,
