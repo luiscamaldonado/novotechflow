@@ -353,7 +353,7 @@ export class CloneProposalDto {
   cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL';
 
   @IsOptional()
-  @IsIn([ProposalStatus.ELABORACION, ProposalStatus.PROPUESTA])
+  @IsEnum(ProposalStatus)
   status?: ProposalStatus;
 
   @IsOptional()
