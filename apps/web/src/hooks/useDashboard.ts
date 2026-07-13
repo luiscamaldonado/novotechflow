@@ -679,6 +679,7 @@ export function useDashboard() {
         handleStatusChange,
         handleDateChange,
         handleClone,
+        loadProposals,
         getBoardHygieneIssues,
         handleDelete,
         handleAcquisitionChange,

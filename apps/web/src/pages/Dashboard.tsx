@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
 import { useProjections } from '../hooks/useProjections';
+import { useCloneVersion } from '../hooks/useCloneVersion';
 import { useNotifications } from '../hooks/useNotifications';
 import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG } from '../lib/constants';
 import { exportDashboardToExcel } from '../lib/exportDashboard';
@@ -17,6 +18,7 @@ import BillingCards from './dashboard/BillingCards';
 import PipelineCards from './dashboard/PipelineCards';
 import ProjectionModal from './dashboard/ProjectionModal';
 import DataHygieneModal from './dashboard/DataHygieneModal';
+import CloneVersionModal from './dashboard/CloneVersionModal';
 import type { HygieneIssue } from '../lib/dashboardValidation';
 import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
@@ -95,7 +97,7 @@ export default function Dashboard() {
         closeMonthFilter, setCloseMonthFilter,
         billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
-        handleStatusChange, handleDateChange, handleClone, handleDelete, getBoardHygieneIssues,
+        handleStatusChange, handleDateChange, handleClone, handleDelete, getBoardHygieneIssues, loadProposals,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
         handleProjectionStatusChange, handleProjectionDateChange,
         toggleStatusFilter, clearFilters,
@@ -109,6 +111,12 @@ export default function Dashboard() {
         openNewProjectionModal, openEditProjectionModal,
         handleSaveProjection, handleDeleteProjection,
     } = useProjections(setProjections);
+
+    const {
+        showCloneVersionModal, setShowCloneVersionModal,
+        cloneVersionForm, setCloneVersionForm, cloningVersion,
+        openCloneVersionModal, handleSaveCloneVersion,
+    } = useCloneVersion(loadProposals);
 
     const {
         notifications, warnings, urgents, unreadWarnings, unreadUrgents,
@@ -143,7 +151,10 @@ export default function Dashboard() {
         runWithCleanBoard(() => navigate(`/proposals/${id}/builder`));
 
     const handleCloneGated = (id: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') =>
-        runWithCleanBoard(() => handleClone(id, cloneType));
+        runWithCleanBoard(() => {
+            if (cloneType === 'NEW_VERSION') openCloneVersionModal(id);
+            else handleClone(id, cloneType);
+        });
 
     if (loading) {
         return (
@@ -574,6 +585,16 @@ export default function Dashboard() {
                 onClose={() => setHygieneModalOpen(false)}
                 onGoToFix={() => setHygieneModalOpen(false)}
             />
+
+            {showCloneVersionModal && (
+                <CloneVersionModal
+                    form={cloneVersionForm}
+                    setForm={setCloneVersionForm}
+                    saving={cloningVersion}
+                    onSave={handleSaveCloneVersion}
+                    onClose={() => setShowCloneVersionModal(false)}
+                />
+            )}
 
             {/* Notification Panel */}
             {showAllNotifications && (
