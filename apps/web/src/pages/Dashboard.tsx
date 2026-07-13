@@ -80,7 +80,7 @@ export default function Dashboard() {
         loading, proposals, filtered, proposalGroups, filteredProjectionRows,
         billingCardsVenta, billingCardsDaas,
         pipelineCards, forecastCurrentQuarter, forecastNextQuarter,
-        cloning, projections, activeRowsUnfiltered, setProjections,
+        projections, activeRowsUnfiltered, setProjections,
         trmRate, setTrmRate,
         trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
         showFilters, setShowFilters, codeFilter, setCodeFilter, clientFilter, setClientFilter, subjectFilter, setSubjectFilter,
@@ -97,7 +97,7 @@ export default function Dashboard() {
         closeMonthFilter, setCloseMonthFilter,
         billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
-        handleStatusChange, handleDateChange, handleClone, handleDelete, getBoardHygieneIssues, loadProposals,
+        handleStatusChange, handleDateChange, handleDelete, getBoardHygieneIssues, loadProposals,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
         handleProjectionStatusChange, handleProjectionDateChange,
         toggleStatusFilter, clearFilters,
@@ -153,7 +153,7 @@ export default function Dashboard() {
     const handleCloneGated = (id: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') =>
         runWithCleanBoard(() => {
             if (cloneType === 'NEW_VERSION') openCloneVersionModal(id);
-            else handleClone(id, cloneType);
+            else navigate(`/proposals/new?cloneFrom=${id}`);
         });
 
     if (loading) {
@@ -411,7 +411,6 @@ export default function Dashboard() {
                                                     row={group.activeVersion}
                                                     userRole={userRole}
                                                     trmRate={trmRate}
-                                                    cloning={cloning}
                                                     onStatusChange={handleStatusChange}
                                                     onDateChange={handleDateChange}
                                                     onAcquisitionChange={handleAcquisitionChange}
@@ -438,7 +437,6 @@ export default function Dashboard() {
                                                         row={v}
                                                         userRole={userRole}
                                                         trmRate={trmRate}
-                                                        cloning={cloning}
                                                         isChild
                                                         isActiveVersion={v.id === group.activeVersion.id}
                                                         onStatusChange={handleStatusChange}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FileText, CalendarDays, Clock, ArrowRight, Loader2, AlertCircle, DollarSign, CheckCircle2, Hash } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -77,6 +77,10 @@ const getDaysDifference = (startDate: string, endDate: string): number => {
  */
 export default function NewProposal() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const cloneFromId = searchParams.get('cloneFrom');
+    const isCloneMode = cloneFromId !== null;
+    const [cloneDataLoaded, setCloneDataLoaded] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const todayDateStr = getTodayDateString();
@@ -200,6 +204,39 @@ export default function NewProposal() {
     /** Envía el formulario y crea la propuesta borrador. */
     const [submitError, setSubmitError] = useState<string | null>(null);
 
+    // ── Precarga en modo clon ─────────────────────────────
+    useEffect(() => {
+        if (!cloneFromId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await api.get(`/proposals/${cloneFromId}`);
+                if (cancelled) return;
+                const p = res.data;
+                setFormData((prev) => ({
+                    ...prev,
+                    clientId: p.clientId ?? '',
+                    clientName: p.clientName ?? '',
+                    subject: p.subject ?? '',
+                    issueDate: p.issueDate ? String(p.issueDate).split('T')[0] : prev.issueDate,
+                    validityDays: p.validityDays != null ? String(p.validityDays) : '',
+                    validityDate: p.validityDate ? String(p.validityDate).split('T')[0] : '',
+                    status: p.status ?? 'ELABORACION',
+                    acquisitionType: p.acquisitionType ?? '',
+                    closeDate: p.closeDate ? String(p.closeDate).split('T')[0] : '',
+                    consecutiveSource: 'AUTO',
+                    manualAmount: '',
+                }));
+                setCloneDataLoaded(true);
+            } catch (error) {
+                if (cancelled) return;
+                console.error('Error cargando propuesta base:', error);
+                setSubmitError('No se pudo cargar la propuesta base.');
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [cloneFromId]);
+
     const handleSubmit = async (e: React.FormEvent): Promise<void> => {
         e.preventDefault();
         setSubmitError(null);
@@ -212,25 +249,41 @@ export default function NewProposal() {
         setIsSubmitting(true);
 
         try {
-            const payload: Record<string, unknown> = {
-                clientId: formData.clientId,
-                clientName: formData.clientName,
-                subject: formData.subject,
-                issueDate: formData.issueDate,
-                validityDays: parseInt(formData.validityDays, 10),
-                validityDate: formData.validityDate,
-                manualAmount: formData.manualAmount ? parseFloat(formData.manualAmount) : undefined,
-                status: formData.status,
-                acquisitionType: formData.acquisitionType,
-                closeDate: formData.closeDate,
-            };
+            if (isCloneMode) {
+                const response = await api.post(`/proposals/${cloneFromId}/clone`, {
+                    cloneType: 'NEW_PROPOSAL',
+                    clientId: formData.clientId,
+                    clientName: formData.clientName,
+                    subject: formData.subject,
+                    issueDate: formData.issueDate,
+                    validityDays: parseInt(formData.validityDays, 10),
+                    validityDate: formData.validityDate,
+                    status: formData.status,
+                    acquisitionType: formData.acquisitionType,
+                    closeDate: formData.closeDate,
+                });
+                navigate(`/proposals/${response.data.id}/builder`);
+            } else {
+                const payload: Record<string, unknown> = {
+                    clientId: formData.clientId,
+                    clientName: formData.clientName,
+                    subject: formData.subject,
+                    issueDate: formData.issueDate,
+                    validityDays: parseInt(formData.validityDays, 10),
+                    validityDate: formData.validityDate,
+                    manualAmount: formData.manualAmount ? parseFloat(formData.manualAmount) : undefined,
+                    status: formData.status,
+                    acquisitionType: formData.acquisitionType,
+                    closeDate: formData.closeDate,
+                };
 
-            if (formData.consecutiveSource === 'MANUAL') {
-                payload.manualConsecutive = parseInt(formData.manualConsecutive, 10);
+                if (formData.consecutiveSource === 'MANUAL') {
+                    payload.manualConsecutive = parseInt(formData.manualConsecutive, 10);
+                }
+
+                const response = await api.post('/proposals', payload);
+                navigate(`/proposals/${response.data.id}/builder`);
             }
-
-            const response = await api.post('/proposals', payload);
-            navigate(`/proposals/${response.data.id}/builder`);
         } catch (error: unknown) {
             const axiosErr = error as { response?: { data?: { message?: string } } };
             const message = axiosErr?.response?.data?.message || 'No se pudo iniciar la propuesta.';
@@ -253,7 +306,7 @@ export default function NewProposal() {
         <div className="max-w-6xl mx-auto space-y-8">
             {/* Header */}
             <div>
-                <h2 className="text-2xl font-bold tracking-tight text-novo-primary">Crear Nueva Propuesta</h2>
+                <h2 className="text-2xl font-bold tracking-tight text-novo-primary">{isCloneMode ? 'Clonar como nueva propuesta' : 'Crear Nueva Propuesta'}</h2>
                 <p className="text-gray-500 text-sm mt-1">Paso 1: Información General del Cliente y la Oferta</p>
             </div>
 
@@ -280,6 +333,7 @@ export default function NewProposal() {
                                         Nombre del Cliente o Empresa
                                     </label>
                                     <ClientAutocomplete
+                                        key={isCloneMode ? (cloneDataLoaded ? 'clone-loaded' : 'clone-pending') : 'new'}
                                         defaultValue={formData.clientName}
                                         onSelect={handleClientSelect}
                                         placeholder="Buscar entre 10k+ clientes..."
@@ -409,6 +463,8 @@ export default function NewProposal() {
                                     </div>
                                 </div>
 
+                                {!isCloneMode && (
+                                <>
                                 {/* Consecutivo de la cotización */}
                                 <div className="space-y-3">
                                     <label className="text-sm font-medium text-gray-700 ml-1">Consecutivo de la cotización</label>
@@ -501,7 +557,11 @@ export default function NewProposal() {
                                         </div>
                                     )}
                                 </div>
+                                </>
+                                )}
 
+                                {!isCloneMode && (
+                                <>
                                 {/* Monto estimado inicial */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-gray-700 ml-1">Monto estimado inicial</label>
@@ -527,6 +587,8 @@ export default function NewProposal() {
                                         Visible en el dashboard hasta agregar ítems con valor a los escenarios.
                                     </p>
                                 </div>
+                                </>
+                                )}
                             </div>
 
                             {/* Columna Derecha */}

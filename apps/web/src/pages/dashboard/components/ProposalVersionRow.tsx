@@ -16,7 +16,6 @@ interface ProposalVersionRowProps {
     row: DashboardRow;
     userRole: UserRole;
     trmRate: number | null;
-    cloning: string | null;
     /** When true, indents the code cell to signal a child version inside an expanded group. */
     isChild?: boolean;
     /** When false, disables editable data controls (dates, status, acquisition) for previous versions. */
@@ -33,7 +32,6 @@ export default function ProposalVersionRow({
     row,
     userRole,
     trmRate,
-    cloning,
     isChild = false,
     isActiveVersion = true,
     onStatusChange,
@@ -62,7 +60,6 @@ export default function ProposalVersionRow({
                         </button>
                         <button
                             onClick={() => onClone(p.id, 'NEW_VERSION')}
-                            disabled={cloning === p.id}
                             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                             title="Clonar versión"
                         >
@@ -70,7 +67,6 @@ export default function ProposalVersionRow({
                         </button>
                         <button
                             onClick={() => onClone(p.id, 'NEW_PROPOSAL')}
-                            disabled={cloning === p.id}
                             className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
                             title="Clonar como nueva propuesta"
                         >

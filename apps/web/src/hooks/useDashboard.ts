@@ -185,9 +185,6 @@ export function useDashboard() {
     const [closeMonthFilter, setCloseMonthFilter] = useState<Set<number>>(new Set());
     const [billingMonthFilter, setBillingMonthFilter] = useState<Set<number>>(new Set());
 
-    // Clone action state
-    const [cloning, setCloning] = useState<string | null>(null);
-
     useEffect(() => {
         loadData();
         fetchTrm();
@@ -508,19 +505,6 @@ export function useDashboard() {
         }
     };
 
-    const handleClone = async (id: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') => {
-        setCloning(id);
-        try {
-            await api.post(`/proposals/${id}/clone`, { cloneType });
-            await loadProposals();
-        } catch (error) {
-            console.error(error);
-            alert('No se pudo clonar la propuesta.');
-        } finally {
-            setCloning(null);
-        }
-    };
-
     const getBoardHygieneIssues = (): ProposalHygieneIssues[] => {
         const activeProposals: ProposalHygieneInput[] = allProposalGroups
             .map(group => group.activeVersion.originalProposal)
@@ -633,7 +617,6 @@ export function useDashboard() {
         pipelineCards,
         forecastCurrentQuarter,
         forecastNextQuarter,
-        cloning,
         projections,
         setProjections,
         trmRate,
@@ -678,7 +661,6 @@ export function useDashboard() {
         // Actions
         handleStatusChange,
         handleDateChange,
-        handleClone,
         loadProposals,
         getBoardHygieneIssues,
         handleDelete,
