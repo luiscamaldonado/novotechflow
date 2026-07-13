@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProposalStatus, ConsecutiveSource } from '@prisma/client';
+import { ProposalStatus, ConsecutiveSource, AcquisitionType } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
 import {
@@ -527,7 +527,7 @@ export class ProposalsService {
    * NEW_VERSION: incrementa la version (COT-LM0001-1 -> COT-LM0001-2), conserva consecutiveSource.
    * NEW_PROPOSAL: genera nuevo codigo secuencial (COT-LM0002-1), siempre AUTO.
    */
-  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser) {
+  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser, overrides?: { status?: ProposalStatus; acquisitionType?: AcquisitionType; closeDate?: string }) {
     await this.verifyProposalOwnership(id, user);
     const original = await this.prisma.proposal.findUnique({
       where: { id },
@@ -578,7 +578,9 @@ export class ProposalsService {
           issueCity: original.issueCity,
           validityDays: original.validityDays,
           validityDate: original.validityDate,
-          status: ProposalStatus.ELABORACION,
+          status: overrides?.status ?? ProposalStatus.ELABORACION,
+          acquisitionType: overrides?.acquisitionType ?? null,
+          closeDate: overrides?.closeDate ? new Date(overrides.closeDate) : null,
           isLocked: false,
         },
       });

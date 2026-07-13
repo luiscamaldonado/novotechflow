@@ -351,6 +351,18 @@ export class ApplyMarginDto {
 export class CloneProposalDto {
   @IsIn(['NEW_VERSION', 'NEW_PROPOSAL'])
   cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL';
+
+  @IsOptional()
+  @IsIn([ProposalStatus.ELABORACION, ProposalStatus.PROPUESTA])
+  status?: ProposalStatus;
+
+  @IsOptional()
+  @IsEnum(AcquisitionType)
+  acquisitionType?: AcquisitionType;
+
+  @IsOptional()
+  @IsDateString()
+  closeDate?: string;
 }
 
 // ── Proposal Pages DTOs ──────────────────────────────────────

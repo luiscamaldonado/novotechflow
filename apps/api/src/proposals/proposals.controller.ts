@@ -188,12 +188,11 @@ export class ProposalsController {
     @Request() req: { user: AuthenticatedUser },
     @Body() data: CloneProposalDto,
   ) {
-    return this.proposalsService.cloneProposal(
-      id,
-      req.user.id,
-      data.cloneType,
-      req.user,
-    );
+    return this.proposalsService.cloneProposal(id, req.user.id, data.cloneType, req.user, {
+      status: data.status,
+      acquisitionType: data.acquisitionType,
+      closeDate: data.closeDate,
+    });
   }
 
   // --- ENDPOINTS DE ESCENARIOS ---
