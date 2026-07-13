@@ -2535,3 +2535,59 @@ Este ADR cubre solo el backend (schema + módulo + toggles). El consumo en el co
 - Frontend del constructor (fase posterior): picker de empresa con creación gated a OTROS, difuso "¿quisiste decir X?" en cliente, captura de contactos, lectura de los toggles para pintar obligatoriedad. Campo OC (texto, obligatorio en NOVOTECHNO) como concern aparte.
 - UI de administración de los tres toggles en /admin/settings.
 - Verificación en navegador (Luis) una vez exista el frontend.
+
+## ADR-063 — Clonado de propuestas con fidelidad total y dos flujos diferenciados
+
+**Fecha:** 2026-07-13
+**Estado:** Aceptado
+
+### Contexto
+
+El clonado de propuestas (`POST /proposals/:id/clone`, botones "Clonar versión" y "Clonar como nueva propuesta" en la fila del Dashboard) tenía dos problemas. Primero, `cloneProposal` copiaba de forma incompleta: perdía overrides de `ScenarioItem` (`sortOrder`, `unitCostOverride`, `unitPriceOverride` y, crítico, `isDiluted`), el `conversionTrm` del escenario, `issueCity` y los vínculos de proveedor del ítem, y no copiaba en absoluto las `ProposalPage` ni sus `ProposalPageBlock`. Un clon nacía con números distintos al original (la dilución redistribuye costos según `isDiluted` por ítem) y sin ninguna página del documento; la única forma de repoblar era `/pages/initialize`, que trae plantillas default del admin, no lo que el usuario había editado.
+
+Segundo, los dos botones eran la misma llamada cambiando solo `cloneType`: ninguno capturaba datos ni pasaba por el formulario. El requisito era que "Clonar versión" capturara estado, adquisición y fecha de cierre obligatorios antes de clonar, y que "Clonar como nueva propuesta" pasara por el formulario "Nueva propuesta" para permitir editar el cliente (y el resto de campos de cabecera) antes de generar la propuesta independiente.
+
+### Decisión
+
+1. **Fidelidad total en `cloneProposal`.** El método copia ahora todos los campos de `Scenario` y `ScenarioItem` (raíz e hijos), incluido `isDiluted`, más `issueCity` y los vínculos de proveedor del ítem. Se agrega copia profunda de páginas y bloques: el orden de creación pasa a Proposal → Páginas+Bloques (poblando un `pageIdMap`) → ProposalItems (remapeando `pageId` con ese mapa) → Escenarios+ScenarioItems, para respetar la FK `ProposalItem.pageId` sin apuntar nunca al original. `billingDate` y `manualAmount` se dejan deliberadamente en null: son del ciclo de facturación, no de las tres ventanas, y una propuesta clonada no debe heredarlos. La fidelidad aplica a los dos flujos por igual, al compartir endpoint.
+
+2. **`POST /proposals/:id/clone` acepta overrides opcionales.** `CloneProposalDto` gana `status`, `acquisitionType`, `closeDate` (para el modal de versión) y `clientId`, `clientName`, `subject`, `issueDate`, `validityDays`, `validityDate` (para el modo clon del formulario). El `status` valida con `@IsEnum(ProposalStatus)` (los seis estados, no solo `ELABORACION`/`PROPUESTA`). Los seis campos de cabecera se aplican solo cuando `cloneType === 'NEW_PROPOSAL'`; en `NEW_VERSION` se conserva la copia desde el original. La obligatoriedad de los campos la fuerza la UI, no el DTO.
+
+3. **"Clonar versión" → modal.** Nuevo `useCloneVersion` + `CloneVersionModal` (patrón `useProjections`/`ProjectionModal`): captura estado (los seis vía `ALL_STATUSES`), adquisición (VENTA/DaaS) y fecha de cierre, los tres obligatorios, y clona con `cloneType: 'NEW_VERSION'` + esos overrides.
+
+4. **"Clonar como nueva propuesta" → modo clon del formulario.** `NewProposal` detecta `?cloneFrom={id}`, precarga el formulario vía `GET /proposals/:id`, permite editar todos los campos de cabecera, oculta el toggle de consecutivo (fuerza AUTO) y el campo de monto, y al "Guardar y continuar" clona con `cloneType: 'NEW_PROPOSAL'` + overrides en vez de crear vacío. El botón del Dashboard reroutea a `/proposals/new?cloneFrom={id}`.
+
+5. **Wiring por bifurcación (Opción A).** `ProposalVersionRow` conserva un único `onClone(id, cloneType)`; `handleCloneGated` bifurca por `cloneType` (versión → modal, nueva → reroute), respetando el gate de higiene de datos previo. No se altera la firma del componente de fila.
+
+### Consecuencias
+
+1. Un clon reproduce fielmente las tres ventanas (Constructor de Propuesta, Ventana de Cálculos, Construcción del Documento), incluidos los números, que antes divergían por la pérdida de `isDiluted`.
+2. El candado anti-doble-clic `cloning` de la fila quedó sin propósito: ningún botón dispara ya una petición desde la fila ("Clonar versión" abre un modal con su propio `cloningVersion`; "Clonar como nueva propuesta" hace `navigate`). Se eliminó de las tres capas (`useDashboard`, `Dashboard`, `ProposalVersionRow`).
+3. `handleClone` de `useDashboard` quedó sin consumidores tras el reroute y se eliminó.
+4. `ClientAutocomplete` no sincroniza `defaultValue` tras el montaje; la precarga asíncrona del modo clon requiere forzar un remount con `key` cuando termina la carga para que el cliente se vea seleccionado.
+
+### Archivos
+
+- `apps/api/src/proposals/proposals.service.ts` — fidelidad total + parámetro `overrides` en `cloneProposal`.
+- `apps/api/src/proposals/dto/proposals.dto.ts` — `CloneProposalDto` con los nueve overrides opcionales.
+- `apps/api/src/proposals/proposals.controller.ts` — paso de overrides al service.
+- `apps/web/src/hooks/useCloneVersion.ts` — hook del modal de versión (nuevo).
+- `apps/web/src/pages/dashboard/CloneVersionModal.tsx` — modal de versión (nuevo).
+- `apps/web/src/pages/proposals/NewProposal.tsx` — modo clon (precarga, submit bifurcado, ocultamiento de consecutivo/monto).
+- `apps/web/src/pages/Dashboard.tsx` — wiring del modal, reroute, limpieza de `cloning`/`handleClone`.
+- `apps/web/src/hooks/useDashboard.ts` — eliminación de `handleClone`/`cloning`.
+- `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` — eliminación del prop `cloning`.
+
+### Commits
+
+- `026ffce` — fix(proposals): clone copies scenario overrides, dilution, pages and blocks
+- `1e90a83` — feat(proposals): clone accepts status, acquisitionType and closeDate overrides
+- `4fe7d10` — fix(proposals): clone status accepts any ProposalStatus
+- `c03ac2d` — feat(dashboard): clone version modal captures close date, acquisition and status
+- `bf7ac39` — feat(proposals): clone as new proposal accepts client and form field overrides
+- `9368104` — feat(proposals): new proposal form clone mode prefills from base and clones on submit
+
+### Pendientes
+
+- `scenarios.service.ts` (botón "Clonar escenario", endpoint aparte) no copia `sortOrder` en hijos ni `unitCostOverride` en ningún nivel — deuda preexistente registrada, fuera del alcance de este ADR.
+- `currentVersion` en `Proposal` no se escribe en ningún flujo del backend; sin impacto hoy, pendiente de decidir si se usa o se elimina.
