@@ -124,9 +124,12 @@ export default function ProposalItemsBuilder() {
                         proveedor: value,
                         fletePct: value === PROVEEDOR_MAYORISTA ? MAYORISTA_FLETE_PCT : 0
                     };
+                    // Cada origen guarda solo lo suyo.
                     if (value === PROVEEDOR_NOVOTECHNO) {
                         next.supplierCompanyId = null;
                         next.supplierContactId = null;
+                    } else {
+                        next.internalCosts.oc = undefined;
                     }
                 } else {
                     next.internalCosts = {
@@ -211,6 +214,10 @@ export default function ProposalItemsBuilder() {
                 setItemError('Seleccione el contacto del proveedor.');
                 return;
             }
+        }
+        if (!editingItemId && origen === PROVEEDOR_NOVOTECHNO && !itemForm.internalCosts?.oc?.trim()) {
+            setItemError('Ingrese el número de OC.');
+            return;
         }
         const success = await saveItem(itemForm, editingItemId);
         if (success) {
@@ -537,6 +544,26 @@ export default function ProposalItemsBuilder() {
                                                     <option value="false">0%</option>
                                                 </select>
                                             </div>
+
+                                            {(itemForm.internalCosts?.proveedor || PROVEEDOR_MAYORISTA) === PROVEEDOR_NOVOTECHNO && (
+                                                <div className="col-span-full border-t border-slate-800 pt-6 mt-2">
+                                                    <div className="space-y-2 md:max-w-xs">
+                                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                                            OC (Orden de Compra)
+                                                            <span className="text-red-400 ml-0.5">*</span>
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            name="internal.oc"
+                                                            value={itemForm.internalCosts?.oc || ''}
+                                                            onChange={handleItemChange}
+                                                            disabled={isReadOnly}
+                                                            placeholder="número de OC del inventario"
+                                                            className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 placeholder:text-slate-500 placeholder:font-medium focus:ring-2 focus:ring-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             <SupplierSection
                                                 origen={itemForm.internalCosts?.proveedor || PROVEEDOR_MAYORISTA}

@@ -113,6 +113,7 @@ export interface SpecFieldDef {
 export interface InternalCosts {
     proveedor?: string;
     fletePct?: number | string;
+    oc?: string;
 }
 
 /** Contacto comercial de una empresa proveedora. */
