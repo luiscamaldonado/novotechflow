@@ -402,6 +402,29 @@ export class ProposalsService {
   }
 
   /**
+   * Verifica que el contacto de proveedor pertenezca a la empresa indicada.
+   * Los FK garantizan que existan, pero no que esten relacionados entre si.
+   */
+  private async assertSupplierContactBelongsToCompany(
+    companyId: string | null | undefined,
+    contactId: string | null | undefined,
+  ): Promise<void> {
+    if (!contactId) return;
+    const contact = await this.prisma.supplierContact.findUnique({
+      where: { id: contactId },
+      select: { companyId: true },
+    });
+    if (!contact) {
+      throw new BadRequestException('El contacto de proveedor no existe.');
+    }
+    if (!companyId || contact.companyId !== companyId) {
+      throw new BadRequestException(
+        'El contacto no pertenece al proveedor seleccionado.',
+      );
+    }
+  }
+
+  /**
    * Añade un nuevo ítem (producto/servicio) a la propuesta.
    * Gestiona el correlativo de orden (sortOrder) automáticamente.
    */
@@ -412,6 +435,10 @@ export class ProposalsService {
   ) {
     const proposal = await this.verifyProposalOwnership(proposalId, user);
     assertProposalNotLocked(proposal);
+    await this.assertSupplierContactBelongsToCompany(
+      data.supplierCompanyId,
+      data.supplierContactId,
+    );
     const aggregate = await this.prisma.proposalItem.aggregate({
       where: { proposalId },
       _max: { sortOrder: true },
@@ -436,6 +463,8 @@ export class ProposalsService {
         isTaxable: data.isTaxable ?? true,
         technicalSpecs: (data.technicalSpecs || {}) as object,
         internalCosts: (data.internalCosts || {}) as object,
+        supplierCompanyId: data.supplierCompanyId ?? null,
+        supplierContactId: data.supplierContactId ?? null,
         sortOrder: nextOrder,
       },
     });
@@ -470,6 +499,18 @@ export class ProposalsService {
     if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
     const proposal = await this.verifyProposalOwnership(item.proposalId, user);
     assertProposalNotLocked(proposal);
+    const effectiveCompanyId =
+      data.supplierCompanyId === undefined
+        ? item.supplierCompanyId
+        : data.supplierCompanyId;
+    const effectiveContactId =
+      data.supplierContactId === undefined
+        ? item.supplierContactId
+        : data.supplierContactId;
+    await this.assertSupplierContactBelongsToCompany(
+      effectiveCompanyId,
+      effectiveContactId,
+    );
     return this.prisma.proposalItem.update({
       where: { id: itemId },
       data: {
@@ -487,6 +528,8 @@ export class ProposalsService {
         isTaxable: data.isTaxable,
         technicalSpecs: data.technicalSpecs as object | undefined,
         internalCosts: data.internalCosts as object | undefined,
+        supplierCompanyId: data.supplierCompanyId,
+        supplierContactId: data.supplierContactId,
       },
     });
   }

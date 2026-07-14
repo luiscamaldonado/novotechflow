@@ -12,6 +12,7 @@ import {
   IsObject,
   IsIn,
   ValidateIf,
+  IsUUID,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ItemType, ProposalStatus, AcquisitionType } from '@prisma/client';
@@ -181,6 +182,14 @@ export class CreateProposalItemDto {
   @IsInt()
   @Min(0)
   deliveryDays?: number;
+
+  @IsOptional()
+  @IsUUID()
+  supplierCompanyId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  supplierContactId?: string | null;
 }
 
 /**
@@ -243,6 +252,14 @@ export class UpdateProposalItemDto {
   @IsInt()
   @Min(0)
   deliveryDays?: number;
+
+  @IsOptional()
+  @IsUUID()
+  supplierCompanyId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  supplierContactId?: string | null;
 }
 
 /**
