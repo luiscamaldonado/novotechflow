@@ -2659,3 +2659,41 @@ La obligatoriedad se aplica **solo a ítems nuevos** (`enforceRequired = !editin
 - No existe PATCH de contactos: editar nombre, teléfono o correo de un contacto ya guardado requiere endpoint nuevo. Evaluar cuando aparezca la necesidad real.
 - El dedup de empresas MANUAL sigue apoyado en `findFirst` por nombre normalizado, sin `@@unique([name])` (limitación ya registrada en ADR-062). El difuso del cliente lo mitiga, no lo cierra.
 - Push a producción pendiente al cierre de esta sesión: nueve commits, sin migración nueva (el schema entró con ADR-062).
+
+## ADR-065 — Campo OC para origen NOVOTECHNO: referencia de trazabilidad en internalCosts, sin módulo de inventario
+
+**Fecha:** 2026-07-14
+**Estado:** Aceptado
+
+### Contexto
+
+El catálogo de proveedores (ADR-062, ADR-064) cubre los ítems que se cotizan a un tercero: empresa y contacto comercial. El origen NOVOTECHNO es distinto: el ítem sale de inventario propio, que NovoTechno ya compró antes a un proveedor mediante una orden de compra. Ahí no hay tercero que registrar, pero sí una necesidad de trazabilidad equivalente: saber con qué OC entró ese ítem al inventario. La OC vive en otra aplicación; en NovoTechFlow es solo una referencia.
+
+### Decisión
+
+Un campo `oc` de texto libre dentro de `internalCosts`, obligatorio únicamente cuando el origen es NOVOTECHNO y solo en ítems nuevos (misma regla A de ADR-064). Sin columna nueva ni migración: es un identificador externo del que no hay integridad referencial que garantizar —al contrario de los FK de proveedor—, y `internalCosts` ya es el contenedor del origen y del flete, que es su vecindario natural. El backend no requirió cambios: `internalCosts` viaja completo en el payload y ambos DTOs lo aceptan como `Record<string, unknown>`.
+
+El campo se renderiza en el mismo panel "Estructura Comercial", condicional al origen, y nunca coexiste con la sección de proveedor (que retorna null en NOVOTECHNO). El comportamiento es simétrico al de los FK: entrar a NOVOTECHNO limpia empresa y contacto; salir de NOVOTECHNO limpia el OC. Cada origen persiste solo lo suyo.
+
+Se descartó modelar una entidad de OC o inventario: no existe módulo de inventario en el sistema y construir uno para almacenar un número sería especulativo (YAGNI). Si algún día hay integración real con la aplicación donde viven las OC, este campo es el punto de anclaje.
+
+### Consecuencias
+
+1. Sin validación de formato ni existencia: el OC es texto libre. Un número mal escrito no se detecta. Aceptado: el dato autoritativo vive en otra aplicación.
+2. El borrado del OC al salir de NOVOTECHNO funciona por una vía indirecta: `oc: undefined` hace que `JSON.stringify` omita la clave, y como el backend reemplaza `internalCosts` completo (no hace merge), la clave desaparece del JSON persistido. Correcto hoy, pero es una dependencia implícita: si el backend pasara a hacer merge de `internalCosts`, este borrado dejaría de funcionar en silencio.
+3. Los ítems históricos con origen NOVOTECHNO y sin OC se siguen editando sin exigir el campo (regla A). Nunca serán forzados a tenerlo.
+4. Al vivir en JSONB y no en columna, el OC no es indexable ni consultable con eficiencia. Si aparece la necesidad de buscar ítems por OC, habrá que promoverlo a columna.
+
+### Archivos
+
+- `apps/web/src/lib/types.ts` — campo `oc?: string` en `InternalCosts`
+- `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx` — render condicional del campo, limpieza al cambiar de origen y validación en ítems nuevos
+
+### Commits
+
+- `0969805` — feat(proposals): add purchase order field for NOVOTECHNO origin
+
+### Pendientes
+
+- Verificación en navegador (Luis): campo visible solo en NOVOTECHNO, ítem nuevo sin OC no guarda, cambiar de origen limpia el valor, persistencia tras F5.
+- Si alguna vez se integra con la aplicación donde viven las órdenes de compra, evaluar promover `oc` a columna con validación real contra esa fuente.
