@@ -1,21 +1,20 @@
 import { motion } from 'framer-motion';
 import { X, FileText, ListOrdered, Download, Loader2, FileSpreadsheet } from 'lucide-react';
-import { generateHTML } from '@tiptap/html';
-import StarterKit from '@tiptap/starter-kit';
-import TextAlign from '@tiptap/extension-text-align';
 
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import type { ProposalPage, PageBlock } from '../../hooks/useProposalPages';
-import { type ProposalVariables, replaceMarkersInHtml } from '../../lib/proposalVariables';
+import { type ProposalVariables } from '../../lib/proposalVariables';
 import type { ProcessedScenario } from '../../hooks/useProposalScenarios';
 import TechnicalSpecSheet from './TechnicalSpecSheet';
 import EconomicProposalTable from './EconomicProposalTable';
 import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
 import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/paginateEconomicProposal';
 import { resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
-import { PAGE_GEOMETRY, CONTENT_PDF_HEIGHTS } from '../../lib/constants';
+import { PAGE_GEOMETRY } from '../../lib/constants';
+import { buildPageHtml } from '../../lib/renderPageHtml';
+import { measureContentElements, paginateContentPage } from '../../lib/paginateContentPage';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
@@ -28,11 +27,6 @@ const PAGE_TYPE_LABELS: Record<string, string> = {
     CUSTOM: 'Página Personalizada',
 };
 
-const extensions = [
-    StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-    TextAlign.configure({ types: ['heading', 'paragraph'] }),
-];
-
 interface PdfPreviewModalProps {
     pages: ProposalPage[];
     onClose: () => void;
@@ -40,15 +34,6 @@ interface PdfPreviewModalProps {
     processedScenarios?: ProcessedScenario[];
     enableExcelExport?: boolean;
     ownerSignatureUrl?: string;
-}
-
-function renderRichText(content: Record<string, unknown> | null): string {
-    if (!content || !content.type) return '';
-    try {
-        return generateHTML(content as Parameters<typeof generateHTML>[0], extensions);
-    } catch {
-        return '<p style="color:#aaa;">Contenido vacío</p>';
-    }
 }
 
 /** Represents one visual page slice */
@@ -244,25 +229,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
             }
 
             // Content pages: render all blocks to HTML, then split by element heights
-            // Build the full HTML for this page
-            let fullHtml = '';
-            for (const block of page.blocks) {
-                if (block.blockType === 'RICH_TEXT') {
-                    let html = renderRichText(block.content);
-                    if (proposalVars) html = replaceMarkersInHtml(html, proposalVars);
-                    fullHtml += html;
-                } else if (block.blockType === 'IMAGE') {
-                    const url = (block.content as Record<string, string>)?.url;
-                    const caption = (block.content as Record<string, string>)?.caption;
-                    if (url) {
-                        fullHtml += `<figure class="my-6"><img src="${resolveImageUrl(url)}" alt="${caption || ''}" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; border:1px solid #f1f5f9;" />`;
-                        if (caption) {
-                            fullHtml += `<figcaption style="text-align:center; font-size:12px; color:#64748b; font-style:italic; margin-top:12px;">${caption}</figcaption>`;
-                        }
-                        fullHtml += '</figure>';
-                    }
-                }
-            }
+            let fullHtml = buildPageHtml(page.blocks, proposalVars, resolveImageUrl);
 
             if (page.pageType === 'PRESENTATION' && ownerSignatureUrl) {
                 fullHtml += `<div style="margin-top:48px;"><img src="${resolveImageUrl(ownerSignatureUrl)}" alt="Firma" style="object-fit:contain;" /></div>`;
@@ -284,87 +251,22 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                 continue;
             }
 
-            // Render the full HTML into a measurement div to get child element heights
-            const measure = document.createElement('div');
-            measure.style.width = `${PAGE_GEOMETRY.CONTENT_WIDTH_PX}px`; // page width minus padding
-            measure.style.position = 'absolute';
-            measure.style.visibility = 'hidden';
-            measure.style.left = '-9999px';
-            measure.className = 'prose prose-sm max-w-none';
-            measure.innerHTML = fullHtml;
-            container.appendChild(measure);
+            const elementData = measureContentElements(fullHtml, container);
+            const slices = paginateContentPage(elementData);
 
-            // Force image rendering by setting dimensions
-            const imgs = measure.querySelectorAll('img');
-            imgs.forEach(img => {
-                if (!img.naturalHeight) {
-                    img.style.height = '300px';
-                }
-            });
-
-            // Get all top-level child elements and their heights
-            const children = Array.from(measure.children) as HTMLElement[];
-            const elementData: { html: string; height: number }[] = [];
-
-            for (const child of children) {
-                const rect = child.getBoundingClientRect();
-                const styles = window.getComputedStyle(child);
-                const marginTop = parseFloat(styles.marginTop) || 0;
-                const marginBottom = parseFloat(styles.marginBottom) || 0;
-                elementData.push({
-                    html: child.outerHTML,
-                    height: rect.height + marginTop + marginBottom,
+            slices.forEach((slice, sliceIdx) => {
+                result.push({
+                    id: `${page.id}-${sliceIdx}`,
+                    pageType: page.pageType,
+                    title: page.title,
+                    htmlContent: slice.htmlContent,
+                    isContinuation: slice.isContinuation,
+                    isCover: false,
+                    isIndex: false,
+                    isTechSpec: false,
+                    isEconomic: false,
+                    coverBlocks: [],
                 });
-            }
-
-            container.removeChild(measure);
-
-            // Split elements across pages
-            let currentHeight: number = CONTENT_PDF_HEIGHTS.FIRST_SLICE_HEADER_HEIGHT;
-            let currentHtml = '';
-            let isContinuation = false;
-            let sliceIdx = 0;
-
-            for (let i = 0; i < elementData.length; i++) {
-                const el = elementData[i];
-
-                // Would adding this element exceed the page?
-                if (currentHeight + el.height > PAGE_GEOMETRY.USABLE_HEIGHT_PX && currentHtml.length > 0) {
-                    // Flush current page
-                    result.push({
-                        id: `${page.id}-${sliceIdx}`,
-                        pageType: page.pageType,
-                        title: page.title,
-                        htmlContent: currentHtml,
-                        isContinuation,
-                        isCover: false,
-                        isIndex: false,
-                        isTechSpec: false,
-                        isEconomic: false,
-                        coverBlocks: [],
-                    });
-                    sliceIdx++;
-                    currentHtml = '';
-                    currentHeight = CONTENT_PDF_HEIGHTS.CONTINUATION_HEADER_HEIGHT; // continuation header is smaller
-                    isContinuation = true;
-                }
-
-                currentHtml += el.html;
-                currentHeight += el.height;
-            }
-
-            // Flush remaining content
-            result.push({
-                id: `${page.id}-${sliceIdx}`,
-                pageType: page.pageType,
-                title: page.title,
-                htmlContent: currentHtml,
-                isContinuation,
-                isCover: false,
-                isIndex: false,
-                isTechSpec: false,
-                isEconomic: false,
-                coverBlocks: [],
             });
         }
 
