@@ -2591,3 +2591,71 @@ Segundo, los dos botones eran la misma llamada cambiando solo `cloneType`: ningu
 
 - `scenarios.service.ts` (botón "Clonar escenario", endpoint aparte) no copia `sortOrder` en hijos ni `unitCostOverride` en ningún nivel — deuda preexistente registrada, fuera del alcance de este ADR.
 - `currentVersion` en `Proposal` no se escribe en ningún flujo del backend; sin impacto hoy, pendiente de decidir si se usa o se elimina.
+
+## ADR-064 — Frontend del catálogo de proveedores: sección en el constructor, dedup difuso y obligatoriedad solo en ítems nuevos
+
+**Fecha:** 2026-07-14
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-062 dejó el backend del catálogo completo y el seed de 2040 empresas en producción, con el frontend y el campo OC explícitamente fuera de alcance. Al bajar a implementarlo apareció un gap real: la migración creó las columnas `supplier_company_id` / `supplier_contact_id` en `proposal_items`, pero el write path del ítem no las conocía. Tanto `CreateProposalItemDto` como `UpdateProposalItemDto` son clases escritas a mano, y `addProposalItem` / `updateProposalItem` arman el `data` de Prisma campo por campo, sin spread: un campo que no esté listado no se escribe nunca. Peor, con `forbidNonWhitelisted: true` un payload con esos campos habría devuelto 400. Sin ese addendum, el frontend no persistía nada.
+
+También quedó a la vista que los dos FK garantizan que empresa y contacto existan, pero no que estén relacionados entre sí: un ítem podía apuntar a la empresa A con un contacto de la empresa B, y Postgres lo aceptaba. Eso corrompe justo la trazabilidad que motiva el feature.
+
+### Decisión
+
+Se completa el write path y se construye la UI, sin tocar el origen (`internalCosts.proveedor`) ni su acople al flete.
+
+Backend: los dos FK se agregan a ambos DTOs con `@IsOptional() @IsUUID()`, y explícitamente a los dos objetos `data` del service. Un helper privado `assertSupplierContactBelongsToCompany` valida la pertenencia contacto→empresa y responde 400 si no calza; en el update se valida sobre los valores efectivos (lo que viene en el DTO, o lo que el ítem ya tenía si el campo está ausente). En el create los FK van con `?? null`; en el update van directos, sin `?? undefined`, para preservar la semántica de ADR-022: campo ausente = no tocar, `null` = desasignar, uuid = asignar.
+
+Frontend: `useSuppliers` trae el catálogo completo una sola vez al montar el builder y lo filtra en memoria (~2000 empresas; sin fetch por tecla, sin debounce); solo el fetch inicial es best-effort silencioso, mientras que `createCompany` y `createContact` propagan el error para que el 409 de nombre duplicado llegue al usuario. `SupplierPicker` calca `CityCombobox` pero opera sobre IDs, corta el render a 50 resultados y bloquea el Enter (con 2000 empresas, autoseleccionar por accidente es peligroso). `NewSupplierModal` muestra los similares como botones seleccionables, no como un aviso ignorable, y expone el nombre normalizado antes de crear. `SupplierSection` orquesta todo con un único callback `onChange({ supplierCompanyId, supplierContactId })`: cambiar de empresa siempre resetea el contacto en el mismo acto, lo que hace imposible el estado que el guard del backend rechaza. Las cuatro opciones de origen se centralizan en `PROVEEDOR_OPTIONS`, reemplazando los `<option>` hardcodeados inline.
+
+La obligatoriedad se aplica **solo a ítems nuevos** (`enforceRequired = !editingItemId`). Un comercial que edita una propuesta ajena de hace meses no sabe quién fue el proveedor; exigírselo produciría datos inventados, que en una base cuya finalidad es trazabilidad es peor que un dato ausente. Los tres toggles se administran desde una card nueva en `/admin/settings`, con guardado inmediato al togglear (PATCH parcial), sin botón Guardar.
+
+### Consecuencias
+
+1. El picker muestra el catálogo completo en cualquier origen; lo que restringe la creación es `allowCreate` (solo OTROS), no un filtro por `source`. Filtrar dejaría las empresas creadas manualmente inutilizables desde MAYORISTA/FABRICANTE: ni seleccionables ni creables, un callejón sin salida. `source` sigue distinguiendo lo sembrado de lo agregado por los usuarios.
+2. Regla A asumida: los ítems históricos sin proveedor nunca serán forzados a tenerlo. La base se enriquece solo con ítems nuevos.
+3. Teléfono y correo son derivados del contacto seleccionado y se muestran de solo lectura (referencia viva). No existe PATCH de contactos: corregir el teléfono de un contacto ya guardado no es posible todavía.
+4. Semántica de los toggles: `nameRequired` exige seleccionar un contacto para el ítem; `phoneRequired` / `emailRequired` exigen esos campos al **crear** un contacto nuevo, no al seleccionar uno existente. Si aplicaran al seleccionar, un contacto viejo sin teléfono bloquearía la edición del ítem — el mismo problema retroactivo que resuelve la regla A.
+5. El form de ítems no tiene superficie para los errores del backend: el `catch` de `saveItem` muestra un `alert()` genérico. El 400 de pertenencia es un guard de servidor puro y no debería verse desde la UI, que resetea el contacto al cambiar de empresa.
+6. `duplicateItem` arrastra los dos FK del ítem original. Es lo deseado (se duplica un ítem del mismo proveedor) y quedan consistentes entre sí porque viajan juntos.
+7. El difuso corre en el cliente con Levenshtein sobre nombres normalizados y sin sufijo societario, saltando comparaciones cuando la diferencia de longitud supera el 40% (una diferencia mayor no puede alcanzar el umbral de 0.82). No requiere extensión de Postgres.
+8. `initialItemForm` inicializa los dos FK en `null` explícito: con `undefined` el PATCH los interpretaría como "no tocar" y desasignar sería imposible.
+
+### Archivos
+
+- `apps/api/src/proposals/dto/proposals.dto.ts` — los dos FK en `CreateProposalItemDto` y `UpdateProposalItemDto`
+- `apps/api/src/proposals/proposals.service.ts` — helper `assertSupplierContactBelongsToCompany` y wiring de los FK en create y update
+- `apps/web/src/lib/types.ts` — `SupplierCompany`, `SupplierContact`, `SupplierFieldRequirements`, y los dos FK al top level de `ProposalItem`
+- `apps/web/src/lib/constants.ts` — `ProveedorOrigen`, `PROVEEDOR_OPTIONS` y las constantes de origen
+- `apps/web/src/lib/supplierMatch.ts` — normalización espejo del backend, Levenshtein y `findSimilarCompanies`
+- `apps/web/src/hooks/useSuppliers.ts` — catálogo global (fetch único, crear empresa, crear contacto)
+- `apps/web/src/hooks/useSupplierFieldRequirements.ts` — lectura y actualización de los toggles
+- `apps/web/src/pages/proposals/components/SupplierPicker.tsx` — combobox de empresa sobre IDs
+- `apps/web/src/pages/proposals/components/NewSupplierModal.tsx` — alta de empresa con similares seleccionables
+- `apps/web/src/pages/proposals/components/SupplierSection.tsx` — bloque del constructor, condicional por origen
+- `apps/web/src/pages/proposals/components/NewContactFields.tsx` — alta de contacto inline
+- `apps/web/src/pages/proposals/components/supplierFieldStyles.tsx` — estilos y `RequiredMark` compartidos
+- `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx` — wiring, validación de la regla A y `PROVEEDOR_OPTIONS`
+- `apps/web/src/hooks/useProposalBuilder.ts` — FK en `initialItemForm` y en el payload
+- `apps/web/src/pages/admin/components/SupplierFieldsSettings.tsx` — card de los tres toggles
+- `apps/web/src/pages/admin/SettingsAdmin.tsx` — composición de la card nueva
+
+### Commits
+
+- `56d9c55` — feat(proposals): wire supplier FKs into item write path with contact ownership check
+- `7a6cd2b` — feat(suppliers): add frontend types, origin constants and catalog hooks
+- `0087ab8` — feat(suppliers): add supplier picker combobox and fuzzy name matching
+- `782cfe3` — feat(suppliers): add new supplier modal with duplicate detection
+- `8644df8` — feat(suppliers): add supplier section with company picker and contact capture
+- `015baf2` — feat(suppliers): wire supplier section into item builder
+- `6d0fc42` — fix(suppliers): clear item error when origin changes
+- `0d3893b` — feat(suppliers): add supplier field requirement toggles to admin settings
+
+### Pendientes
+
+- No existe PATCH de contactos: editar nombre, teléfono o correo de un contacto ya guardado requiere endpoint nuevo. Evaluar cuando aparezca la necesidad real.
+- El dedup de empresas MANUAL sigue apoyado en `findFirst` por nombre normalizado, sin `@@unique([name])` (limitación ya registrada en ADR-062). El difuso del cliente lo mitiga, no lo cierra.
+- Push a producción pendiente al cierre de esta sesión: nueve commits, sin migración nueva (el schema entró con ADR-062).
