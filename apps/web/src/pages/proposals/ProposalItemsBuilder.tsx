@@ -86,6 +86,9 @@ export default function ProposalItemsBuilder() {
         const { name } = e.target;
         let { value } = e.target;
 
+        // Cambiar el origen invalida cualquier mensaje de validación previo.
+        if (name === 'internal.proveedor') setItemError(null);
+
         // Convertir coma a punto y dejar solo números y un punto
         if (['unitCost', 'marginPct', 'unitPrice', 'internal.fletePct', 'quantity'].includes(name)) {
             value = value.replace(/,/g, '.');
