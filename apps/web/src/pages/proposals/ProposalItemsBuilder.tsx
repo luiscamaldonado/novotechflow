@@ -9,11 +9,14 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { ProposalItem, ProposalDetail, TechnicalSpecs } from '../../lib/types';
-import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY } from '../../lib/constants';
+import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, PROVEEDOR_OPTIONS, PROVEEDOR_NOVOTECHNO, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY } from '../../lib/constants';
 import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '../../lib/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import PrefillModal from './components/PrefillModal';
+import SupplierSection from './components/SupplierSection';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';
+import { useSuppliers } from '../../hooks/useSuppliers';
+import { useSupplierFieldRequirements } from '../../hooks/useSupplierFieldRequirements';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
@@ -29,12 +32,15 @@ export default function ProposalItemsBuilder() {
     } = useProposalBuilder(id);
 
     const { isReadOnly } = useProposalReadOnly(proposal);
+    const { companies, isLoading: isLoadingCompanies, createCompany, createContact } = useSuppliers();
+    const { requirements } = useSupplierFieldRequirements();
 
     // UI state
     const [isAddingItem, setIsAddingItem] = useState(false);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [itemForm, setItemForm] = useState<ProposalItem>(initialItemForm);
     const [isPrefillOpen, setIsPrefillOpen] = useState(false);
+    const [itemError, setItemError] = useState<string | null>(null);
 
     const handleUpdateProposal = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -110,11 +116,15 @@ export default function ProposalItemsBuilder() {
 
                 // Dependencia directa de proveedor a flete
                 if (internalField === 'proveedor') {
-                    next.internalCosts = { 
-                        ...prev.internalCosts, 
+                    next.internalCosts = {
+                        ...prev.internalCosts,
                         proveedor: value,
-                        fletePct: value === PROVEEDOR_MAYORISTA ? MAYORISTA_FLETE_PCT : 0 
+                        fletePct: value === PROVEEDOR_MAYORISTA ? MAYORISTA_FLETE_PCT : 0
                     };
+                    if (value === PROVEEDOR_NOVOTECHNO) {
+                        next.supplierCompanyId = null;
+                        next.supplierContactId = null;
+                    }
                 } else {
                     next.internalCosts = {
                         ...prev.internalCosts,
@@ -186,6 +196,19 @@ export default function ProposalItemsBuilder() {
 
     const handleSaveItem = async (e: React.FormEvent) => {
         e.preventDefault();
+        setItemError(null);
+        const origen = itemForm.internalCosts?.proveedor || PROVEEDOR_MAYORISTA;
+        // Regla A: la obligatoriedad de proveedor solo aplica a items nuevos.
+        if (!editingItemId && origen !== PROVEEDOR_NOVOTECHNO) {
+            if (!itemForm.supplierCompanyId) {
+                setItemError('Seleccione la empresa proveedora.');
+                return;
+            }
+            if (requirements.nameRequired && !itemForm.supplierContactId) {
+                setItemError('Seleccione el contacto del proveedor.');
+                return;
+            }
+        }
         const success = await saveItem(itemForm, editingItemId);
         if (success) {
             setIsAddingItem(false);
@@ -198,6 +221,7 @@ export default function ProposalItemsBuilder() {
         setItemForm(item);
         setEditingItemId(item.id || null);
         setIsAddingItem(true);
+        setItemError(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -207,6 +231,7 @@ export default function ProposalItemsBuilder() {
         setItemForm(newItem);
         setEditingItemId(null);
         setIsAddingItem(true);
+        setItemError(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -350,7 +375,7 @@ export default function ProposalItemsBuilder() {
                                              <span>EXPANDIR</span>
                                         </button>
                                     )}
-                                    {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
+                                    {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); setItemError(null); }} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
                                         <Plus className="h-5 w-5" />
                                         <span>NUEVO ITEM</span>
                                     </button>}
@@ -448,10 +473,9 @@ export default function ProposalItemsBuilder() {
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Origen (Prov)</label>
                                                 <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} disabled={isReadOnly} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none disabled:opacity-60 disabled:cursor-not-allowed">
-                                                    <option value="MAYORISTA">MAYORISTA</option>
-                                                    <option value="FABRICANTE">FABRICANTE</option>
-                                                    <option value="NOVOTECHNO">NOVOTECHNO</option>
-                                                    <option value="OTROS">OTROS</option>
+                                                    {PROVEEDOR_OPTIONS.map(opt => (
+                                                        <option key={opt} value={opt}>{opt}</option>
+                                                    ))}
                                                 </select>
                                             </div>
                                             <div className="space-y-2">
@@ -510,11 +534,28 @@ export default function ProposalItemsBuilder() {
                                                     <option value="false">0%</option>
                                                 </select>
                                             </div>
+
+                                            <SupplierSection
+                                                origen={itemForm.internalCosts?.proveedor || PROVEEDOR_MAYORISTA}
+                                                companies={companies}
+                                                isLoadingCompanies={isLoadingCompanies}
+                                                supplierCompanyId={itemForm.supplierCompanyId}
+                                                supplierContactId={itemForm.supplierContactId}
+                                                onChange={next => setItemForm(prev => ({ ...prev, ...next }))}
+                                                requirements={requirements}
+                                                enforceRequired={!editingItemId}
+                                                disabled={isReadOnly}
+                                                createCompany={createCompany}
+                                                createContact={createContact}
+                                            />
                                         </div>
                                     </div>
 
-                                    <div className="flex justify-end space-x-4 pt-4">
-                                        {!isReadOnly && <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
+                                    <div className="flex justify-end items-center space-x-4 pt-4">
+                                        {itemError && (
+                                            <p className="text-xs font-bold text-red-500">{itemError}</p>
+                                        )}
+                                        {!isReadOnly && <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); setItemError(null); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
                                             Descartar
                                         </button>}
                                         {!isReadOnly && <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
@@ -550,7 +591,7 @@ export default function ProposalItemsBuilder() {
                                             <div className="max-w-xs mx-auto space-y-4 grayscale opacity-40">
                                                 <Cpu className="h-20 w-20 mx-auto text-indigo-300" />
                                                 <p className="text-sm font-bold text-slate-400">Su arquitectura aún no tiene componentes definidos.</p>
-                                                {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>}
+                                                {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); setItemError(null); }} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>}
                                             </div>
                                         </td>
                                     </tr>
