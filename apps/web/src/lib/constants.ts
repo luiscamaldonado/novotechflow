@@ -19,6 +19,21 @@ export const MAYORISTA_FLETE_PCT = 1.5;
 /** Nombre del proveedor mayorista. */
 export const PROVEEDOR_MAYORISTA = 'MAYORISTA';
 
+/** Origen (categoria de proveedor) de un item. Dispara el flete: solo MAYORISTA suma. */
+export type ProveedorOrigen = 'MAYORISTA' | 'FABRICANTE' | 'NOVOTECHNO' | 'OTROS';
+
+export const PROVEEDOR_FABRICANTE = 'FABRICANTE';
+export const PROVEEDOR_NOVOTECHNO = 'NOVOTECHNO';
+export const PROVEEDOR_OTROS = 'OTROS';
+
+/** Opciones del selector de origen (value === label). */
+export const PROVEEDOR_OPTIONS: ProveedorOrigen[] = [
+    'MAYORISTA',
+    'FABRICANTE',
+    'NOVOTECHNO',
+    'OTROS',
+];
+
 /** Debounce para búsquedas de autocompletado (ms). */
 export const AUTOCOMPLETE_DEBOUNCE_MS = 200;
 

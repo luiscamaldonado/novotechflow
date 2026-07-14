@@ -115,6 +115,31 @@ export interface InternalCosts {
     fletePct?: number | string;
 }
 
+/** Contacto comercial de una empresa proveedora. */
+export interface SupplierContact {
+    id: string;
+    companyId: string;
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+}
+
+/** Empresa proveedora del catalogo global, con sus contactos. */
+export interface SupplierCompany {
+    id: string;
+    name: string;
+    nit?: string | null;
+    source: 'CSV' | 'MANUAL';
+    contacts: SupplierContact[];
+}
+
+/** Obligatoriedad configurable de los campos de contacto de proveedor. */
+export interface SupplierFieldRequirements {
+    nameRequired: boolean;
+    phoneRequired: boolean;
+    emailRequired: boolean;
+}
+
 /** Ítem dentro de una propuesta (edición completa). */
 export interface ProposalItem {
     id?: string;
@@ -132,6 +157,8 @@ export interface ProposalItem {
     isTaxable?: boolean;
     deliveryDays?: number | null;
     internalCosts?: InternalCosts;
+    supplierCompanyId?: string | null;
+    supplierContactId?: string | null;
 }
 
 /** Ítem de propuesta tal como llega del backend (campos numéricos como number). */
