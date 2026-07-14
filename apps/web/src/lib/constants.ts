@@ -249,15 +249,60 @@ export const INACTIVITY_TIMEOUT_STORAGE_KEY = 'inactivity_timeout_minutes';
 // ── Economic proposal PDF pagination — alturas (height-aware) ─
 
 /**
+ * Geometria de la hoja Carta - fuente unica de verdad.
+ *
+ * Los valores en pt son los que consume jsPDF (format: 'letter').
+ * Los valores en px derivan de los pt a 96dpi: pt / 72 * 96.
+ * Esa derivacion es la razon por la que 816x1056 px equivale a 612x792 pt;
+ * antes eran literales independientes repetidos por el codigo.
+ *
+ * Todo consumidor (generador de PDF y constructor del documento) DEBE leer
+ * de aqui. Si estos numeros divergen entre vistas, el WYSIWYG miente.
+ */
+const PT_PER_INCH = 72;
+const PX_PER_INCH = 96;
+const PAGE_WIDTH_PT = 612;
+const PAGE_HEIGHT_PT = 792;
+const PAGE_PADDING_PX = 64;
+const PAGE_WIDTH_PX = (PAGE_WIDTH_PT / PT_PER_INCH) * PX_PER_INCH;
+const PAGE_HEIGHT_PX = (PAGE_HEIGHT_PT / PT_PER_INCH) * PX_PER_INCH;
+
+export const PAGE_GEOMETRY = {
+    /** Ancho de hoja en pt (jsPDF) */
+    WIDTH_PT: PAGE_WIDTH_PT,
+    /** Alto de hoja en pt (jsPDF) */
+    HEIGHT_PT: PAGE_HEIGHT_PT,
+    /** Ancho de hoja en px @96dpi: 816 */
+    WIDTH_PX: PAGE_WIDTH_PX,
+    /** Alto de hoja en px @96dpi: 1056 */
+    HEIGHT_PX: PAGE_HEIGHT_PX,
+    /** Padding de la hoja, vertical y horizontal */
+    PADDING_PX: PAGE_PADDING_PX,
+    /** Ancho util para contenido: WIDTH_PX - PADDING_PX*2 = 688 */
+    CONTENT_WIDTH_PX: PAGE_WIDTH_PX - PAGE_PADDING_PX * 2,
+    /** Alto util para contenido: HEIGHT_PX - PADDING_PX*2 = 928 */
+    USABLE_HEIGHT_PX: PAGE_HEIGHT_PX - PAGE_PADDING_PX * 2,
+} as const;
+
+/**
+ * Alturas estimadas (px) de los bloques fijos de una pagina de contenido
+ * en el PDF. No se miden: se estiman. Si cambia el diseno del header de
+ * pagina en PdfPreviewModal, hay que recalibrar estos valores.
+ */
+export const CONTENT_PDF_HEIGHTS = {
+    /** Header de la primera hoja de una pagina de contenido */
+    FIRST_SLICE_HEADER_HEIGHT: 72,
+    /** Header reducido de las hojas de continuacion */
+    CONTINUATION_HEADER_HEIGHT: 40,
+} as const;
+
+/**
  * Alturas estimadas (px) para la paginacion height-aware del PDF
  * de la propuesta economica. Las filas <tr> se miden en runtime;
  * estos valores cubren los bloques fijos y el fallback de medicion.
- * Pagina carta a 96dpi: 1056px de alto, padding vertical 64px x2.
  * Valores conservadores — ajustar si se observa corte o desperdicio.
  */
 export const ECONOMIC_PDF_HEIGHTS = {
-    /** Alto util de la hoja: PAGE_HEIGHT (1056) - padding vertical (64x2) */
-    USABLE_HEIGHT: 928,
     /** Header grande indigo de la primera hoja del escenario */
     FIRST_SLICE_HEADER_HEIGHT: 88,
     /** Header reducido de las hojas de continuacion */

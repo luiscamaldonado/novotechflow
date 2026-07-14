@@ -15,6 +15,7 @@ import EconomicProposalTable from './EconomicProposalTable';
 import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
 import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/paginateEconomicProposal';
 import { resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
+import { PAGE_GEOMETRY, CONTENT_PDF_HEIGHTS } from '../../lib/constants';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
     COVER: 'Portada',
@@ -49,12 +50,6 @@ function renderRichText(content: Record<string, unknown> | null): string {
         return '<p style="color:#aaa;">Contenido vacío</p>';
     }
 }
-
-/** Letter page size at 96dpi */
-const PAGE_HEIGHT = 1056;
-const PAGE_PADDING = 64; // py-16 = 64px each side
-const USABLE_HEIGHT = PAGE_HEIGHT - PAGE_PADDING * 2; // ~928px
-const HEADER_HEIGHT = 72; // estimated header with border
 
 /** Represents one visual page slice */
 interface VisualPage {
@@ -121,14 +116,14 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     useCORS: true,
                     allowTaint: true,
                     backgroundColor: '#ffffff',
-                    width: 816,
-                    height: PAGE_HEIGHT,
-                    windowWidth: 816,
+                    width: PAGE_GEOMETRY.WIDTH_PX,
+                    height: PAGE_GEOMETRY.HEIGHT_PX,
+                    windowWidth: PAGE_GEOMETRY.WIDTH_PX,
                 });
 
                 const imgData = canvas.toDataURL('image/jpeg', 0.92);
-                const pdfWidth = 612;
-                const pdfHeight = 792;
+                const pdfWidth = PAGE_GEOMETRY.WIDTH_PT;
+                const pdfHeight = PAGE_GEOMETRY.HEIGHT_PT;
 
                 if (i > 0) pdf.addPage();
                 pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
@@ -291,7 +286,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
             // Render the full HTML into a measurement div to get child element heights
             const measure = document.createElement('div');
-            measure.style.width = `${816 - PAGE_PADDING * 2}px`; // page width minus padding
+            measure.style.width = `${PAGE_GEOMETRY.CONTENT_WIDTH_PX}px`; // page width minus padding
             measure.style.position = 'absolute';
             measure.style.visibility = 'hidden';
             measure.style.left = '-9999px';
@@ -325,7 +320,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
             container.removeChild(measure);
 
             // Split elements across pages
-            let currentHeight = HEADER_HEIGHT;
+            let currentHeight: number = CONTENT_PDF_HEIGHTS.FIRST_SLICE_HEADER_HEIGHT;
             let currentHtml = '';
             let isContinuation = false;
             let sliceIdx = 0;
@@ -334,7 +329,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                 const el = elementData[i];
 
                 // Would adding this element exceed the page?
-                if (currentHeight + el.height > USABLE_HEIGHT && currentHtml.length > 0) {
+                if (currentHeight + el.height > PAGE_GEOMETRY.USABLE_HEIGHT_PX && currentHtml.length > 0) {
                     // Flush current page
                     result.push({
                         id: `${page.id}-${sliceIdx}`,
@@ -350,7 +345,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     });
                     sliceIdx++;
                     currentHtml = '';
-                    currentHeight = 40; // continuation header is smaller
+                    currentHeight = CONTENT_PDF_HEIGHTS.CONTINUATION_HEADER_HEIGHT; // continuation header is smaller
                     isContinuation = true;
                 }
 
@@ -425,10 +420,10 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
             className="fixed inset-0 z-50 flex flex-col bg-slate-900/80 backdrop-blur-md"
         >
             {/* Hidden measurement container for content pages */}
-            <div ref={measureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: 816, pointerEvents: 'none' }} />
+            <div ref={measureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: PAGE_GEOMETRY.WIDTH_PX, pointerEvents: 'none' }} />
 
             {/* Hidden measurement container for economic table row heights */}
-            <div ref={economicMeasureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: 816, pointerEvents: 'none' }}>
+            <div ref={economicMeasureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: PAGE_GEOMETRY.WIDTH_PX, pointerEvents: 'none' }}>
                 {processedScenarios.map((scenario) => (
                     <EconomicProposalTable
                         key={`measure-${scenario.id}`}
@@ -504,7 +499,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
             {/* Scrollable preview area */}
             <div className="flex-1 overflow-y-auto py-12 px-4">
-                <div ref={pagesContainerRef} className="max-w-[816px] mx-auto space-y-12">
+                <div ref={pagesContainerRef} className="mx-auto space-y-12" style={{ maxWidth: PAGE_GEOMETRY.WIDTH_PX }}>
                     {visualPages.map((vPage, pageIdx) => (
                         <motion.div
                             key={vPage.id}
@@ -529,7 +524,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                             <div
                                 data-pdf-page
                                 className="bg-white rounded-2xl shadow-2xl shadow-black/20 border border-slate-200/50 overflow-hidden"
-                                style={{ minHeight: `${PAGE_HEIGHT}px`, maxHeight: `${PAGE_HEIGHT}px`, overflow: 'hidden' }}
+                                style={{ minHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px`, maxHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px`, overflow: 'hidden' }}
                             >
                                 {vPage.isCover ? (
                                     <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title ?? ''} apiBase={apiBase} resolveImageUrl={resolveImageUrl} />
@@ -611,19 +606,19 @@ function CoverPageContent({ blocks, title, resolveImageUrl }: { blocks: PageBloc
 
     if (imageUrl) {
         return (
-            <div className="w-full h-full flex items-center justify-center" style={{ minHeight: `${PAGE_HEIGHT}px` }}>
+            <div className="w-full h-full flex items-center justify-center" style={{ minHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px` }}>
                 <img
                     src={resolveImageUrl(imageUrl)}
                     alt="Portada"
                     className="w-full h-full object-cover"
-                    style={{ minHeight: `${PAGE_HEIGHT}px` }}
+                    style={{ minHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px` }}
                 />
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col items-center justify-center" style={{ minHeight: `${PAGE_HEIGHT}px` }}>
+        <div className="flex flex-col items-center justify-center" style={{ minHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px` }}>
             <div className="w-full max-w-md mx-auto text-center space-y-8">
                 <div className="w-24 h-24 mx-auto bg-gradient-to-br from-indigo-600 to-violet-600 rounded-3xl shadow-2xl shadow-indigo-600/30 flex items-center justify-center">
                     <FileText className="h-12 w-12 text-white" />
@@ -683,7 +678,7 @@ function IndexPageContent({ visualPages }: { visualPages: VisualPage[] }) {
     });
 
     return (
-        <div className="px-16 py-16" style={{ minHeight: `${PAGE_HEIGHT}px` }}>
+        <div className="px-16 py-16" style={{ minHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px` }}>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-8 pb-4 border-b-2 border-indigo-600">Índice</h2>
             <div className="space-y-1">
                 {entries.map((entry, idx) => {

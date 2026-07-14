@@ -1,5 +1,5 @@
 import type { ProcessedScenario } from '../hooks/useProposalScenarios';
-import { ECONOMIC_PDF_HEIGHTS } from './constants';
+import { ECONOMIC_PDF_HEIGHTS, PAGE_GEOMETRY } from './constants';
 
 /** Tipo de un item visible del escenario (alias para legibilidad) */
 type VisibleItem = ProcessedScenario['visibleItems'][number];
@@ -19,7 +19,6 @@ export interface EconomicPageSlice {
 }
 
 const {
-    USABLE_HEIGHT,
     FIRST_SLICE_HEADER_HEIGHT,
     CONTINUATION_HEADER_HEIGHT,
     TABLE_HEAD_HEIGHT,
@@ -27,9 +26,11 @@ const {
     FALLBACK_ROW_HEIGHT,
 } = ECONOMIC_PDF_HEIGHTS;
 
+const USABLE_HEIGHT = PAGE_GEOMETRY.USABLE_HEIGHT_PX;
+
 /**
  * Pagina los visibleItems del escenario en slices usando alturas reales
- * medidas en el DOM. Cada slice cabe en una hoja Letter a 96dpi (928px útiles).
+ * medidas en el DOM. Cada slice cabe en una hoja Letter a 96dpi (alto útil definido en PAGE_GEOMETRY).
  *
  * Algoritmo:
  * 1. Primera pasada — empaqueta filas en chunks por altura acumulada:
