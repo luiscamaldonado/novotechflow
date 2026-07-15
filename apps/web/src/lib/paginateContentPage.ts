@@ -10,6 +10,8 @@ export interface MeasuredElement {
 export interface ContentPageSlice {
     htmlContent: string;
     isContinuation: boolean;
+    /** True si el contenido excede el alto util de la hoja: el PDF lo recorta */
+    isOverflowing: boolean;
 }
 
 /** Alto asumido para imagenes que aun no cargaron (sin naturalHeight) */
@@ -74,6 +76,10 @@ export function measureContentElements(html: string, container: HTMLElement): Me
  * elemento excedería el alto útil (y ya hay contenido en la hoja actual),
  * corta y arranca una hoja de continuación. Con `elements` vacío devuelve
  * exactamente un slice vacío.
+ *
+ * Un elemento más alto que el alto útil entra igual en una hoja vacía (no hay
+ * partición intra-elemento): esa hoja se marca `isOverflowing` y el PDF la
+ * recorta. Por construcción, una hoja desbordada contiene un solo elemento.
  */
 export function paginateContentPage(elements: MeasuredElement[]): ContentPageSlice[] {
     const slices: ContentPageSlice[] = [];
@@ -92,6 +98,7 @@ export function paginateContentPage(elements: MeasuredElement[]): ContentPageSli
             slices.push({
                 htmlContent: currentHtml,
                 isContinuation,
+                isOverflowing: currentHeight > USABLE_HEIGHT,
             });
             currentHtml = '';
             currentHeight = CONTINUATION_HEADER_HEIGHT; // continuation header is smaller
@@ -106,6 +113,7 @@ export function paginateContentPage(elements: MeasuredElement[]): ContentPageSli
     slices.push({
         htmlContent: currentHtml,
         isContinuation,
+        isOverflowing: currentHeight > USABLE_HEIGHT,
     });
 
     return slices;
