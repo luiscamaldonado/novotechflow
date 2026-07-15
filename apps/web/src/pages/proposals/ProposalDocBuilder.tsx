@@ -570,10 +570,10 @@ export default function ProposalDocBuilder() {
                     )}
                 </div>
 
-                {/* Main Content — Page Editor */}
-                <div className={cn(activePage ? "lg:col-span-5" : "lg:col-span-9", "space-y-6")}>
-                    {activePage ? (
-                        canEditPage(activePage) ? (
+                {/* Main content — editor, virtual section sheets, or placeholder */}
+                {activePage ? (
+                    <div className="lg:col-span-5 space-y-6">
+                        {canEditPage(activePage) ? (
                             <PageEditor
                                 page={activePage}
                                 editingTitle={editingTitle}
@@ -592,21 +592,25 @@ export default function ProposalDocBuilder() {
                             />
                         ) : (
                             <LockedPageView page={activePage} />
-                        )
-                    ) : selectedVirtualSection ? (
+                        )}
+                    </div>
+                ) : selectedVirtualSection ? (
+                    <div className="lg:col-span-9">
                         <VirtualSectionPreview
                             sectionId={selectedVirtualSection}
                             processedScenarios={processedScenarios}
                         />
-                    ) : (
+                    </div>
+                ) : (
+                    <div className="lg:col-span-9 space-y-6">
                         <div className="bg-white rounded-[2.5rem] p-32 text-center border-2 border-dashed border-slate-100">
                             <BookOpen className="h-20 w-20 mx-auto text-slate-100 mb-6" />
                             <h4 className="text-xl font-black text-slate-300 uppercase tracking-tight">
                                 Seleccione una página para editar su contenido.
                             </h4>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
                 {activePage && (
                     <div className="lg:col-span-4">
                         <PageSheetsPreview page={activePage} proposalVars={proposalVars} />
