@@ -9,23 +9,14 @@ import { type ProposalVariables } from '../../lib/proposalVariables';
 import type { ProcessedScenario } from '../../hooks/useProposalScenarios';
 import TechnicalSpecSheet from './TechnicalSpecSheet';
 import EconomicProposalTable from './EconomicProposalTable';
+import PdfSheet from './PdfSheet';
+import PdfContentPage from './PdfContentPage';
 import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
 import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/paginateEconomicProposal';
 import { resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
-import { PAGE_GEOMETRY } from '../../lib/constants';
+import { PAGE_GEOMETRY, PAGE_TYPE_LABELS } from '../../lib/constants';
 import { buildPageHtml } from '../../lib/renderPageHtml';
 import { measureContentElements, paginateContentPage } from '../../lib/paginateContentPage';
-
-const PAGE_TYPE_LABELS: Record<string, string> = {
-    COVER: 'Portada',
-    PRESENTATION: 'Carta de Presentación',
-    COMPANY_INFO: 'Info. General',
-    INDEX: 'Índice',
-    TECH_SPEC: 'Propuesta Técnica',
-    ECONOMIC: 'Propuesta Económica',
-    TERMS: 'Términos y Condiciones',
-    CUSTOM: 'Página Personalizada',
-};
 
 interface PdfPreviewModalProps {
     pages: ProposalPage[];
@@ -423,11 +414,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                             </div>
 
                             {/* Paper page */}
-                            <div
-                                data-pdf-page
-                                className="bg-white rounded-2xl shadow-2xl shadow-black/20 border border-slate-200/50 overflow-hidden"
-                                style={{ minHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px`, maxHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px`, overflow: 'hidden' }}
-                            >
+                            <PdfSheet>
                                 {vPage.isCover ? (
                                     <CoverPageContent blocks={vPage.coverBlocks} title={vPage.title ?? ''} apiBase={apiBase} resolveImageUrl={resolveImageUrl} />
                                 ) : vPage.isIndex ? (
@@ -446,46 +433,9 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                                         slice={vPage.economicSlice}
                                     />
                                 ) : (
-                                    <div className="px-16 py-16 h-full">
-                                        {/* Header */}
-                                        {!vPage.isContinuation ? (
-                                            vPage.pageType === 'CUSTOM' ? (
-                                                <div className="mb-8 pb-4 border-b-2 border-indigo-600">
-                                                    <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
-                                                        Propuesta Comercial
-                                                    </h2>
-                                                    {vPage.title && (
-                                                        <p className="text-sm text-indigo-600 font-bold mt-1">{vPage.title}</p>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-8 pb-4 border-b-2 border-indigo-600">
-                                                    {vPage.title || PAGE_TYPE_LABELS[vPage.pageType]}
-                                                </h2>
-                                            )
-                                        ) : (
-                                            <div className="mb-6 pb-3 border-b border-slate-200 flex items-center justify-between">
-                                                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                                                    {vPage.title || PAGE_TYPE_LABELS[vPage.pageType]}
-                                                    <span className="text-slate-300 ml-2">— Continuación</span>
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Content */}
-                                        {vPage.htmlContent ? (
-                                            <div
-                                                className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-p:leading-relaxed"
-                                                dangerouslySetInnerHTML={{ __html: vPage.htmlContent }}
-                                            />
-                                        ) : (
-                                            <div className="py-20 text-center">
-                                                <p className="text-sm text-slate-300 italic">Esta página no tiene contenido aún.</p>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <PdfContentPage pageType={vPage.pageType} title={vPage.title} htmlContent={vPage.htmlContent} isContinuation={vPage.isContinuation} />
                                 )}
-                            </div>
+                            </PdfSheet>
                         </motion.div>
                     ))}
 
