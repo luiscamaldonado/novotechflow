@@ -13,7 +13,7 @@ import PdfSheet from './PdfSheet';
 import PdfContentPage from './PdfContentPage';
 import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
 import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/paginateEconomicProposal';
-import { resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
+import { getApiBase, resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
 import { PAGE_GEOMETRY, PAGE_TYPE_LABELS } from '../../lib/constants';
 import { buildPageHtml } from '../../lib/renderPageHtml';
 import { measureContentElements, paginateContentPage } from '../../lib/paginateContentPage';
@@ -54,7 +54,7 @@ interface VisualPage {
 }
 
 export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [], enableExcelExport = false, ownerSignatureUrl }: PdfPreviewModalProps) {
-    const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+    const apiBase = getApiBase();
 
     /** Wrapper local que cierra sobre apiBase. Delega en el helper compartido en lib/resolveImageUrl.ts. */
     const resolveImageUrl = useCallback(
