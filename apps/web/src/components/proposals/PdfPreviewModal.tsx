@@ -11,12 +11,14 @@ import TechnicalSpecSheet from './TechnicalSpecSheet';
 import EconomicProposalTable from './EconomicProposalTable';
 import PdfSheet from './PdfSheet';
 import PdfContentPage from './PdfContentPage';
+import EconomicMeasureContainer from './EconomicMeasureContainer';
 import { consolidateTechnicalItems, type ConsolidatedTechItem } from '../../lib/consolidateTechnicalItems';
 import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/paginateEconomicProposal';
 import { getApiBase, resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
 import { PAGE_GEOMETRY, PAGE_TYPE_LABELS } from '../../lib/constants';
 import { buildPageHtml } from '../../lib/renderPageHtml';
 import { measureContentElements, paginateContentPage } from '../../lib/paginateContentPage';
+import { useEconomicRowHeights } from '../../hooks/useEconomicRowHeights';
 
 interface PdfPreviewModalProps {
     pages: ProposalPage[];
@@ -63,11 +65,10 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
     );
     const [visualPages, setVisualPages] = useState<VisualPage[]>([]);
     const measureRef = useRef<HTMLDivElement>(null);
-    const economicMeasureRef = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [exportingExcel, setExportingExcel] = useState(false);
-    const [rowHeights, setRowHeights] = useState<Map<string, number>>(new Map());
+    const { measureRef: economicMeasureRef, rowHeights } = useEconomicRowHeights(processedScenarios);
     const consolidation = useMemo(
         () => consolidateTechnicalItems(processedScenarios),
         [processedScenarios],
@@ -280,29 +281,6 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
         }
     }, [buildVisualPages]);
 
-    // Measure economic table row heights in a hidden container
-    useEffect(() => {
-        if (processedScenarios.length === 0) return;
-
-        const timer = setTimeout(() => {
-            const container = economicMeasureRef.current;
-            if (!container) return;
-
-            const measured = new Map<string, number>();
-            const rows = container.querySelectorAll<HTMLElement>('[data-measure-row]');
-            rows.forEach((el) => {
-                const id = el.getAttribute('data-measure-row');
-                if (id) {
-                    measured.set(id, el.getBoundingClientRect().height);
-                }
-            });
-
-            setRowHeights(measured);
-        }, 200);
-
-        return () => clearTimeout(timer);
-    }, [processedScenarios]);
-
     const totalPages = ready ? visualPages.length : pages.length;
 
     return (
@@ -316,22 +294,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
             <div ref={measureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: PAGE_GEOMETRY.WIDTH_PX, pointerEvents: 'none' }} />
 
             {/* Hidden measurement container for economic table row heights */}
-            <div ref={economicMeasureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: PAGE_GEOMETRY.WIDTH_PX, pointerEvents: 'none' }}>
-                {processedScenarios.map((scenario) => (
-                    <EconomicProposalTable
-                        key={`measure-${scenario.id}`}
-                        scenario={scenario}
-                        variantLabelByScenarioItemId={consolidation.variantLabelByScenarioItemId}
-                        slice={{
-                            items: scenario.visibleItems,
-                            isFirstSlice: false,
-                            showTotals: false,
-                            sliceIndex: 0,
-                            totalSlices: 1,
-                        }}
-                    />
-                ))}
-            </div>
+            <EconomicMeasureContainer measureRef={economicMeasureRef} processedScenarios={processedScenarios} variantLabelByScenarioItemId={consolidation.variantLabelByScenarioItemId} />
 
             {/* Toolbar */}
             <div className="flex items-center justify-between px-8 py-4 bg-slate-900/90 border-b border-slate-700/50 shrink-0">
