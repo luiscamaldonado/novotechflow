@@ -27,6 +27,7 @@ import CityCombobox from './components/CityCombobox';
 import LockedPageView from './components/LockedPageView';
 import VirtualSectionPreview from './components/VirtualSectionPreview';
 import PageEditor from './components/PageEditor';
+import PageSheetsPreview from './components/PageSheetsPreview';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 
@@ -570,7 +571,7 @@ export default function ProposalDocBuilder() {
                 </div>
 
                 {/* Main Content — Page Editor */}
-                <div className="lg:col-span-9 space-y-6">
+                <div className={cn(activePage ? "lg:col-span-5" : "lg:col-span-9", "space-y-6")}>
                     {activePage ? (
                         canEditPage(activePage) ? (
                             <PageEditor
@@ -606,6 +607,11 @@ export default function ProposalDocBuilder() {
                         </div>
                     )}
                 </div>
+                {activePage && (
+                    <div className="lg:col-span-4">
+                        <PageSheetsPreview page={activePage} proposalVars={proposalVars} />
+                    </div>
+                )}
             </div>
 
             <ProposalNavBar proposalId={id!} currentStep={3} />
