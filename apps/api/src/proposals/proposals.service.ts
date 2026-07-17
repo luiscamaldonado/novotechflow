@@ -356,6 +356,7 @@ export class ProposalsService {
       where: { id },
       include: {
         proposalItems: { orderBy: { sortOrder: 'asc' } },
+        user: { select: { name: true, nomenclature: true, signatureUrl: true } },
       },
     });
   }
