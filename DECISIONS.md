@@ -2697,3 +2697,53 @@ Se descartó modelar una entidad de OC o inventario: no existe módulo de invent
 
 - Verificación en navegador (Luis): campo visible solo en NOVOTECHNO, ítem nuevo sin OC no guarda, cambiar de origen limpia el valor, persistencia tras F5.
 - Si alguna vez se integra con la aplicación donde viven las órdenes de compra, evaluar promover `oc` a columna con validación real contra esa fuente.
+
+## ADR-066 — Firma del usuario resuelta en render, no como snapshot en el documento
+
+**Fecha:** 2026-07-18
+**Estado:** Aceptado
+
+### Contexto
+
+Un usuario comercial (Carolina Casas, nomenclatura CC) reportó que su firma, subida desde la ventana de administración de usuarios, no aparecía en la propuesta COT-CC00005-1, mientras que sí aparecía en otras propuestas suyas, nuevas y viejas. El patrón no era monótono en el tiempo: propuestas más viejas mostraban la firma y otras más nuevas no.
+
+El diagnóstico contra producción (solo lectura) reveló la causa raíz. Las páginas de una propuesta no se crean al crear la propuesta, sino de forma diferida (lazy), la primera vez que alguien abre el documento y se dispara `POST /proposals/:id/pages/initialize`. Al inicializarse, `initializeDefaultPages` leía la firma del usuario dueño en ese instante y la copiaba como un bloque IMAGE dentro de la página PRESENTATION: una foto del estado de la firma en el momento de abrir el documento por primera vez. Como `initializeDefaultPages` es idempotente y no re-inicializa si ya existen páginas, esa foto nunca se actualizaba después.
+
+Cruzando los `createdAt` reales de cada página PRESENTATION con el momento de subida de la firma, el patrón colapsó en un solo evento: la firma se subió una única vez, en la ventana 2026-07-17 21:07–22:24 UTC. Todo documento abierto por primera vez antes de esa hora quedó sin firma; todo documento abierto después la capturó. COT-CC00005-1 abrió su documento a las 19:30 UTC, antes de la subida, y quedó congelada sin firma. No era la edad de la propuesta lo que importaba, sino cuándo se abrió el documento por primera vez.
+
+El modelo de snapshot tiene además dos defectos de fondo: la firma no era un dato vivo (cambiarla no afectaba propuestas ya inicializadas), y el bloque IMAGE de la firma era indistinguible de una imagen normal insertada por el usuario. El único intento de distinguirlos, la heurística `url.includes('/signatures/')` en el render, estaba muerto desde la migración de firmas a data URI base64 (abril 2026): un data URI nunca contiene `/signatures/`.
+
+### Decisión
+
+La firma deja de copiarse dentro del documento y pasa a resolverse en tiempo de render, desde el usuario dueño de la propuesta.
+
+En backend, `getProposalById` incluye ahora `user: { name, nomenclature, signatureUrl }` del dueño, e `initializeDefaultPages` deja de inyectar el bloque IMAGE de firma: las propuestas nuevas nacen sin bloque de firma. En frontend, el render de la página PRESENTATION pinta la firma del dueño al final de la página, después de los bloques, como elemento aparte. La firma se resuelve desde el dueño de la propuesta (traído por el backend), no desde el usuario logueado (`authStore`), para que un administrador que abra la propuesta de un comercial vea la firma correcta y no la propia.
+
+Al dejar de ser un bloque, la firma ya no necesita marcador ni heurística: todo bloque IMAGE vuelve a ser una imagen normal, sin excepción, y la firma se pinta por una vía separada condicionada a `pageType === 'PRESENTATION'`. La heurística `url.includes('/signatures/')` se elimina.
+
+Se descartó la alternativa de mantener el snapshot con un botón de "actualizar firma" en el documento, porque deja al usuario la carga de saber que debe accionarlo. Se aceptó explícitamente la consecuencia de que las propuestas ya enviadas muestren en la app la firma actual del dueño y no la del momento de envío: el registro de lo enviado al cliente es el PDF archivado, no la vista de la app.
+
+### Consecuencias
+
+1. Se elimina la clase completa de bug: ningún documento futuro puede quedar sin firma por haberse abierto antes de que el dueño la cargara. La firma es un dato vivo del usuario.
+2. Las propuestas ya inicializadas que tenían el bloque IMAGE-firma snapshot mostraban la firma dos veces (el bloque viejo más la firma nueva en render). Se identificaron y borraron los bloques residuales en producción: COT-CC00004-1 (blockId 6542a08e-7b66-45f9-87e0-575eed6b8aab) y COT-CC00010-1 (blockId 5306e9d8-9209-4cba-b364-ad1f2a83c5cc), con pg_dump previo de proposal_page_blocks y verificación precheck/postcheck.
+3. Una propuesta abierta en la app ya no refleja necesariamente la firma que llevaba el PDF enviado al cliente, si el dueño cambió su firma después. Es un cambio de contrato deliberado: la app muestra el estado actual, el PDF archivado es el registro de lo enviado.
+4. Deuda de reconciliación con la rama feature/wysiwyg-pages. Ese trabajo (en diseño, sin mergear) extrae el render de páginas de PdfPreviewModal a lib/renderPageHtml.ts y añade una segunda vía de render (useContentPageSheets / PageSheetsPreview). Este fix se construyó sobre la estructura inline de master (render dentro de PdfPreviewModal, 3 archivos). Cuando wysiwyg se mergee, hay que unificar las dos versiones del render de firma: la lógica del append de firma debe quedar en buildPageHtml (que ya recibe pageType y ownerSignatureUrl en la rama) y propagarse a sus dos call sites, no duplicada en el modal.
+
+### Archivos
+
+- `apps/api/src/proposals/proposals.service.ts` — `getProposalById` incluye `user: { name, nomenclature, signatureUrl }` del dueño
+- `apps/api/src/proposals/pages.service.ts` — `initializeDefaultPages` deja de inyectar el bloque IMAGE de firma; se elimina el fetch de `proposal` que solo servía para eso
+- `apps/web/src/lib/types.ts` — `ProposalDetail.user` gana `signatureUrl?`
+- `apps/web/src/components/proposals/PdfPreviewModal.tsx` — prop `ownerSignatureUrl`; se elimina la heurística `url.includes('/signatures/')`; se pinta la firma del dueño al final de PRESENTATION
+- `apps/web/src/pages/proposals/ProposalDocBuilder.tsx` — pasa `ownerSignatureUrl={proposal?.user?.signatureUrl}` al modal
+
+### Commits
+
+- `642c185` — refactor(proposals): resolve owner signature at render instead of snapshot
+- `a952373` — feat(proposals): render owner signature on presentation page
+
+### Pendientes
+
+- Reconciliar el render de firma con feature/wysiwyg-pages al mergear esa rama (ver consecuencia 4)
+- Bug preexistente, aparte de este fix: el preview de firma en la ventana Usuarios (`Users.tsx:552`) usa `${apiBase}${u.signatureUrl}` en vez de `resolveImageUrl`, lo que produce una URL malformada con un data URI. No afecta el render en propuestas
