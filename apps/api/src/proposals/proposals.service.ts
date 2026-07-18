@@ -711,7 +711,9 @@ export class ProposalsService {
         },
       });
 
-      // Clone pages and their blocks (before items, so pageIdMap is available for ProposalItem.pageId)
+      // Clone pages in two passes: create all pages first (parentPageId null),
+      // then remap parentPageId, so a child sheet can reference a section created later.
+      // pageIdMap is also used below for ProposalItem.pageId.
       const pageIdMap = new Map<string, string>();
       for (const page of original.pages) {
         const newPage = await tx.proposalPage.create({
@@ -721,6 +723,7 @@ export class ProposalsService {
             title: page.title,
             variables: page.variables as object | undefined,
             isLocked: page.isLocked,
+            isSectionModel: page.isSectionModel,
             sortOrder: page.sortOrder,
           },
         });
@@ -733,6 +736,17 @@ export class ProposalsService {
               content: block.content as object | undefined,
               sortOrder: block.sortOrder,
             },
+          });
+        }
+      }
+      for (const page of original.pages) {
+        if (!page.parentPageId) continue;
+        const newPageId = pageIdMap.get(page.id);
+        const newParentId = pageIdMap.get(page.parentPageId);
+        if (newPageId && newParentId) {
+          await tx.proposalPage.update({
+            where: { id: newPageId },
+            data: { parentPageId: newParentId },
           });
         }
       }
