@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProposalsService } from './proposals.service';
 import { BlockType, PageType } from '@prisma/client';
@@ -290,6 +294,46 @@ export class PagesService {
         pageType: 'CUSTOM',
         title: data.title,
         isLocked: false,
+        isSectionModel: true,
+        sortOrder: nextOrder,
+      },
+      include: { blocks: true },
+    });
+  }
+
+  /**
+   * Agrega una hoja hija a una seccion personalizada.
+   */
+  async addSheetToSection(
+    sectionId: string,
+    user: AuthenticatedUser,
+  ) {
+    const section = await this.prisma.proposalPage.findUnique({
+      where: { id: sectionId },
+    });
+    if (!section) throw new NotFoundException('Seccion no encontrada.');
+    if (!section.isSectionModel || section.parentPageId) {
+      throw new BadRequestException('La pagina no es una seccion valida.');
+    }
+    const proposal = await this.proposalsService.verifyProposalOwnership(
+      section.proposalId,
+      user,
+    );
+    assertProposalNotLocked(proposal);
+    const aggregate = await this.prisma.proposalPage.aggregate({
+      where: { parentPageId: sectionId },
+      _max: { sortOrder: true },
+    });
+    const nextOrder = (aggregate._max.sortOrder || 0) + 1;
+
+    return this.prisma.proposalPage.create({
+      data: {
+        proposalId: section.proposalId,
+        pageType: 'CUSTOM',
+        title: section.title,
+        isLocked: false,
+        isSectionModel: true,
+        parentPageId: sectionId,
         sortOrder: nextOrder,
       },
       include: { blocks: true },

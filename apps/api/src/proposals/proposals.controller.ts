@@ -343,6 +343,14 @@ export class ProposalsController {
     return this.pagesService.createCustomPage(id, data, req.user);
   }
 
+  @Post('pages/:sectionId/sheets')
+  async addSheetToSection(
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.pagesService.addSheetToSection(sectionId, req.user);
+  }
+
   @Patch('pages/:pageId')
   async updatePage(
     @Param('pageId', ParseUUIDPipe) pageId: string,
