@@ -29,6 +29,8 @@ export function buildPageHtml(
     blocks: PageBlock[],
     proposalVars: ProposalVariables | undefined,
     resolveImageUrl: (url: string) => string,
+    pageType?: string,
+    ownerSignatureUrl?: string,
 ): string {
     let fullHtml = '';
     for (const block of blocks) {
@@ -40,18 +42,16 @@ export function buildPageHtml(
             const url = (block.content as Record<string, string>)?.url;
             const caption = (block.content as Record<string, string>)?.caption;
             if (url) {
-                const isSignature = url.includes('/signatures/');
-                if (isSignature) {
-                    fullHtml += `<div style="margin-top:48px;"><img src="${resolveImageUrl(url)}" alt="${caption || 'Firma'}" style="object-fit:contain;" /></div>`;
-                } else {
-                    fullHtml += `<figure class="my-6"><img src="${resolveImageUrl(url)}" alt="${caption || ''}" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; border:1px solid #f1f5f9;" />`;
-                    if (caption) {
-                        fullHtml += `<figcaption style="text-align:center; font-size:12px; color:#64748b; font-style:italic; margin-top:12px;">${caption}</figcaption>`;
-                    }
-                    fullHtml += '</figure>';
+                fullHtml += `<figure class="my-6"><img src="${resolveImageUrl(url)}" alt="${caption || ''}" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; border:1px solid #f1f5f9;" />`;
+                if (caption) {
+                    fullHtml += `<figcaption style="text-align:center; font-size:12px; color:#64748b; font-style:italic; margin-top:12px;">${caption}</figcaption>`;
                 }
+                fullHtml += '</figure>';
             }
         }
+    }
+    if (pageType === 'PRESENTATION' && ownerSignatureUrl) {
+        fullHtml += `<div style="margin-top:48px;"><img src="${resolveImageUrl(ownerSignatureUrl)}" alt="Firma" style="object-fit:contain;" /></div>`;
     }
     return fullHtml;
 }

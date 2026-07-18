@@ -613,7 +613,7 @@ export default function ProposalDocBuilder() {
                 )}
                 {activePage && (
                     <div className="lg:col-span-4">
-                        <PageSheetsPreview page={activePage} proposalVars={proposalVars} />
+                        <PageSheetsPreview page={activePage} proposalVars={proposalVars} ownerSignatureUrl={proposal?.user?.signatureUrl} />
                     </div>
                 )}
             </div>

@@ -9,13 +9,14 @@ import PdfContentPage from '../../../components/proposals/PdfContentPage';
 interface PageSheetsPreviewProps {
     page: ProposalPage;
     proposalVars: ProposalVariables;
+    ownerSignatureUrl?: string;
 }
 
 /** Escala de la hoja en la columna de vista previa del constructor */
 const SHEET_SCALE = 0.6;
 
-export default function PageSheetsPreview({ page, proposalVars }: PageSheetsPreviewProps) {
-    const { measureRef, slices } = useContentPageSheets(page, proposalVars);
+export default function PageSheetsPreview({ page, proposalVars, ownerSignatureUrl }: PageSheetsPreviewProps) {
+    const { measureRef, slices } = useContentPageSheets(page, proposalVars, ownerSignatureUrl);
 
     return (
         <>

@@ -221,11 +221,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
             }
 
             // Content pages: render all blocks to HTML, then split by element heights
-            let fullHtml = buildPageHtml(page.blocks, proposalVars, resolveImageUrl);
-
-            if (page.pageType === 'PRESENTATION' && ownerSignatureUrl) {
-                fullHtml += `<div style="margin-top:48px;"><img src="${resolveImageUrl(ownerSignatureUrl)}" alt="Firma" style="object-fit:contain;" /></div>`;
-            }
+            const fullHtml = buildPageHtml(page.blocks, proposalVars, resolveImageUrl, page.pageType, ownerSignatureUrl);
 
             if (!fullHtml.trim()) {
                 result.push({

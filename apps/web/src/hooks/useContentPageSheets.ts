@@ -28,6 +28,7 @@ export function isContentPage(page: ProposalPage | null): boolean {
 export function useContentPageSheets(
     page: ProposalPage | null,
     proposalVars: ProposalVariables | undefined,
+    ownerSignatureUrl?: string,
 ): { measureRef: RefObject<HTMLDivElement | null>; slices: ContentPageSlice[] } {
     const resolveImageUrl = useCallback((url: string) => resolveImageUrlShared(url, getApiBase()), []);
     const measureRef = useRef<HTMLDivElement>(null);
@@ -45,7 +46,7 @@ export function useContentPageSheets(
             if (cancelled) return;
             const container = measureRef.current;
             if (!container) return;
-            const html = buildPageHtml(page.blocks, proposalVars, resolveImageUrl);
+            const html = buildPageHtml(page.blocks, proposalVars, resolveImageUrl, page.pageType, ownerSignatureUrl);
             const elements = measureContentElements(html, container);
             setSlices(paginateContentPage(elements));
         };
@@ -59,7 +60,7 @@ export function useContentPageSheets(
             cancelled = true;
             window.clearTimeout(timer);
         };
-    }, [page, proposalVars, resolveImageUrl]);
+    }, [page, proposalVars, resolveImageUrl, ownerSignatureUrl]);
 
     return { measureRef, slices };
 }
