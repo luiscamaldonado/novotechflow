@@ -320,6 +320,8 @@ export default function DefaultPagesAdmin() {
                             title: t.name,
                             variables: null,
                             isLocked: true,
+                            isSectionModel: false,
+                            parentPageId: null,
                             sortOrder: t.sortOrder,
                             blocks: t.content.map(block => ({ ...block, pageId: t.id }))
                         }))}

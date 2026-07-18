@@ -18,6 +18,8 @@ export interface ProposalPage {
     title: string | null;
     variables: Record<string, unknown> | null;
     isLocked: boolean;
+    isSectionModel: boolean;
+    parentPageId: string | null;
     sortOrder: number;
     blocks: PageBlock[];
 }
@@ -71,7 +73,7 @@ export function useProposalPages(proposalId: string | undefined) {
 
     // ── Page CRUD ────────────────────────────────────────────
 
-    const createPage = async (title: string) => {
+    const createSection = async (title: string) => {
         if (!title.trim() || !proposalId) return;
         setSaving(true);
         try {
@@ -82,6 +84,32 @@ export function useProposalPages(proposalId: string | undefined) {
                 if (termsIdx === -1) return [...prev, res.data];
                 const copy = [...prev];
                 copy.splice(termsIdx, 0, res.data);
+                return copy;
+            });
+            setActivePageId(res.data.id);
+            return true;
+        } catch (error) {
+            console.error(error);
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const addSheet = async (sectionId: string) => {
+        setSaving(true);
+        try {
+            const res = await api.post(`/proposals/pages/${sectionId}/sheets`, {});
+            setPages(prev => {
+                const sectionIdx = prev.findIndex(p => p.id === sectionId);
+                if (sectionIdx === -1) return [...prev, res.data];
+                // Insert after the section and its existing child sheets
+                let insertIdx = sectionIdx + 1;
+                while (insertIdx < prev.length && prev[insertIdx].parentPageId === sectionId) {
+                    insertIdx++;
+                }
+                const copy = [...prev];
+                copy.splice(insertIdx, 0, res.data);
                 return copy;
             });
             setActivePageId(res.data.id);
@@ -212,7 +240,8 @@ export function useProposalPages(proposalId: string | undefined) {
         activePage,
         loadPages,
         fetchPages,
-        createPage,
+        createSection,
+        addSheet,
         updatePage,
         deletePage,
         reorderPages,

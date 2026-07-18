@@ -38,7 +38,7 @@ export default function ProposalDocBuilder() {
 
     const {
         loading, saving, pages, activePageId, setActivePageId, activePage,
-        loadPages, createPage, updatePage, deletePage, reorderPages,
+        loadPages, createSection, updatePage, deletePage, reorderPages,
         createBlock, updateBlock, deleteBlock, uploadImage,
     } = useProposalPages(id);
 
@@ -139,7 +139,7 @@ export default function ProposalDocBuilder() {
 
     const handleCreatePage = async (e: React.FormEvent) => {
         e.preventDefault();
-        const ok = await createPage(newPageTitle);
+        const ok = await createSection(newPageTitle);
         if (ok) {
             setNewPageTitle('');
             setIsCreatingPage(false);
