@@ -38,6 +38,7 @@ interface PdfPreviewModalProps {
     proposalVars?: ProposalVariables;
     processedScenarios?: ProcessedScenario[];
     enableExcelExport?: boolean;
+    ownerSignatureUrl?: string;
 }
 
 function renderRichText(content: Record<string, unknown> | null): string {
@@ -81,7 +82,7 @@ interface VisualPage {
     economicSlice?: EconomicPageSlice;
 }
 
-export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [], enableExcelExport = false }: PdfPreviewModalProps) {
+export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [], enableExcelExport = false, ownerSignatureUrl }: PdfPreviewModalProps) {
     const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
     /** Wrapper local que cierra sobre apiBase. Delega en el helper compartido en lib/resolveImageUrl.ts. */
@@ -259,18 +260,17 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     const url = (block.content as Record<string, string>)?.url;
                     const caption = (block.content as Record<string, string>)?.caption;
                     if (url) {
-                        const isSignature = url.includes('/signatures/');
-                        if (isSignature) {
-                            fullHtml += `<div style="margin-top:48px;"><img src="${resolveImageUrl(url)}" alt="${caption || 'Firma'}" style="object-fit:contain;" /></div>`;
-                        } else {
-                            fullHtml += `<figure class="my-6"><img src="${resolveImageUrl(url)}" alt="${caption || ''}" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; border:1px solid #f1f5f9;" />`;
-                            if (caption) {
-                                fullHtml += `<figcaption style="text-align:center; font-size:12px; color:#64748b; font-style:italic; margin-top:12px;">${caption}</figcaption>`;
-                            }
-                            fullHtml += '</figure>';
+                        fullHtml += `<figure class="my-6"><img src="${resolveImageUrl(url)}" alt="${caption || ''}" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; border:1px solid #f1f5f9;" />`;
+                        if (caption) {
+                            fullHtml += `<figcaption style="text-align:center; font-size:12px; color:#64748b; font-style:italic; margin-top:12px;">${caption}</figcaption>`;
                         }
+                        fullHtml += '</figure>';
                     }
                 }
+            }
+
+            if (page.pageType === 'PRESENTATION' && ownerSignatureUrl) {
+                fullHtml += `<div style="margin-top:48px;"><img src="${resolveImageUrl(ownerSignatureUrl)}" alt="Firma" style="object-fit:contain;" /></div>`;
             }
 
             if (!fullHtml.trim()) {
@@ -375,7 +375,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
 
         setVisualPages(result);
         setReady(true);
-    }, [pages, proposalVars, processedScenarios, consolidation, rowHeights, resolveImageUrl]);
+    }, [pages, proposalVars, processedScenarios, consolidation, rowHeights, resolveImageUrl, ownerSignatureUrl]);
 
     useEffect(() => {
         // Wait for DOM to be ready

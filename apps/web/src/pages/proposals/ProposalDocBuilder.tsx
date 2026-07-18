@@ -309,6 +309,7 @@ export default function ProposalDocBuilder() {
                         proposalVars={proposalVars}
                         processedScenarios={processedScenarios}
                         enableExcelExport
+                        ownerSignatureUrl={proposal?.user?.signatureUrl}
                     />
                 )}
                 {showPriceWarning && (

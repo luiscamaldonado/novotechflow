@@ -194,7 +194,7 @@ export interface ProposalDetail {
     status: ProposalStatus;
     isLocked: boolean;
     proposalItems: ProposalItemFromApi[];
-    user?: { name: string; nomenclature: string };
+    user?: { name: string; nomenclature: string; signatureUrl?: string };
 }
 
 // ──────────────────────────────────────────────────────────
