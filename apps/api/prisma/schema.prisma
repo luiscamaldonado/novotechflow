@@ -153,20 +153,25 @@ model ProposalVersion {
 }
 
 model ProposalPage {
-  id         String   @id @default(uuid()) @db.Uuid
-  proposalId String   @map("proposal_id") @db.Uuid
-  pageType   PageType @map("page_type")
-  title      String?  @db.VarChar(200)
-  variables  Json?    @db.JsonB
-  isLocked   Boolean  @default(false) @map("is_locked")
-  sortOrder  Int      @default(0) @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  proposalId     String   @map("proposal_id") @db.Uuid
+  pageType       PageType @map("page_type")
+  title          String?  @db.VarChar(200)
+  variables      Json?    @db.JsonB
+  isLocked       Boolean  @default(false) @map("is_locked")
+  isSectionModel Boolean  @default(false) @map("is_section_model")
+  parentPageId   String?  @map("parent_page_id") @db.Uuid
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   proposal      Proposal            @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  parentPage    ProposalPage?       @relation("PageSheets", fields: [parentPageId], references: [id], onDelete: Cascade)
+  childSheets   ProposalPage[]      @relation("PageSheets")
   blocks        ProposalPageBlock[]
   proposalItems ProposalItem[]
 
   @@index([proposalId])
+  @@index([parentPageId])
   @@map("proposal_pages")
 }
 
