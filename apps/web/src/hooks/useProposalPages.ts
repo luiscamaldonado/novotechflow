@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '../lib/api';
 
 // ── Types ────────────────────────────────────────────────────
@@ -34,6 +34,14 @@ export function useProposalPages(proposalId: string | undefined) {
     const initializingRef = useRef(false);
 
     const activePage = pages.find(p => p.id === activePageId) ?? null;
+
+    // Invariante: activePageId nunca apunta a una página que ya no existe.
+    // Cubre borrados (incluida la cascada de secciones) sin depender de closures stale.
+    useEffect(() => {
+        if (activePageId && pages.length > 0 && !pages.some(p => p.id === activePageId)) {
+            setActivePageId(pages[0]?.id ?? null);
+        }
+    }, [pages, activePageId]);
 
     const loadPages = useCallback(async () => {
         if (!proposalId || initializingRef.current) return;
@@ -73,8 +81,8 @@ export function useProposalPages(proposalId: string | undefined) {
 
     // ── Page CRUD ────────────────────────────────────────────
 
-    const createSection = async (title: string) => {
-        if (!title.trim() || !proposalId) return;
+    const createSection = async (title: string): Promise<ProposalPage | null> => {
+        if (!title.trim() || !proposalId) return null;
         setSaving(true);
         try {
             const res = await api.post(`/proposals/${proposalId}/pages`, { title });
@@ -87,10 +95,10 @@ export function useProposalPages(proposalId: string | undefined) {
                 return copy;
             });
             setActivePageId(res.data.id);
-            return true;
+            return res.data as ProposalPage;
         } catch (error) {
             console.error(error);
-            return false;
+            return null;
         } finally {
             setSaving(false);
         }
@@ -141,11 +149,16 @@ export function useProposalPages(proposalId: string | undefined) {
     const deletePage = async (pageId: string) => {
         const page = pages.find(p => p.id === pageId);
         if (!page || page.isLocked) return;
-        if (!confirm('¿Eliminar esta página?')) return;
+        const isSection = page.isSectionModel && !page.parentPageId;
+        const message = isSection
+            ? '\u00bfEliminar esta secci\u00f3n? Se eliminar\u00e1n tambi\u00e9n todas sus hojas.'
+            : '\u00bfEliminar esta p\u00e1gina?';
+        if (!confirm(message)) return;
         try {
             await api.delete(`/proposals/pages/${pageId}`);
-            setPages(prev => prev.filter(p => p.id !== pageId));
-            if (activePageId === pageId) setActivePageId(pages[0]?.id ?? null);
+            // El backend cascadea (onDelete: Cascade); esto es solo el espejo local.
+            // El efecto de invariante reubica activePageId si queda colgando.
+            setPages(prev => prev.filter(p => p.id !== pageId && p.parentPageId !== pageId));
         } catch (error) {
             console.error(error);
         }

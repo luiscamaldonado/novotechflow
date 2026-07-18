@@ -6,6 +6,7 @@ import {
     Lock, GripVertical,
     BookOpen, Eye, ShieldAlert,
     ChevronUp, ChevronDown, MapPin, Cpu, DollarSign,
+    Folder,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useProposalPages, type ProposalPage } from '../../hooks/useProposalPages';
@@ -28,8 +29,18 @@ import LockedPageView from './components/LockedPageView';
 import VirtualSectionPreview from './components/VirtualSectionPreview';
 import PageEditor from './components/PageEditor';
 import PageSheetsPreview from './components/PageSheetsPreview';
+import SectionView from './components/SectionView';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
+
+/** Sección del modelo nuevo: página contenedora sin padre */
+const isSectionPage = (page: ProposalPage): boolean => page.isSectionModel && !page.parentPageId;
+
+/** Entrada del sidebar: página top-level con sus hojas hijas (vacío si no es sección) */
+interface SidebarEntry {
+    page: ProposalPage;
+    children: ProposalPage[];
+}
 
 export default function ProposalDocBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -38,7 +49,7 @@ export default function ProposalDocBuilder() {
 
     const {
         loading, saving, pages, activePageId, setActivePageId, activePage,
-        loadPages, createSection, updatePage, deletePage, reorderPages,
+        loadPages, createSection, addSheet, updatePage, deletePage, reorderPages,
         createBlock, updateBlock, deleteBlock, uploadImage,
     } = useProposalPages(id);
 
@@ -69,12 +80,46 @@ export default function ProposalDocBuilder() {
     }, [scenariosLoading, priceWarnings]);
 
 
-    const movePage = (index: number, direction: 'up' | 'down') => {
+    /** Jerarquía derivada de la lista plana: top-level en su orden, cada sección con sus hojas en el suyo */
+    const topLevel = useMemo<SidebarEntry[]>(
+        () => pages
+            .filter(p => !p.parentPageId)
+            .map(page => ({
+                page,
+                children: pages.filter(c => c.parentPageId === page.id),
+            })),
+        [pages],
+    );
+
+    const activeSectionSheets = useMemo(
+        () => (activePage && isSectionPage(activePage)
+            ? pages.filter(p => p.parentPageId === activePage.id)
+            : []),
+        [pages, activePage],
+    );
+
+    /** Aplana la jerarquía al orden plano que espera el PATCH de reorder (sección seguida de sus hojas) */
+    const flattenPageIds = (entries: SidebarEntry[]): string[] =>
+        entries.flatMap(entry => [entry.page.id, ...entry.children.map(c => c.id)]);
+
+    const moveTopLevel = (index: number, direction: 'up' | 'down') => {
         const newIndex = direction === 'up' ? index - 1 : index + 1;
-        if (newIndex < 0 || newIndex >= pages.length) return;
-        const newPages = [...pages];
-        [newPages[index], newPages[newIndex]] = [newPages[newIndex], newPages[index]];
-        reorderPages(newPages.map(p => p.id));
+        if (newIndex < 0 || newIndex >= topLevel.length) return;
+        const entries = [...topLevel];
+        [entries[index], entries[newIndex]] = [entries[newIndex], entries[index]];
+        reorderPages(flattenPageIds(entries));
+    };
+
+    const moveSheet = (sectionId: string, index: number, direction: 'up' | 'down') => {
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        const entries = topLevel.map(entry =>
+            entry.page.id === sectionId ? { ...entry, children: [...entry.children] } : entry,
+        );
+        const section = entries.find(entry => entry.page.id === sectionId);
+        if (!section || newIndex < 0 || newIndex >= section.children.length) return;
+        [section.children[index], section.children[newIndex]] =
+            [section.children[newIndex], section.children[index]];
+        reorderPages(flattenPageIds(entries));
     };
 
     const [isCreatingPage, setIsCreatingPage] = useState(false);
@@ -139,10 +184,13 @@ export default function ProposalDocBuilder() {
 
     const handleCreatePage = async (e: React.FormEvent) => {
         e.preventDefault();
-        const ok = await createSection(newPageTitle);
-        if (ok) {
+        const created = await createSection(newPageTitle);
+        if (created) {
             setNewPageTitle('');
             setIsCreatingPage(false);
+            // Toda sección nace con su primera hoja; addSheet deja la hoja activa.
+            // Si falla, la sección queda sin hojas (sin rollback): se puede agregar desde la vista de sección.
+            await addSheet(created.id);
         }
     };
 
@@ -341,8 +389,9 @@ export default function ProposalDocBuilder() {
 
                         <div className="space-y-2">
                             <AnimatePresence mode="popLayout">
-                                {pages.map((page, idx) => {
+                                {topLevel.map(({ page, children }, idx) => {
                                     const isActive = activePageId === page.id;
+                                    const isSection = isSectionPage(page);
 
                                     // Insert virtual sections after INDEX page
                                     const isIndex = page.pageType === 'INDEX';
@@ -362,7 +411,9 @@ export default function ProposalDocBuilder() {
                                             )}
                                         >
                                             <div className="flex items-center space-x-3 min-w-0 flex-1">
-                                                {page.isLocked ? (
+                                                {isSection ? (
+                                                    <Folder className={cn("h-4 w-4 shrink-0", isActive ? "text-indigo-200" : "text-slate-400")} />
+                                                ) : page.isLocked ? (
                                                     <Lock className={cn("h-4 w-4 shrink-0", isActive ? "text-indigo-200" : "text-slate-400")} />
                                                 ) : (
                                                     <GripVertical className={cn("h-4 w-4 shrink-0", isActive ? "text-indigo-200" : "text-slate-300")} />
@@ -375,7 +426,7 @@ export default function ProposalDocBuilder() {
                                                         "text-[9px] font-black uppercase tracking-widest",
                                                         isActive ? "text-indigo-200" : "text-slate-400"
                                                     )}>
-                                                        {PAGE_TYPE_LABELS[page.pageType]}
+                                                        {isSection ? 'Secci\u00f3n' : PAGE_TYPE_LABELS[page.pageType]}
                                                     </span>
                                                 </div>
                                             </div>
@@ -383,7 +434,7 @@ export default function ProposalDocBuilder() {
                                                 {!isReadOnly && (
                                                     <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); movePage(idx, 'up'); }}
+                                                            onClick={(e) => { e.stopPropagation(); moveTopLevel(idx, 'up'); }}
                                                             disabled={idx === 0}
                                                             className={cn(
                                                                 "p-0.5 rounded transition-colors disabled:opacity-30",
@@ -394,8 +445,8 @@ export default function ProposalDocBuilder() {
                                                             <ChevronUp className="h-3.5 w-3.5" />
                                                         </button>
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); movePage(idx, 'down'); }}
-                                                            disabled={idx === pages.length - 1}
+                                                            onClick={(e) => { e.stopPropagation(); moveTopLevel(idx, 'down'); }}
+                                                            disabled={idx === topLevel.length - 1}
                                                             className={cn(
                                                                 "p-0.5 rounded transition-colors disabled:opacity-30",
                                                                 isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
@@ -506,6 +557,84 @@ export default function ProposalDocBuilder() {
                                                 </motion.div>
                                             </>
                                         )}
+
+                                        {/* Hojas hijas de la sección */}
+                                        {isSection && (
+                                            <div className="ml-7 mt-2 space-y-1.5">
+                                                {children.map((sheet, sheetIdx) => {
+                                                    const sheetActive = activePageId === sheet.id;
+                                                    return (
+                                                        <div
+                                                            key={sheet.id}
+                                                            onClick={() => { setActivePageId(sheet.id); setSelectedVirtualSection(null); }}
+                                                            className={cn(
+                                                                "group/sheet flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all border-2",
+                                                                sheetActive
+                                                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100"
+                                                                    : "bg-slate-50 border-transparent hover:bg-white hover:border-indigo-100 text-slate-600"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center space-x-2 min-w-0 flex-1">
+                                                                <FileText className={cn("h-3.5 w-3.5 shrink-0", sheetActive ? "text-indigo-200" : "text-slate-400")} />
+                                                                <span className="text-xs font-black tracking-tight truncate">
+                                                                    Hoja {sheetIdx + 1}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center shrink-0 gap-0.5">
+                                                                {!isReadOnly && (
+                                                                    <div className="flex flex-col opacity-0 group-hover/sheet:opacity-100 transition-opacity">
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); moveSheet(page.id, sheetIdx, 'up'); }}
+                                                                            disabled={sheetIdx === 0}
+                                                                            className={cn(
+                                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                                sheetActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                                            )}
+                                                                            title="Subir"
+                                                                        >
+                                                                            <ChevronUp className="h-3 w-3" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); moveSheet(page.id, sheetIdx, 'down'); }}
+                                                                            disabled={sheetIdx === children.length - 1}
+                                                                            className={cn(
+                                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                                sheetActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                                            )}
+                                                                            title="Bajar"
+                                                                        >
+                                                                            <ChevronDown className="h-3 w-3" />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                                {!isReadOnly && (
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); deletePage(sheet.id); }}
+                                                                        className={cn(
+                                                                            "p-1 rounded-lg opacity-0 group-hover/sheet:opacity-100 transition-opacity",
+                                                                            sheetActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                                                        )}
+                                                                    >
+                                                                        <Trash2 className="h-3 w-3" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {!isReadOnly && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => addSheet(page.id)}
+                                                        disabled={saving}
+                                                        className="w-full flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border-2 border-dashed border-indigo-100 text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                                                    >
+                                                        <Plus className="h-3 w-3" />
+                                                        <span>Agregar hoja</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                         </motion.div>
                                     );
                                 })}
@@ -571,7 +700,18 @@ export default function ProposalDocBuilder() {
                 </div>
 
                 {/* Main content — editor, virtual section sheets, or placeholder */}
-                {activePage ? (
+                {activePage && isSectionPage(activePage) ? (
+                    <div className="lg:col-span-9">
+                        <SectionView
+                            section={activePage}
+                            sheets={activeSectionSheets}
+                            isReadOnly={isReadOnly}
+                            onUpdateTitle={(title) => updatePage(activePage.id, { title })}
+                            onAddSheet={() => addSheet(activePage.id)}
+                            onOpenSheet={(sheetId) => { setActivePageId(sheetId); setSelectedVirtualSection(null); }}
+                        />
+                    </div>
+                ) : activePage ? (
                     <div className="lg:col-span-5 space-y-6">
                         {canEditPage(activePage) ? (
                             <PageEditor
@@ -611,7 +751,7 @@ export default function ProposalDocBuilder() {
                         </div>
                     </div>
                 )}
-                {activePage && (
+                {activePage && !isSectionPage(activePage) && (
                     <div className="lg:col-span-4">
                         <PageSheetsPreview page={activePage} proposalVars={proposalVars} ownerSignatureUrl={proposal?.user?.signatureUrl} />
                     </div>
