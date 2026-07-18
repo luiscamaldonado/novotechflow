@@ -320,23 +320,46 @@ export class PagesService {
       user,
     );
     assertProposalNotLocked(proposal);
-    const aggregate = await this.prisma.proposalPage.aggregate({
-      where: { parentPageId: sectionId },
-      _max: { sortOrder: true },
-    });
-    const nextOrder = (aggregate._max.sortOrder || 0) + 1;
 
-    return this.prisma.proposalPage.create({
-      data: {
-        proposalId: section.proposalId,
-        pageType: 'CUSTOM',
-        title: section.title,
-        isLocked: false,
-        isSectionModel: true,
-        parentPageId: sectionId,
-        sortOrder: nextOrder,
-      },
-      include: { blocks: true },
+    return this.prisma.$transaction(async (tx) => {
+      // Punto de insercion: ultima pagina que pertenece a la seccion en el
+      // orden global (la seccion misma o cualquiera de sus hojas hijas).
+      const aggregate = await tx.proposalPage.aggregate({
+        where: {
+          OR: [{ id: sectionId }, { parentPageId: sectionId }],
+        },
+        _max: { sortOrder: true },
+      });
+      const lastInSection = aggregate._max.sortOrder;
+      // La seccion siempre matchea por id, asi que no deberia ser null;
+      // defensa por si acaso, reusando el error del guard de arriba.
+      if (lastInSection === null) {
+        throw new NotFoundException('Seccion no encontrada.');
+      }
+      const insertOrder = lastInSection + 1;
+
+      // Abre hueco: desplaza +1 todas las paginas de la propuesta que esten
+      // en insertOrder o despues, para que la nueva hoja no colisione.
+      await tx.proposalPage.updateMany({
+        where: {
+          proposalId: section.proposalId,
+          sortOrder: { gte: insertOrder },
+        },
+        data: { sortOrder: { increment: 1 } },
+      });
+
+      return tx.proposalPage.create({
+        data: {
+          proposalId: section.proposalId,
+          pageType: 'CUSTOM',
+          title: section.title,
+          isLocked: false,
+          isSectionModel: true,
+          parentPageId: sectionId,
+          sortOrder: insertOrder,
+        },
+        include: { blocks: true },
+      });
     });
   }
 
