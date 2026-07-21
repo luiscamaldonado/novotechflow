@@ -8,7 +8,7 @@ import {
     Cpu, DollarSign,
     Image as ImageIcon,
 } from 'lucide-react';
-import type { ItemType, ProposalStatus, SpecFieldDef, TechnicalSpecs } from './types';
+import type { ProposalStatus, SpecFieldDef } from './types';
 
 /** Tasa de IVA colombiano (19%). */
 export const IVA_RATE = 0.19;
@@ -49,15 +49,8 @@ export const CONFLICT_SEARCH_DEBOUNCE_MS = 500;
 /** Longitud mínima del nombre del cliente para activar la búsqueda de conflictos. */
 export const MIN_CONFLICT_SEARCH_LENGTH = 3;
 
-/** Labels legibles para cada tipo de ítem. */
-export const ITEM_TYPE_LABELS: Record<string, string> = {
-    PCS: 'PCs',
-    ACCESSORIES: 'Accesorios y Opciones',
-    PC_SERVICES: 'Servicios PCs',
-    SOFTWARE: 'Software',
-    INFRASTRUCTURE: 'Infraestructura',
-    INFRA_SERVICES: 'Servicios de Infraestructura',
-} as const;
+/** Labels de categoría y campos de información rápida: fuente única en @repo/item-display. */
+export { ITEM_TYPE_LABELS, QUICK_SPEC_FIELDS_BY_ITEM_TYPE } from '@repo/item-display';
 
 /** Valor de estado que mantiene visibles las garantías de PCS. */
 export const ESTADO_NUEVO = 'Nuevo';
@@ -119,21 +112,6 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, SpecFieldDe
         unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
     },
 } as const;
-
-/**
- * Campos de "informacion rapida" por tipo de item — el mismo subconjunto de
- * specs que la tabla de Configuracion de Item del Constructor de Propuesta
- * muestra como chips. Subconjunto acotado de SPEC_FIELDS_BY_ITEM_TYPE; se
- * anexa bajo las Notas Tecnicas en la columna DESCRIPCION del Excel.
- */
-export const QUICK_SPEC_FIELDS_BY_ITEM_TYPE: Partial<Record<ItemType, (keyof TechnicalSpecs)[]>> = {
-    PCS: ['fabricante', 'modelo', 'procesador', 'memoriaRam', 'almacenamiento', 'garantiaEquipo'],
-    ACCESSORIES: ['tipo', 'fabricante', 'garantia'],
-    PC_SERVICES: ['tipo', 'responsable', 'unidadMedida'],
-    SOFTWARE: ['tipo', 'fabricante', 'unidadMedida'],
-    INFRASTRUCTURE: ['tipo', 'fabricante', 'garantia'],
-    INFRA_SERVICES: ['tipo', 'responsable', 'unidadMedida'],
-};
 
 // Formato (detectado por la IA) que dispara garantia de bateria automatica.
 // Unico formato inequivocamente movil de FORMATO_VALUES; Workstation es ambiguo

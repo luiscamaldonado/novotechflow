@@ -7,6 +7,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/ packages/
 RUN pnpm install --frozen-lockfile --filter web...
+RUN pnpm --filter @repo/item-display build
 COPY apps/web/ apps/web/
 ARG VITE_API_URL=http://localhost:3000
 RUN cd apps/web && pnpm build

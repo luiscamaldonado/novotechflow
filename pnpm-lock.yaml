@@ -180,6 +180,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.71.2(react@19.2.4))
+      '@repo/item-display':
+        specifier: workspace:*
+        version: link:../../packages/item-display
       '@tiptap/extension-text-align':
         specifier: ^3.20.5
         version: 3.20.5(@tiptap/core@3.20.5(@tiptap/pm@3.20.5))

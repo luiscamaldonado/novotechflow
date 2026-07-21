@@ -52,12 +52,12 @@ export const QUICK_SPEC_FIELDS_BY_ITEM_TYPE: Record<string, readonly string[]> =
   INFRA_SERVICES: ['tipo', 'responsable', 'modelo', 'unidadMedida'],
 };
 
-function joinSpecFields(fields: readonly string[] | undefined, specs: SpecsInput): string {
+function joinSpecFields(fields: readonly string[] | undefined, specs: SpecsInput, separator = ' | '): string {
   if (!specs || !fields) return '';
   return fields
     .map((key) => (typeof specs[key] === 'string' ? (specs[key] as string).trim() : ''))
     .filter(Boolean)
-    .join(' | ');
+    .join(separator);
 }
 
 /**
@@ -69,9 +69,10 @@ export function buildQuickDescription(itemType: string, specs?: SpecsInput): str
 
 /**
  * Informacion rapida para el Excel (incluye unidadMedida donde aplica).
+ * Separador por defecto: punto medio, el formato historico del Excel.
  */
-export function buildExcelQuickSpecs(itemType: string, specs?: SpecsInput): string {
-  return joinSpecFields(QUICK_SPEC_FIELDS_BY_ITEM_TYPE[itemType], specs);
+export function buildExcelQuickSpecs(itemType: string, specs?: SpecsInput, separator = ' \u00b7 '): string {
+  return joinSpecFields(QUICK_SPEC_FIELDS_BY_ITEM_TYPE[itemType], specs, separator);
 }
 
 /**
