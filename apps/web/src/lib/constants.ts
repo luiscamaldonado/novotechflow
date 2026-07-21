@@ -84,28 +84,38 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, SpecFieldDe
         garantiaEquipo: { label: 'Garant\u00eda Equipo', cat: 'GARANTIA_EQUIPO', visibleWhen: { field: 'estado', equals: ESTADO_NUEVO } },
     },
     ACCESSORIES: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo', cat: 'ACC_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         garantia: { label: 'Garant\u00eda', cat: 'ACC_GARANTIA' },
     },
     PC_SERVICES: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Servicio', cat: 'SVC_TIPO' },
         responsable: { label: 'Responsable', cat: 'SVC_RESPONSABLE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         unidadMedida: { label: 'Unidad de Medida', cat: 'SVC_UM' },
     },
     SOFTWARE: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Software', cat: 'SW_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         unidadMedida: { label: 'Unidad de Medida', cat: 'SW_UM' },
     },
     INFRASTRUCTURE: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Infraestructura', cat: 'INFRA_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         garantia: { label: 'Garant\u00eda', cat: 'INFRA_GARANTIA' },
     },
     INFRA_SERVICES: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Servicio', cat: 'INFRA_SVC_TIPO' },
         responsable: { label: 'Responsable', cat: 'INFRA_SVC_RESPONSABLE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
     },
 } as const;
