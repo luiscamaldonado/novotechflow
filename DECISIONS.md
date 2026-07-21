@@ -2747,3 +2747,48 @@ Se descartó la alternativa de mantener el snapshot con un botón de "actualizar
 
 - Reconciliar el render de firma con feature/wysiwyg-pages al mergear esa rama (ver consecuencia 4)
 - Bug preexistente, aparte de este fix: el preview de firma en la ventana Usuarios (`Users.tsx:552`) usa `${apiBase}${u.signatureUrl}` en vez de `resolveImageUrl`, lo que produce una URL malformada con un data URI. No afecta el render en propuestas
+
+## ADR-067 — Campos numeroParte/modelo en todas las categorías y paquete compartido @repo/item-display
+
+**Fecha:** 2026-07-21
+**Estado:** Aceptado
+
+### Contexto
+
+El contrato de la API externa debe entregar, por categoría de ítem, número de parte, modelo y una descripción rápida coherente con lo que el usuario captura en el Constructor de Propuesta. Solo la categoría PCS tenía los campos de specs `numeroParte` y `modelo`; las otras cinco categorías no los capturaban. Además, la lógica de display estaba fragmentada y parcialmente duplicada: `buildQuickDescription` en `apps/web/src/lib/itemDescription.ts`, una copia adaptada en `apps/api/src/external/external-spec-fields.ts` (deuda registrada en el ADR-059 de la rama `feature/external-api`), y una constante divergente `QUICK_SPEC_FIELDS_BY_ITEM_TYPE` para la "información rápida" del Excel, con campos y separador propios (` · `).
+
+### Decisión
+
+1. **Campos nuevos de specs**: se agregaron `numeroParte` (input de texto, cat `NUMERO_PARTE`) y `modelo` (cat `MODELO`, autocompletado compartido) a las cinco categorías no-PCS de `SPEC_FIELDS_BY_ITEM_TYPE`. El render es automático vía `SpecFieldsSection`; las specs viven en el JSON `technicalSpecs`, sin migración.
+2. **Paquete compartido `@repo/item-display`** (`packages/item-display`, molde de `@repo/pricing-engine`): fuente única de `ITEM_TYPE_LABELS`, `resolveItemTypeLabel`, `pickSpecString`, `buildQuickDescription`, `buildExcelQuickSpecs` y `getUnitOfMeasure`.
+3. **Definición unificada de descripción rápida** (pantalla, PDF y API externa), separador ` | `: PCS sin cambios (fabricante, modelo, procesador, memoriaRam, almacenamiento, garantiaEquipo); ACCESSORIES e INFRASTRUCTURE cambian `garantia` por `modelo` (tipo, fabricante, modelo); SOFTWARE (tipo, fabricante, modelo); PC_SERVICES e INFRA_SERVICES (tipo, responsable, modelo).
+4. **Información rápida del Excel**: la misma definición de pantalla más `unidadMedida` en SOFTWARE, PC_SERVICES e INFRA_SERVICES, conservando su separador histórico ` · ` vía parámetro de `buildExcelQuickSpecs`. Decisión de producto: el formato visible del Excel no cambia.
+5. `apps/web` consume el paquete: `itemDescription.ts` y las constantes migradas quedan como re-exports; `exportExcel.ts` delega en `buildExcelQuickSpecs`; `vite.config`, Dockerfile de web y ambos workflows de CI compilan el paquete antes del build/typecheck.
+
+### Consecuencias
+
+- El usuario captura número de parte y modelo en las seis categorías; la descripción rápida los refleja en pantalla, PDF y Excel.
+- Una sola fuente de lógica de display en el monorepo. La copia `external-spec-fields.ts` de la rama `feature/external-api` se reemplazará por este paquete tras el merge (sanea la deuda del ADR-059 de esa rama).
+- El gate local de `docker build` de web no corre en Windows (el `COPY` sin `.dockerignore` arrastra junctions de pnpm); el gate válido es el job `docker-build` del CI. Deuda registrada: `.dockerignore` raíz.
+- Los ADR-057 y ADR-059 de feature/external-api colisionan con la numeración ya usada en master; se renumeran en el merge.
+
+### Archivos
+
+- `apps/web/src/lib/constants.ts` — campos nuevos en `SPEC_FIELDS_BY_ITEM_TYPE`; constantes de display migradas a re-export.
+- `packages/item-display/` (nuevo) — package.json, tsconfig.json, src/index.ts.
+- `apps/web/src/lib/itemDescription.ts` — re-export del paquete.
+- `apps/web/src/lib/exportExcel.ts` — delega en `buildExcelQuickSpecs`.
+- `apps/web/package.json`, `apps/web/vite.config.ts`, `apps/web/Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/pr-check.yml`, `pnpm-lock.yaml`.
+
+### Commits
+
+- `f4adf4d` — feat(web): add part number and model spec fields to non-PC categories
+- `3d65ad5` — feat(item-display): add shared item display package with unified quick description logic
+- `478ecd0` — feat(web): consume @repo/item-display as single source for item display logic
+- Pendiente — commit de este ADR (`docs: ADR-067 item display package and new spec fields`)
+
+### Pendientes
+
+- **Verificación en navegador** (Luis): campos nuevos en las 5 categorías, descripción rápida nueva en pantalla/PDF, Excel con ` · ` y `modelo`.
+- **`.dockerignore` raíz** para habilitar docker build local en Windows (afecta también al Dockerfile de api).
+- **Merge a `feature/external-api`**: renumerar los ADR de la rama en colisión (057 y 059) y reemplazar `external-spec-fields.ts` por el paquete.
