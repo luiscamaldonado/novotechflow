@@ -192,6 +192,12 @@ export class ProposalsController {
       status: data.status,
       acquisitionType: data.acquisitionType,
       closeDate: data.closeDate,
+      clientId: data.clientId,
+      clientName: data.clientName,
+      subject: data.subject,
+      issueDate: data.issueDate,
+      validityDays: data.validityDays,
+      validityDate: data.validityDate,
     });
   }
 

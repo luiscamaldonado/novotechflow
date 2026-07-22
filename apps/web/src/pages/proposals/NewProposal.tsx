@@ -252,7 +252,7 @@ export default function NewProposal() {
             if (isCloneMode) {
                 const response = await api.post(`/proposals/${cloneFromId}/clone`, {
                     cloneType: 'NEW_PROPOSAL',
-                    clientId: formData.clientId,
+                    clientId: formData.clientId || null,
                     clientName: formData.clientName,
                     subject: formData.subject,
                     issueDate: formData.issueDate,
