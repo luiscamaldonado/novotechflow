@@ -3017,3 +3017,36 @@ Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente
 
 - **Extracción a paquete compartido** de `buildQuickDescription` / `ITEM_TYPE_LABELS` (elimina el duplicado web/api), al mergear la rama. — **Ejecutado**: el paquete es `@repo/item-display` (ADR-067); la copia local se eliminó tras el merge.
 - **Renumeración del ADR-057 de esta rama** (Railway CLI) al mergear a master, por colisión con el ADR-057 de master (getMaintenanceBanner). — **Ejecutado** en el merge: 057→068, 059→069.
+
+## ADR-070 — Contrato de la API externa por categoría: tipo, responsable y datos de contacto del proveedor
+
+**Fecha:** 2026-07-22
+**Estado:** Aceptado
+
+### Contexto
+
+La lista de campos que el consumidor externo necesita por ítem incluye, además de lo ya expuesto (número de parte, formato, fabricante, modelo, descripción rápida, categoría, flete, tiempo de entrega), el tipo del ítem, el responsable (en categorías de servicio) y los datos de la empresa proveedora con su contacto (nombre, teléfono, correo). Tras el merge de master (f11f074), la rama dispone del catálogo global de proveedores (ADR-062/064): `ProposalItem` referencia `SupplierCompany` y `SupplierContact` vía FKs, y teléfono/correo son atributos del contacto del catálogo, no del ítem. `tipo` y `responsable` viven como claves de `technicalSpecs`.
+
+### Decisión
+
+Seis campos planos nuevos en `ExternalItemOut` y `ExternalChildItemOut`: `tipo` y `responsable` (vía `pickSpecString` sobre `technicalSpecs`; `null` donde la categoría no los captura) y `supplierCompanyName`, `supplierContactName`, `supplierContactPhone`, `supplierContactEmail` (vía include de las relaciones `supplierCompany`/`supplierContact` en la query; `null` cuando el ítem no tiene proveedor asignado). Convención de nombres: inglés para lo que proviene del modelo relacional, español para claves de specs. El campo existente `proveedor` (categoría de origen en `internal_costs`) se conserva sin cambios. Mismo tratamiento en sub-ítems.
+
+### Consecuencias
+
+- El contrato cubre la lista completa de campos por categoría definida por Luis; el consumidor no necesita parsear `technicalSpecs` ni conocer el modelo de proveedores.
+- Los campos de proveedor llegan `null` en ítems sin proveedor asignado — en particular, los de `COT-LU00002-1` (copiados antes de que existiera el catálogo en esa base).
+
+### Archivos
+
+- `apps/api/src/external/external-proposals.types.ts` — include de `supplierCompany`/`supplierContact` en ambos niveles.
+- `apps/api/src/external/dto/external-proposals.dto.ts` — seis campos nuevos en ambas interfaces.
+- `apps/api/src/external/external-proposals.service.ts` — mapeo en ítem top-level y `mapChildOut`.
+
+### Commits
+
+- `bf8976f` — feat(external): expose spec type, responsable and supplier contact data per item
+- Pendiente — commit de este ADR (`docs: ADR-070 external contract supplier and spec type fields`)
+
+### Pendientes
+
+- **Prueba end-to-end** con data de proveedor poblada: asignar proveedor a los ítems de `COT-LU00002-1` en `postgres-external` o copiar una propuesta reciente con catálogo asignado.
