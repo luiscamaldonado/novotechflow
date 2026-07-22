@@ -2794,3 +2794,28 @@ El contrato de la API externa debe entregar, por categoría de ítem, número de
 - **Verificación en navegador** (Luis): campos nuevos en las 5 categorías, descripción rápida nueva en pantalla/PDF, Excel con ` · ` y `modelo`.
 - **`.dockerignore` raíz** para habilitar docker build local en Windows (afecta también al Dockerfile de api).
 - **Merge a `feature/external-api`**: renumerar los ADR de la rama en colisión (057 y 059) y reemplazar `external-spec-fields.ts` por el paquete.
+
+## ADR-068 — Actualización del protocolo operativo: modelo/esfuerzo por sesión, rama obligatoria en prompts y Railway MCP
+
+**Fecha:** 2026-07-22
+**Estado:** Implementado
+
+### Contexto
+La guía oficial de Claude Code (jul 2026) separa dos ejes independientes: el modelo (qué tan capaz) y el esfuerzo (qué tan a fondo trabaja: archivos leídos, verificación, autonomía antes de devolver control), con defaults `high` en Fable 5, Sonnet 5 y Opus 4.8 y `xhigh` recomendado para código complejo. El §10.3 del instructivo tenía una condición vencida ("Fable hasta 2026-07-07"); Fable está incluido en el plan de Luis. Luis además fijó dos reglas nuevas: todo prompt de Claude Code debe indicar la rama donde ubicarse, sea sesión nueva o la misma; y el MCP de Railway queda disponible para Claude Code, reemplazando la regla previa de "write ops solo Luis".
+
+### Decisión
+En `INSTRUCTIVO_CLAUDE.md`: (1) §6 — rama obligatoria en TODO prompt como paso 0 (`git branch --show-current` + checkout si no coincide + detenerse si hay cambios sin commitear ajenos); el chat anuncia los cuatro datos encima del bloque (`Modelo · Effort · Sesión · Rama`, effort omitido si es el default); heurística modelo-vs-esfuerzo (falló con contexto e intento → subir modelo; falló por saltarse pasos → subir esfuerzo); fila Fable en la tabla (especialista para causa raíz ambigua, `claude --model fable`); Sonnet 5 añade `xhigh`; advertencia de que `/model` persiste como default de sesiones futuras, por eso la sesión nueva se abre con el flag `--model`. (2) §10.3 — Fable como default de diagnóstico de causa raíz; reruteo del clasificador documentado (puede dispararse en el primer request por CLAUDE.md y git status; mitigación con framing defensivo, `/clear`, `claude --safe-mode`, toggle en `/config`); sin la fecha vencida. (3) §2 — bloque Railway vía MCP: lecturas libres para Claude Code; escritura y creación de variables por Claude Code solo con aprobación previa de Luis por operación (variable y valor exactos a la vista); cambiar una variable redeploya el servicio automáticamente. Se conserva la mecánica ya decidida de que modelo y esfuerzo se fijan al abrir la sesión, nunca dentro del prompt: la actualización injerta sobre esa base, no la revierte.
+
+### Consecuencias
+El enrutamiento de modelo/esfuerzo queda alineado a la guía oficial vigente y Fable entra al repertorio de diagnóstico. Claude Code opera Railway sin fricción en lecturas y con gate humano por operación en escrituras. `railway up`/`redeploy` manuales y el push a `master` siguen siendo exclusivamente de Luis.
+
+### Archivos
+- `INSTRUCTIVO_CLAUDE.md` (§2, §6, §10.3)
+
+### Commits
+- `e453f25` — docs: actualiza protocolo de modelos, effort, rama obligatoria y Railway MCP
+
+### Pendientes
+- Renumerar en `feature/wysiwyg-pages` el ADR-067 (vista previa WYSIWYG) a ADR-069 antes del merge: colisiona con el ADR-067 de master (numeroParte/`@repo/item-display`). El ADR del modelo de secciones tomará el 070.
+- Reemplazar el attachment `INSTRUCTIVO_CLAUDE.md` del proyecto en Claude.ai con la versión de este commit (gana el disco).
+- Actualizar las instrucciones del proyecto en Claude.ai (español neutro, referencia a Railway MCP) — entrega manual a Luis.
