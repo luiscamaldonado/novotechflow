@@ -29,8 +29,8 @@ import { ProposalsService } from './proposals.service';
 import { ScenariosService } from './scenarios.service';
 import { PagesService } from './pages.service';
 import { TrmService } from './trm.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { ReporterReadOnlyGuard } from '../common/guards/reporter.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import {
   validateImageMagicBytes,
@@ -56,6 +56,7 @@ import {
   UpdateBlockDto,
   ReorderBlocksDto,
   ReorderScenarioItemsDto,
+  ReorderScenariosDto,
 } from './dto/proposals.dto';
 
 /**
@@ -67,6 +68,7 @@ import {
  */
 @ApiTags('Proposals')
 @ApiBearerAuth()
+@UseGuards(ReporterReadOnlyGuard)
 @Controller('proposals')
 export class ProposalsController {
   constructor(
@@ -77,20 +79,17 @@ export class ProposalsController {
   ) {}
 
   @SkipThrottle()
-  @UseGuards(JwtAuthGuard)
   @Get('trm-extra')
   async getExtraTrm() {
     return this.trmService.getExtraTrmValues();
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('client-history')
   async getClientHistory(@Query('clientName') query: string) {
     return this.proposalsService.findPotentialConflicts(query);
   }
 
   @Get('validate-manual')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Valida un número manual contra los códigos del usuario logueado',
@@ -103,7 +102,6 @@ export class ProposalsController {
     return this.proposalsService.validateManualConsecutive(req.user.id, n);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   async create(
     @Request() req: { user: AuthenticatedUser },
@@ -121,7 +119,6 @@ export class ProposalsController {
     return this.proposalsService.findDeleted();
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get(':id')
   async getById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -130,7 +127,6 @@ export class ProposalsController {
     return this.proposalsService.getProposalById(id, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -140,7 +136,6 @@ export class ProposalsController {
     return this.proposalsService.updateProposal(id, updateData, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post(':id/items')
   async addItem(
     @Param('id', ParseUUIDPipe) id: string,
@@ -150,7 +145,6 @@ export class ProposalsController {
     return this.proposalsService.addProposalItem(id, itemData, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete('items/:itemId')
   async removeItem(
     @Param('itemId', ParseUUIDPipe) itemId: string,
@@ -159,7 +153,6 @@ export class ProposalsController {
     return this.proposalsService.removeProposalItem(itemId, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('items/:itemId')
   async updateItem(
     @Param('itemId', ParseUUIDPipe) itemId: string,
@@ -169,13 +162,11 @@ export class ProposalsController {
     return this.proposalsService.updateProposalItem(itemId, itemData, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get()
   async findAll(@Request() req: { user: AuthenticatedUser }) {
     return this.proposalsService.findAll(req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async delete(
     @Param('id', ParseUUIDPipe) id: string,
@@ -191,24 +182,21 @@ export class ProposalsController {
     return this.proposalsService.restoreProposal(id);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post(':id/clone')
   async clone(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: { user: AuthenticatedUser },
     @Body() data: CloneProposalDto,
   ) {
-    return this.proposalsService.cloneProposal(
-      id,
-      req.user.id,
-      data.cloneType,
-      req.user,
-    );
+    return this.proposalsService.cloneProposal(id, req.user.id, data.cloneType, req.user, {
+      status: data.status,
+      acquisitionType: data.acquisitionType,
+      closeDate: data.closeDate,
+    });
   }
 
   // --- ENDPOINTS DE ESCENARIOS ---
 
-  @UseGuards(JwtAuthGuard)
   @Get(':id/scenarios')
   async getScenarios(
     @Param('id', ParseUUIDPipe) id: string,
@@ -217,7 +205,6 @@ export class ProposalsController {
     return this.scenariosService.getScenariosByProposalId(id, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post(':id/scenarios')
   async createScenario(
     @Param('id', ParseUUIDPipe) id: string,
@@ -227,7 +214,6 @@ export class ProposalsController {
     return this.scenariosService.createScenario(id, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('scenarios/:scenarioId')
   async updateScenario(
     @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
@@ -237,7 +223,6 @@ export class ProposalsController {
     return this.scenariosService.updateScenario(scenarioId, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete('scenarios/:scenarioId')
   async deleteScenario(
     @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
@@ -246,7 +231,6 @@ export class ProposalsController {
     return this.scenariosService.deleteScenario(scenarioId, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('scenarios/:scenarioId/clone')
   async cloneScenario(
     @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
@@ -255,7 +239,19 @@ export class ProposalsController {
     return this.scenariosService.cloneScenario(scenarioId, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @Patch(':id/scenarios/reorder')
+  async reorderScenarios(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: ReorderScenariosDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.scenariosService.reorderScenarios(
+      id,
+      data.scenarioIds,
+      req.user,
+    );
+  }
+
   @Post('scenarios/:scenarioId/items')
   async addScenarioItem(
     @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
@@ -265,7 +261,6 @@ export class ProposalsController {
     return this.scenariosService.addScenarioItem(scenarioId, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('scenarios/items/:itemId')
   async updateScenarioItem(
     @Param('itemId', ParseUUIDPipe) itemId: string,
@@ -275,7 +270,6 @@ export class ProposalsController {
     return this.scenariosService.updateScenarioItem(itemId, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete('scenarios/items/:itemId')
   async removeScenarioItem(
     @Param('itemId', ParseUUIDPipe) itemId: string,
@@ -284,7 +278,6 @@ export class ProposalsController {
     return this.scenariosService.removeScenarioItem(itemId, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('scenarios/:scenarioId/items/reorder')
   async reorderScenarioItems(
     @Param('scenarioId', ParseUUIDPipe) scenarioId: string,
@@ -298,7 +291,6 @@ export class ProposalsController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('scenarios/:scenarioId/apply-margin')
   async applyMarginToScenario(
     @Param('scenarioId', ParseUUIDPipe) id: string,
@@ -314,7 +306,6 @@ export class ProposalsController {
 
   // --- ENDPOINTS DE PÁGINAS ---
 
-  @UseGuards(JwtAuthGuard)
   @Get(':id/pages')
   async getPages(
     @Param('id', ParseUUIDPipe) id: string,
@@ -323,7 +314,6 @@ export class ProposalsController {
     return this.pagesService.getPagesByProposalId(id, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post(':id/pages/initialize')
   async initializePages(
     @Param('id', ParseUUIDPipe) id: string,
@@ -332,7 +322,6 @@ export class ProposalsController {
     return this.pagesService.initializeDefaultPages(id, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post(':id/pages')
   async createPage(
     @Param('id', ParseUUIDPipe) id: string,
@@ -342,7 +331,6 @@ export class ProposalsController {
     return this.pagesService.createCustomPage(id, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('pages/:pageId')
   async updatePage(
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -352,7 +340,6 @@ export class ProposalsController {
     return this.pagesService.updatePage(pageId, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete('pages/:pageId')
   async deletePage(
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -361,7 +348,6 @@ export class ProposalsController {
     return this.pagesService.deletePage(pageId, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch(':id/pages/reorder')
   async reorderPages(
     @Param('id', ParseUUIDPipe) id: string,
@@ -373,7 +359,6 @@ export class ProposalsController {
 
   // --- ENDPOINTS DE BLOQUES ---
 
-  @UseGuards(JwtAuthGuard)
   @Post('pages/:pageId/blocks')
   async createBlock(
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -383,7 +368,6 @@ export class ProposalsController {
     return this.pagesService.createBlock(pageId, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('pages/blocks/:blockId')
   async updateBlock(
     @Param('blockId', ParseUUIDPipe) blockId: string,
@@ -393,7 +377,6 @@ export class ProposalsController {
     return this.pagesService.updateBlock(blockId, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete('pages/blocks/:blockId')
   async deleteBlock(
     @Param('blockId', ParseUUIDPipe) blockId: string,
@@ -402,7 +385,6 @@ export class ProposalsController {
     return this.pagesService.deleteBlock(blockId, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('pages/:pageId/blocks/reorder')
   async reorderBlocks(
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -414,7 +396,6 @@ export class ProposalsController {
 
   // --- UPLOAD DE IMÁGENES ---
 
-  @UseGuards(JwtAuthGuard)
   @Post('pages/upload-image')
   @UseInterceptors(
     FileInterceptor('file', {

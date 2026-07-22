@@ -96,7 +96,8 @@ export class BillingProjectionsService {
    * Lists billing projections with RBAC filtering.
    */
   async findAll(user: AuthenticatedUser) {
-    const accessFilter = user.role === 'ADMIN' ? {} : { userId: user.id };
+    const accessFilter =
+      user.role === 'ADMIN' || user.role === 'REPORTER' ? {} : { userId: user.id };
 
     return this.prisma.billingProjection.findMany({
       where: accessFilter,

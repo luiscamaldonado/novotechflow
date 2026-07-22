@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   ADMIN
   COMMERCIAL
+  REPORTER
 }
 
 enum ProposalStatus {
@@ -60,6 +61,11 @@ enum ConsecutiveSource {
   MANUAL
 }
 
+enum SupplierSource {
+  CSV
+  MANUAL
+}
+
 model User {
   id                   String   @id @default(uuid()) @db.Uuid
   name                 String   @db.VarChar(100)
@@ -81,6 +87,8 @@ model User {
   billingProjections BillingProjection[]
   verificationCodes  VerificationCode[]
   updatedAppSettings AppSetting[]        @relation("AppSettingUpdatedBy")
+  supplierCompaniesCreated SupplierCompany[] @relation("SupplierCompanyCreatedBy")
+  supplierContactsCreated  SupplierContact[] @relation("SupplierContactCreatedBy")
 
   @@map("users")
 }
@@ -195,12 +203,17 @@ model ProposalItem {
   sortOrder      Int      @default(0) @map("sort_order")
   technicalSpecs Json?    @map("technical_specs")
   createdAt      DateTime @default(now()) @map("created_at")
+  supplierCompanyId String?  @map("supplier_company_id") @db.Uuid
+  supplierContactId String?  @map("supplier_contact_id") @db.Uuid
 
   proposal      Proposal       @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   page          ProposalPage?  @relation(fields: [pageId], references: [id])
   scenarioItems ScenarioItem[]
+  supplierCompany SupplierCompany? @relation(fields: [supplierCompanyId], references: [id], onDelete: SetNull)
+  supplierContact SupplierContact? @relation(fields: [supplierContactId], references: [id], onDelete: SetNull)
 
   @@index([proposalId])
+  @@index([supplierCompanyId])
   @@map("proposal_items")
 }
 
@@ -385,4 +398,37 @@ model AppSetting {
   updatedBy User? @relation("AppSettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@map("app_settings")
+}
+
+model SupplierCompany {
+  id          String         @id @default(uuid()) @db.Uuid
+  name        String         @db.VarChar(300)
+  nit         String?        @unique @db.VarChar(15)
+  source      SupplierSource @default(MANUAL)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  createdById String?        @map("created_by_id") @db.Uuid
+
+  createdBy User?             @relation("SupplierCompanyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  contacts  SupplierContact[]
+  items     ProposalItem[]
+
+  @@index([name])
+  @@map("supplier_companies")
+}
+
+model SupplierContact {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  name        String   @db.VarChar(200)
+  phone       String?  @db.VarChar(50)
+  email       String?  @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById String?  @map("created_by_id") @db.Uuid
+
+  company   SupplierCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation("SupplierContactCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     ProposalItem[]
+
+  @@index([companyId])
+  @@map("supplier_contacts")
 }

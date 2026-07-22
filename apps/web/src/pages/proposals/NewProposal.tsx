@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, FileText, CalendarDays, Clock, ArrowRight, Loader2, AlertCircle, DollarSign, CheckCircle2, Hash } from 'lucide-react';
+import { FileText, CalendarDays, Clock, ArrowRight, Loader2, AlertCircle, DollarSign, CheckCircle2, Hash } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { ManualConsecutiveValidation } from '../../lib/types';
 import { STATUS_CONFIG, ACQUISITION_CONFIG } from '../../lib/constants';
 import { ClientAutocomplete } from '../../components/ClientAutocomplete';
+import { useAccountConflicts } from '../../hooks/useAccountConflicts';
+import ConflictPanel from '../../components/proposals/ConflictPanel';
 
 // ──────────────────────────────────────────────────────────
 // Interfaces / Tipos
@@ -27,29 +29,12 @@ interface ProposalFormData {
     closeDate: string;
 }
 
-/** Registro de historial para cruce de cuentas. */
-interface ConflictRecord {
-    id: string;
-    proposalCode: string;
-    issueDate: string;
-    subject: string;
-    status: string;
-    validityDays: number;
-    user?: { name: string };
-}
-
 // ──────────────────────────────────────────────────────────
 // Constantes
 // ──────────────────────────────────────────────────────────
 
 /** Días de validez por defecto para una nueva propuesta. */
 const DEFAULT_VALIDITY_DAYS = 15;
-
-/** Tiempo de debounce para la búsqueda de cruce de cuentas (ms). */
-const CONFLICT_SEARCH_DEBOUNCE_MS = 500;
-
-/** Longitud mínima del nombre del cliente para activar la búsqueda de conflictos. */
-const MIN_CONFLICT_SEARCH_LENGTH = 3;
 
 /** Tiempo de debounce para validar el consecutivo manual (ms). */
 const MANUAL_VALIDATION_DEBOUNCE_MS = 500;
@@ -92,8 +77,11 @@ const getDaysDifference = (startDate: string, endDate: string): number => {
  */
 export default function NewProposal() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const cloneFromId = searchParams.get('cloneFrom');
+    const isCloneMode = cloneFromId !== null;
+    const [cloneDataLoaded, setCloneDataLoaded] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [conflictHistory, setConflictHistory] = useState<ConflictRecord[]>([]);
 
     const todayDateStr = getTodayDateString();
 
@@ -116,27 +104,7 @@ export default function NewProposal() {
     const [isValidatingManual, setIsValidatingManual] = useState(false);
 
     // ── Cruce de cuentas dinámico (debounced) ────────────
-    useEffect(() => {
-        const trimmedName = formData.clientName.trim();
-
-        if (trimmedName.length < MIN_CONFLICT_SEARCH_LENGTH) {
-            setConflictHistory([]);
-            return;
-        }
-
-        const timer = setTimeout(async () => {
-            try {
-                const response = await api.get(
-                    `/proposals/client-history?clientName=${encodeURIComponent(trimmedName)}`
-                );
-                setConflictHistory(response.data);
-            } catch (error) {
-                console.error('Error buscando cruce de cuentas:', error);
-            }
-        }, CONFLICT_SEARCH_DEBOUNCE_MS);
-
-        return () => clearTimeout(timer);
-    }, [formData.clientName]);
+    const { conflicts, isClientEmpty, hasNoConflicts } = useAccountConflicts(formData.clientName);
 
     // ── Validación debounced del consecutivo manual ──────
     useEffect(() => {
@@ -236,6 +204,39 @@ export default function NewProposal() {
     /** Envía el formulario y crea la propuesta borrador. */
     const [submitError, setSubmitError] = useState<string | null>(null);
 
+    // ── Precarga en modo clon ─────────────────────────────
+    useEffect(() => {
+        if (!cloneFromId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await api.get(`/proposals/${cloneFromId}`);
+                if (cancelled) return;
+                const p = res.data;
+                setFormData((prev) => ({
+                    ...prev,
+                    clientId: p.clientId ?? '',
+                    clientName: p.clientName ?? '',
+                    subject: p.subject ?? '',
+                    issueDate: p.issueDate ? String(p.issueDate).split('T')[0] : prev.issueDate,
+                    validityDays: p.validityDays != null ? String(p.validityDays) : '',
+                    validityDate: p.validityDate ? String(p.validityDate).split('T')[0] : '',
+                    status: p.status ?? 'ELABORACION',
+                    acquisitionType: p.acquisitionType ?? '',
+                    closeDate: p.closeDate ? String(p.closeDate).split('T')[0] : '',
+                    consecutiveSource: 'AUTO',
+                    manualAmount: '',
+                }));
+                setCloneDataLoaded(true);
+            } catch (error) {
+                if (cancelled) return;
+                console.error('Error cargando propuesta base:', error);
+                setSubmitError('No se pudo cargar la propuesta base.');
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [cloneFromId]);
+
     const handleSubmit = async (e: React.FormEvent): Promise<void> => {
         e.preventDefault();
         setSubmitError(null);
@@ -248,25 +249,41 @@ export default function NewProposal() {
         setIsSubmitting(true);
 
         try {
-            const payload: Record<string, unknown> = {
-                clientId: formData.clientId,
-                clientName: formData.clientName,
-                subject: formData.subject,
-                issueDate: formData.issueDate,
-                validityDays: parseInt(formData.validityDays, 10),
-                validityDate: formData.validityDate,
-                manualAmount: formData.manualAmount ? parseFloat(formData.manualAmount) : undefined,
-                status: formData.status,
-                acquisitionType: formData.acquisitionType,
-                closeDate: formData.closeDate,
-            };
+            if (isCloneMode) {
+                const response = await api.post(`/proposals/${cloneFromId}/clone`, {
+                    cloneType: 'NEW_PROPOSAL',
+                    clientId: formData.clientId,
+                    clientName: formData.clientName,
+                    subject: formData.subject,
+                    issueDate: formData.issueDate,
+                    validityDays: parseInt(formData.validityDays, 10),
+                    validityDate: formData.validityDate,
+                    status: formData.status,
+                    acquisitionType: formData.acquisitionType,
+                    closeDate: formData.closeDate,
+                });
+                navigate(`/proposals/${response.data.id}/builder`);
+            } else {
+                const payload: Record<string, unknown> = {
+                    clientId: formData.clientId,
+                    clientName: formData.clientName,
+                    subject: formData.subject,
+                    issueDate: formData.issueDate,
+                    validityDays: parseInt(formData.validityDays, 10),
+                    validityDate: formData.validityDate,
+                    manualAmount: formData.manualAmount ? parseFloat(formData.manualAmount) : undefined,
+                    status: formData.status,
+                    acquisitionType: formData.acquisitionType,
+                    closeDate: formData.closeDate,
+                };
 
-            if (formData.consecutiveSource === 'MANUAL') {
-                payload.manualConsecutive = parseInt(formData.manualConsecutive, 10);
+                if (formData.consecutiveSource === 'MANUAL') {
+                    payload.manualConsecutive = parseInt(formData.manualConsecutive, 10);
+                }
+
+                const response = await api.post('/proposals', payload);
+                navigate(`/proposals/${response.data.id}/builder`);
             }
-
-            const response = await api.post('/proposals', payload);
-            navigate(`/proposals/${response.data.id}/builder`);
         } catch (error: unknown) {
             const axiosErr = error as { response?: { data?: { message?: string } } };
             const message = axiosErr?.response?.data?.message || 'No se pudo iniciar la propuesta.';
@@ -283,15 +300,13 @@ export default function NewProposal() {
         (formData.manualConsecutive === '' || isValidatingManual || manualValidation === null || !manualValidation.ok);
 
     const isFormValid = formData.clientName.trim().length > 0 && !isManualBlocked && formData.acquisitionType !== '' && formData.closeDate !== '';
-    const hasNoConflicts = conflictHistory.length === 0;
-    const isClientEmpty = formData.clientName.trim() === '';
 
     // ── Render ───────────────────────────────────────────
     return (
         <div className="max-w-6xl mx-auto space-y-8">
             {/* Header */}
             <div>
-                <h2 className="text-2xl font-bold tracking-tight text-novo-primary">Crear Nueva Propuesta</h2>
+                <h2 className="text-2xl font-bold tracking-tight text-novo-primary">{isCloneMode ? 'Clonar como nueva propuesta' : 'Crear Nueva Propuesta'}</h2>
                 <p className="text-gray-500 text-sm mt-1">Paso 1: Información General del Cliente y la Oferta</p>
             </div>
 
@@ -318,6 +333,7 @@ export default function NewProposal() {
                                         Nombre del Cliente o Empresa
                                     </label>
                                     <ClientAutocomplete
+                                        key={isCloneMode ? (cloneDataLoaded ? 'clone-loaded' : 'clone-pending') : 'new'}
                                         defaultValue={formData.clientName}
                                         onSelect={handleClientSelect}
                                         placeholder="Buscar entre 10k+ clientes..."
@@ -447,6 +463,8 @@ export default function NewProposal() {
                                     </div>
                                 </div>
 
+                                {!isCloneMode && (
+                                <>
                                 {/* Consecutivo de la cotización */}
                                 <div className="space-y-3">
                                     <label className="text-sm font-medium text-gray-700 ml-1">Consecutivo de la cotización</label>
@@ -539,7 +557,11 @@ export default function NewProposal() {
                                         </div>
                                     )}
                                 </div>
+                                </>
+                                )}
 
+                                {!isCloneMode && (
+                                <>
                                 {/* Monto estimado inicial */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-gray-700 ml-1">Monto estimado inicial</label>
@@ -565,6 +587,8 @@ export default function NewProposal() {
                                         Visible en el dashboard hasta agregar ítems con valor a los escenarios.
                                     </p>
                                 </div>
+                                </>
+                                )}
                             </div>
 
                             {/* Columna Derecha */}
@@ -612,7 +636,7 @@ export default function NewProposal() {
                 <ConflictPanel
                     isClientEmpty={isClientEmpty}
                     hasNoConflicts={hasNoConflicts}
-                    conflicts={conflictHistory}
+                    conflicts={conflicts}
                 />
             </div>
         </div>
@@ -652,84 +676,5 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
                 </div>
             ))}
         </div>
-    );
-}
-
-/**
- * Panel lateral que muestra propuestas previas para detectar cruces de cuenta.
- *
- * @param {boolean} isClientEmpty - Si el campo de cliente está vacío.
- * @param {boolean} hasNoConflicts - Si no se encontraron propuestas relacionadas.
- * @param {ConflictRecord[]} conflicts - Lista de propuestas candidatas a cruce.
- */
-function ConflictPanel({
-    isClientEmpty,
-    hasNoConflicts,
-    conflicts,
-}: {
-    isClientEmpty: boolean;
-    hasNoConflicts: boolean;
-    conflicts: ConflictRecord[];
-}) {
-    return (
-        <motion.div
-            initial={{ opacity: 0, x: 15 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-1 h-fit"
-        >
-            <div className="bg-gradient-to-br from-indigo-50 to-white p-6 border-b border-gray-100">
-                <div className="flex items-center space-x-2 text-indigo-700 mb-1">
-                    <AlertCircle className="h-5 w-5" />
-                    <h3 className="text-sm font-bold tracking-wide uppercase">Cruce de Cuentas</h3>
-                </div>
-                <p className="text-gray-500 text-xs">
-                    Oportunidades creadas para este cliente en el último año.
-                </p>
-            </div>
-
-            <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
-                {isClientEmpty ? (
-                    <div className="text-center py-10 px-4 text-gray-400 text-sm">
-                        Escribe el nombre del cliente para buscar proyectos previos y evitar cruces con otros comerciales.
-                    </div>
-                ) : hasNoConflicts ? (
-                    <div className="text-center py-10 px-4">
-                        <span className="inline-flex items-center justify-center p-3 bg-green-50 rounded-full mb-3 text-green-600">
-                            <Building2 className="h-6 w-6" />
-                        </span>
-                        <h4 className="text-sm font-semibold text-gray-900">Cliente Libre</h4>
-                        <p className="text-xs text-gray-500 mt-1">
-                            Nadie del equipo ha cotizado a este cliente en el último año.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {conflicts.map((item) => (
-                            <div key={item.id} className="p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-sm">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-gray-900">{item.proposalCode}</span>
-                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600">
-                                        {new Date(item.issueDate).toLocaleDateString()}
-                                    </span>
-                                </div>
-                                <p className="text-gray-600 text-xs mb-2 line-clamp-2">{item.subject}</p>
-                                <div className="flex flex-col space-y-1 mt-2 pt-2 border-t border-gray-200">
-                                    <div className="text-xs flex items-center text-gray-500">
-                                        <span className="font-medium mr-1">Comercial:</span>
-                                        <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
-                                            {item.user?.name || 'Desconocido'}
-                                        </span>
-                                    </div>
-                                    <div className="text-xs flex items-center text-gray-500">
-                                        <span className="font-medium mr-1">Estado:</span>
-                                        {item.status} ({item.validityDays} días)
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </motion.div>
     );
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Plus, Trash2, Loader2, AlertCircle,
-    TrendingUp, Copy,
+    TrendingUp, Copy, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { Scenario } from '../../../hooks/useScenarios';
@@ -16,6 +16,7 @@ interface ScenarioSidebarProps {
     createScenario: (name: string) => Promise<boolean | undefined>;
     deleteScenario: (id: string) => Promise<void>;
     cloneScenario: (id: string) => Promise<void>;
+    reorderScenarios: (orderedScenarioIds: string[]) => void;
 }
 
 export default function ScenarioSidebar({
@@ -27,6 +28,7 @@ export default function ScenarioSidebar({
     createScenario,
     deleteScenario,
     cloneScenario,
+    reorderScenarios,
 }: ScenarioSidebarProps) {
     const [isCreatingScenario, setIsCreatingScenario] = useState(false);
     const [newScenarioName, setNewScenarioName] = useState('');
@@ -38,6 +40,14 @@ export default function ScenarioSidebar({
             setNewScenarioName('');
             setIsCreatingScenario(false);
         }
+    };
+
+    const moveScenario = (index: number, direction: -1 | 1) => {
+        const target = index + direction;
+        if (target < 0 || target >= scenarios.length) return;
+        const ids = scenarios.map(s => s.id);
+        [ids[index], ids[target]] = [ids[target], ids[index]];
+        reorderScenarios(ids);
     };
 
     return (
@@ -57,7 +67,7 @@ export default function ScenarioSidebar({
 
                 <div className="space-y-2">
                     <AnimatePresence mode="popLayout">
-                        {scenarios.map(s => (
+                        {scenarios.map((s, index) => (
                             <motion.div 
                                 key={s.id}
                                 layout
@@ -77,7 +87,29 @@ export default function ScenarioSidebar({
                                     <span className="text-sm font-black tracking-tight">{s.name}</span>
                                 </div>
                                 <div className="flex items-center space-x-1">
-                                    <button 
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); moveScenario(index, -1); }}
+                                        disabled={isReadOnly || index === 0}
+                                        className={cn(
+                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                            activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-500"
+                                        )}
+                                        title="Subir escenario"
+                                    >
+                                        <ChevronUp className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); moveScenario(index, 1); }}
+                                        disabled={isReadOnly || index === scenarios.length - 1}
+                                        className={cn(
+                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                            activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-500"
+                                        )}
+                                        title="Bajar escenario"
+                                    >
+                                        <ChevronDown className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
                                         onClick={(e) => { e.stopPropagation(); cloneScenario(s.id); }}
                                         disabled={isReadOnly}
                                         className={cn(

@@ -85,8 +85,8 @@ export default function ProposalDocBuilder() {
 
     // ── Proposal metadata for µ marker replacements ──────────
     const [proposal, setProposal] = useState<ProposalDetail | null>(null);
-    const [selectedCity, setSelectedCity] = useState<string>('Bogotá D.C.');
-    const [savedCity, setSavedCity] = useState<string>('Bogotá D.C.');
+    const [selectedCity, setSelectedCity] = useState<string>('');
+    const [savedCity, setSavedCity] = useState<string>('');
     const [savingCity, setSavingCity] = useState<boolean>(false);
 
     const { isReadOnly } = useProposalReadOnly(proposal);
@@ -98,7 +98,7 @@ export default function ProposalDocBuilder() {
             if (data.issueDate) data.issueDate = data.issueDate.split('T')[0];
             if (data.validityDate) data.validityDate = data.validityDate.split('T')[0];
             setProposal(data);
-            const initialCity = data.issueCity || 'Bogotá D.C.';
+            const initialCity = data.issueCity || '';
             setSelectedCity(initialCity);
             setSavedCity(initialCity);
         }).catch(err => console.error('Error loading proposal metadata', err));
@@ -245,7 +245,9 @@ export default function ProposalDocBuilder() {
                 </div>
                 <button
                     onClick={() => setShowPreview(true)}
-                    className="flex items-center space-x-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-lg shadow-indigo-200 transition-all font-black text-[10px] uppercase tracking-widest"
+                    disabled={!selectedCity}
+                    title={!selectedCity ? 'Selecciona la ciudad de emisi\u00f3n antes de generar el PDF' : undefined}
+                    className="flex items-center space-x-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-lg shadow-indigo-200 transition-all font-black text-[10px] uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Eye className="h-4 w-4" />
                     <span>Vista Previa PDF</span>
@@ -259,7 +261,7 @@ export default function ProposalDocBuilder() {
                         <MapPin className="h-4 w-4 text-indigo-600" />
                     </div>
                     <div className="flex items-center gap-2">
-                        <CityCombobox value={selectedCity} onChange={setSelectedCity} disabled={isReadOnly} />
+                        <CityCombobox value={selectedCity} onChange={setSelectedCity} disabled={isReadOnly} required={!isReadOnly} />
                         {!isReadOnly && selectedCity !== savedCity && (
                             <button
                                 type="button"
@@ -307,6 +309,7 @@ export default function ProposalDocBuilder() {
                         proposalVars={proposalVars}
                         processedScenarios={processedScenarios}
                         enableExcelExport
+                        ownerSignatureUrl={proposal?.user?.signatureUrl}
                     />
                 )}
                 {showPriceWarning && (

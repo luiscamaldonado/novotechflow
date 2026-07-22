@@ -16,22 +16,21 @@ import {
   CreateBillingProjectionDto,
   UpdateBillingProjectionDto,
 } from './billing-projections.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ReporterReadOnlyGuard } from '../common/guards/reporter.guard';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 
 @ApiTags('Billing Projections')
 @ApiBearerAuth()
+@UseGuards(ReporterReadOnlyGuard)
 @Controller('billing-projections')
 export class BillingProjectionsController {
   constructor(private readonly service: BillingProjectionsService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get()
   async findAll(@Request() req: { user: AuthenticatedUser }) {
     return this.service.findAll(req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   async create(
     @Request() req: { user: AuthenticatedUser },
@@ -40,7 +39,6 @@ export class BillingProjectionsController {
     return this.service.create(req.user.id, data);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -50,7 +48,6 @@ export class BillingProjectionsController {
     return this.service.update(id, data, req.user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async delete(
     @Param('id', ParseUUIDPipe) id: string,

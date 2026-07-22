@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────────────────
 
 /** Roles de usuario en el sistema. */
-export type UserRole = 'ADMIN' | 'COMMERCIAL';
+export type UserRole = 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
 
 /** Posibles estados de una propuesta. */
 export type ProposalStatus = 'ELABORACION' | 'PROPUESTA' | 'GANADA' | 'PERDIDA' | 'PENDIENTE_FACTURAR' | 'FACTURADA';
@@ -113,6 +113,32 @@ export interface SpecFieldDef {
 export interface InternalCosts {
     proveedor?: string;
     fletePct?: number | string;
+    oc?: string;
+}
+
+/** Contacto comercial de una empresa proveedora. */
+export interface SupplierContact {
+    id: string;
+    companyId: string;
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+}
+
+/** Empresa proveedora del catalogo global, con sus contactos. */
+export interface SupplierCompany {
+    id: string;
+    name: string;
+    nit?: string | null;
+    source: 'CSV' | 'MANUAL';
+    contacts: SupplierContact[];
+}
+
+/** Obligatoriedad configurable de los campos de contacto de proveedor. */
+export interface SupplierFieldRequirements {
+    nameRequired: boolean;
+    phoneRequired: boolean;
+    emailRequired: boolean;
 }
 
 /** Ítem dentro de una propuesta (edición completa). */
@@ -132,6 +158,8 @@ export interface ProposalItem {
     isTaxable?: boolean;
     deliveryDays?: number | null;
     internalCosts?: InternalCosts;
+    supplierCompanyId?: string | null;
+    supplierContactId?: string | null;
 }
 
 /** Ítem de propuesta tal como llega del backend (campos numéricos como number). */
@@ -166,7 +194,7 @@ export interface ProposalDetail {
     status: ProposalStatus;
     isLocked: boolean;
     proposalItems: ProposalItemFromApi[];
-    user?: { name: string; nomenclature: string };
+    user?: { name: string; nomenclature: string; signatureUrl?: string };
 }
 
 // ──────────────────────────────────────────────────────────
@@ -254,4 +282,20 @@ export type ManualConsecutiveValidation =
           conflict?: string;
           suggestion: number | null;
       };
+
+// ──────────────────────────────────────────────────────────
+// Cruce de cuentas
+// ──────────────────────────────────────────────────────────
+
+/** Registro de historial para cruce de cuentas. */
+export interface ConflictRecord {
+    id: string;
+    proposalCode: string;
+    clientName: string;
+    issueDate: string;
+    subject: string;
+    status: string;
+    validityDays: number;
+    user?: { name: string };
+}
 

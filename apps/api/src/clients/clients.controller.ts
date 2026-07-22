@@ -27,6 +27,9 @@ import { readFile } from 'fs/promises';
 import { ClientsService, ISearchResponse } from './clients.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import {
   validateCsvFile,
   validateCsvCellValue,
@@ -70,7 +73,8 @@ export class ClientsController {
    *
    * @example GET /clients/search?q=SURA
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.COMMERCIAL)
   @ApiBearerAuth()
   @ApiTags('Clients')
   @ApiOperation({ summary: 'Buscar clientes con ranking de relevancia' })

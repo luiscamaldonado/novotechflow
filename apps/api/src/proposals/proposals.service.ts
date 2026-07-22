@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProposalStatus, ConsecutiveSource } from '@prisma/client';
+import { ProposalStatus, ConsecutiveSource, AcquisitionType } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
 import {
@@ -356,6 +356,7 @@ export class ProposalsService {
       where: { id },
       include: {
         proposalItems: { orderBy: { sortOrder: 'asc' } },
+        user: { select: { name: true, nomenclature: true, signatureUrl: true } },
       },
     });
   }
@@ -402,6 +403,29 @@ export class ProposalsService {
   }
 
   /**
+   * Verifica que el contacto de proveedor pertenezca a la empresa indicada.
+   * Los FK garantizan que existan, pero no que esten relacionados entre si.
+   */
+  private async assertSupplierContactBelongsToCompany(
+    companyId: string | null | undefined,
+    contactId: string | null | undefined,
+  ): Promise<void> {
+    if (!contactId) return;
+    const contact = await this.prisma.supplierContact.findUnique({
+      where: { id: contactId },
+      select: { companyId: true },
+    });
+    if (!contact) {
+      throw new BadRequestException('El contacto de proveedor no existe.');
+    }
+    if (!companyId || contact.companyId !== companyId) {
+      throw new BadRequestException(
+        'El contacto no pertenece al proveedor seleccionado.',
+      );
+    }
+  }
+
+  /**
    * Añade un nuevo ítem (producto/servicio) a la propuesta.
    * Gestiona el correlativo de orden (sortOrder) automáticamente.
    */
@@ -412,6 +436,10 @@ export class ProposalsService {
   ) {
     const proposal = await this.verifyProposalOwnership(proposalId, user);
     assertProposalNotLocked(proposal);
+    await this.assertSupplierContactBelongsToCompany(
+      data.supplierCompanyId,
+      data.supplierContactId,
+    );
     const aggregate = await this.prisma.proposalItem.aggregate({
       where: { proposalId },
       _max: { sortOrder: true },
@@ -436,6 +464,8 @@ export class ProposalsService {
         isTaxable: data.isTaxable ?? true,
         technicalSpecs: (data.technicalSpecs || {}) as object,
         internalCosts: (data.internalCosts || {}) as object,
+        supplierCompanyId: data.supplierCompanyId ?? null,
+        supplierContactId: data.supplierContactId ?? null,
         sortOrder: nextOrder,
       },
     });
@@ -470,6 +500,18 @@ export class ProposalsService {
     if (!item) throw new NotFoundException('\u00cdtem no encontrado.');
     const proposal = await this.verifyProposalOwnership(item.proposalId, user);
     assertProposalNotLocked(proposal);
+    const effectiveCompanyId =
+      data.supplierCompanyId === undefined
+        ? item.supplierCompanyId
+        : data.supplierCompanyId;
+    const effectiveContactId =
+      data.supplierContactId === undefined
+        ? item.supplierContactId
+        : data.supplierContactId;
+    await this.assertSupplierContactBelongsToCompany(
+      effectiveCompanyId,
+      effectiveContactId,
+    );
     return this.prisma.proposalItem.update({
       where: { id: itemId },
       data: {
@@ -487,6 +529,8 @@ export class ProposalsService {
         isTaxable: data.isTaxable,
         technicalSpecs: data.technicalSpecs as object | undefined,
         internalCosts: data.internalCosts as object | undefined,
+        supplierCompanyId: data.supplierCompanyId,
+        supplierContactId: data.supplierContactId,
       },
     });
   }
@@ -499,7 +543,8 @@ export class ProposalsService {
    * @returns Lista de propuestas con datos del comercial asociado.
    */
   async findAll(user: AuthenticatedUser) {
-    const accessFilter = user.role === 'ADMIN' ? {} : { userId: user.id };
+    const accessFilter =
+      user.role === 'ADMIN' || user.role === 'REPORTER' ? {} : { userId: user.id };
 
     return this.prisma.proposal.findMany({
       where: { ...accessFilter, deletedAt: null },
@@ -522,41 +567,30 @@ export class ProposalsService {
   }
 
   /**
-   * Clona una propuesta existente incluyendo ítems y escenarios.
-   * NEW_VERSION: incrementa la versión (COT-LM0001-1 → COT-LM0001-2), conserva consecutiveSource.
-   * NEW_PROPOSAL: genera nuevo código secuencial (COT-LM0002-1), siempre AUTO.
+   * Clona una propuesta existente incluyendo items, escenarios, paginas y bloques.
+   * NEW_VERSION: incrementa la version (COT-LM0001-1 -> COT-LM0001-2), conserva consecutiveSource.
+   * NEW_PROPOSAL: genera nuevo codigo secuencial (COT-LM0002-1), siempre AUTO.
    */
-  async cloneProposal(
-    id: string,
-    userId: string,
-    cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL',
-    user: AuthenticatedUser,
-  ) {
+  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser, overrides?: {
+    status?: ProposalStatus; acquisitionType?: AcquisitionType; closeDate?: string;
+    clientId?: string; clientName?: string; subject?: string;
+    issueDate?: string; validityDays?: number; validityDate?: string;
+  }) {
     await this.verifyProposalOwnership(id, user);
     const original = await this.prisma.proposal.findUnique({
       where: { id },
       include: {
         proposalItems: true,
-        scenarios: {
-          include: {
-            scenarioItems: {
-              include: { children: true },
-            },
-          },
-        },
+        pages: { include: { blocks: true } },
+        scenarios: { include: { scenarioItems: { include: { children: true } } } },
       },
     });
-
     if (!original) throw new NotFoundException('Propuesta no encontrada.');
 
     return this.prisma.$transaction(async (tx) => {
       let newCode: string;
-
       if (cloneType === 'NEW_VERSION') {
-        const groupPrefix = this.extractVersionGroupPrefix(
-          original.proposalCode,
-        );
-
+        const groupPrefix = this.extractVersionGroupPrefix(original.proposalCode);
         if (groupPrefix) {
           const groupCodes = await tx.proposal.findMany({
             where: { proposalCode: { startsWith: groupPrefix } },
@@ -564,7 +598,6 @@ export class ProposalsService {
           });
           const maxVersion = this.calculateMaxVersion(groupCodes, groupPrefix);
           newCode = `${groupPrefix}${maxVersion + 1}`;
-
           await tx.proposal.updateMany({
             where: { proposalCode: { startsWith: groupPrefix } },
             data: { isLocked: true },
@@ -574,42 +607,65 @@ export class ProposalsService {
         }
       } else {
         const cloneUser = await this.validateUserAccess(userId);
-        newCode = await this.generateProposalCode(
-          cloneUser.nomenclature,
-          userId,
-        );
+        newCode = await this.generateProposalCode(cloneUser.nomenclature, userId);
       }
 
       const clonedConsecutiveSource =
-        cloneType === 'NEW_VERSION'
-          ? original.consecutiveSource
-          : ConsecutiveSource.AUTO;
-
-      const ownerUserId =
-        cloneType === 'NEW_VERSION' ? original.userId : userId;
+        cloneType === 'NEW_VERSION' ? original.consecutiveSource : ConsecutiveSource.AUTO;
+      const ownerUserId = cloneType === 'NEW_VERSION' ? original.userId : userId;
 
       const cloned = await tx.proposal.create({
         data: {
           proposalCode: newCode,
           consecutiveSource: clonedConsecutiveSource,
           userId: ownerUserId,
-          clientId: original.clientId,
-          clientName: original.clientName,
-          subject: original.subject,
-          issueDate: new Date(),
-          validityDays: original.validityDays,
-          validityDate: original.validityDate,
-          status: ProposalStatus.ELABORACION,
+          clientId: cloneType === 'NEW_PROPOSAL' && overrides?.clientId !== undefined ? overrides.clientId : original.clientId,
+          clientName: cloneType === 'NEW_PROPOSAL' && overrides?.clientName !== undefined ? overrides.clientName : original.clientName,
+          subject: cloneType === 'NEW_PROPOSAL' && overrides?.subject !== undefined ? overrides.subject : original.subject,
+          issueDate: cloneType === 'NEW_PROPOSAL' && overrides?.issueDate ? new Date(overrides.issueDate) : new Date(),
+          issueCity: original.issueCity,
+          validityDays: cloneType === 'NEW_PROPOSAL' && overrides?.validityDays !== undefined ? overrides.validityDays : original.validityDays,
+          validityDate: cloneType === 'NEW_PROPOSAL' && overrides?.validityDate ? new Date(overrides.validityDate) : original.validityDate,
+          status: overrides?.status ?? ProposalStatus.ELABORACION,
+          acquisitionType: overrides?.acquisitionType ?? null,
+          closeDate: overrides?.closeDate ? new Date(overrides.closeDate) : null,
           isLocked: false,
         },
       });
 
-      // Clone proposal items, mapping old IDs to new IDs
+      // Clone pages and their blocks (before items, so pageIdMap is available for ProposalItem.pageId)
+      const pageIdMap = new Map<string, string>();
+      for (const page of original.pages) {
+        const newPage = await tx.proposalPage.create({
+          data: {
+            proposalId: cloned.id,
+            pageType: page.pageType,
+            title: page.title,
+            variables: page.variables as object | undefined,
+            isLocked: page.isLocked,
+            sortOrder: page.sortOrder,
+          },
+        });
+        pageIdMap.set(page.id, newPage.id);
+        for (const block of page.blocks) {
+          await tx.proposalPageBlock.create({
+            data: {
+              pageId: newPage.id,
+              blockType: block.blockType,
+              content: block.content as object | undefined,
+              sortOrder: block.sortOrder,
+            },
+          });
+        }
+      }
+
+      // Clone proposal items
       const itemIdMap = new Map<string, string>();
       for (const item of original.proposalItems) {
         const newItem = await tx.proposalItem.create({
           data: {
             proposalId: cloned.id,
+            pageId: item.pageId ? pageIdMap.get(item.pageId) ?? null : null,
             itemType: item.itemType,
             name: item.name,
             description: item.description,
@@ -625,27 +681,28 @@ export class ProposalsService {
             technicalSpecs: item.technicalSpecs as object | undefined,
             internalCosts: item.internalCosts as object | undefined,
             sortOrder: item.sortOrder,
+            supplierCompanyId: item.supplierCompanyId,
+            supplierContactId: item.supplierContactId,
           },
         });
         itemIdMap.set(item.id, newItem.id);
       }
 
-      // Clone scenarios with items
+      // Clone scenarios with items (root first, then children, remapping parent ids)
       for (const scenario of original.scenarios) {
         const newScenario = await tx.scenario.create({
           data: {
             proposalId: cloned.id,
             name: scenario.name,
             currency: scenario.currency,
+            conversionTrm: scenario.conversionTrm,
             description: scenario.description,
             sortOrder: scenario.sortOrder,
           },
         });
 
-        // Clone root scenario items (parentId = null)
         const rootItems = scenario.scenarioItems.filter((si) => !si.parentId);
         const scenarioItemIdMap = new Map<string, string>();
-
         for (const si of rootItems) {
           const newItemId = itemIdMap.get(si.itemId) || si.itemId;
           const newSi = await tx.scenarioItem.create({
@@ -653,17 +710,19 @@ export class ProposalsService {
               scenarioId: newScenario.id,
               itemId: newItemId,
               quantity: si.quantity,
+              sortOrder: si.sortOrder,
+              unitCostOverride: si.unitCostOverride,
               marginPctOverride: si.marginPctOverride,
+              unitPriceOverride: si.unitPriceOverride,
+              isDiluted: si.isDiluted,
             },
           });
           scenarioItemIdMap.set(si.id, newSi.id);
         }
 
-        // Clone child scenario items
         const childItems = scenario.scenarioItems.filter((si) => si.parentId);
         for (const child of childItems) {
-          const newParentId =
-            scenarioItemIdMap.get(child.parentId!) || child.parentId;
+          const newParentId = scenarioItemIdMap.get(child.parentId!) || child.parentId;
           const newItemId = itemIdMap.get(child.itemId) || child.itemId;
           await tx.scenarioItem.create({
             data: {
@@ -671,12 +730,15 @@ export class ProposalsService {
               itemId: newItemId,
               parentId: newParentId,
               quantity: child.quantity,
+              sortOrder: child.sortOrder,
+              unitCostOverride: child.unitCostOverride,
               marginPctOverride: child.marginPctOverride,
+              unitPriceOverride: child.unitPriceOverride,
+              isDiluted: child.isDiluted,
             },
           });
         }
       }
-
       return cloned;
     });
   }

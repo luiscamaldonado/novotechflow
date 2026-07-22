@@ -18,7 +18,7 @@ export class LoginDto {
 export interface JwtPayload {
   sub: string;
   email: string;
-  role: 'ADMIN' | 'COMMERCIAL';
+  role: 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
   nomenclature: string;
 }
 
@@ -28,7 +28,7 @@ export interface JwtPayload {
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  role: 'ADMIN' | 'COMMERCIAL';
+  role: 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
   nomenclature: string;
 }
 

@@ -30,6 +30,8 @@ export function useProposalBuilder(proposalId: string | undefined) {
             proveedor: PROVEEDOR_MAYORISTA,
             fletePct: MAYORISTA_FLETE_PCT,
         },
+        supplierCompanyId: null,
+        supplierContactId: null,
     };
 
     const loadProposalData = useCallback(async () => {
@@ -100,6 +102,8 @@ export function useProposalBuilder(proposalId: string | undefined) {
                 deliveryDays: Number.isFinite(deliveryDays) ? deliveryDays : undefined,
                 technicalSpecs: cleanedSpecs,
                 internalCosts: itemForm.internalCosts,
+                supplierCompanyId: itemForm.supplierCompanyId ?? null,
+                supplierContactId: itemForm.supplierContactId ?? null,
             };
 
             if (editingItemId) {

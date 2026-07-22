@@ -36,6 +36,7 @@ export default function ProposalCalculations() {
         clearUnitPriceOverride,
         renameScenario,
         cloneScenario,
+        reorderScenarios,
         reorderItems,
     } = useScenarios(id);
 
@@ -237,6 +238,7 @@ export default function ProposalCalculations() {
                     createScenario={createScenario}
                     deleteScenario={deleteScenario}
                     cloneScenario={cloneScenario}
+                    reorderScenarios={reorderScenarios}
                 />
 
                 {/* Contenido Principal */}

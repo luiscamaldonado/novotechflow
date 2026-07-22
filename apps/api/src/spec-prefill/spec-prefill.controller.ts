@@ -10,6 +10,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import { SpecPrefillService } from './spec-prefill.service';
 import { ExtractSpecsDto } from './dto/extract-specs.dto';
 import type { PrefillResponseDto } from './dto/prefill-response.dto';
@@ -24,7 +27,8 @@ export class SpecPrefillController {
   constructor(private readonly specPrefill: SpecPrefillService) {}
 
   @Post('extract')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.COMMERCIAL)
   @ApiBearerAuth()
   @ApiOperation({
     summary:

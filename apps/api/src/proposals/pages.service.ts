@@ -59,12 +59,6 @@ export class PagesService {
       return this.getPagesByProposalId(proposalId);
     }
 
-    // Fetch proposal with user to get signature
-    const proposal = await this.prisma.proposal.findUnique({
-      where: { id: proposalId },
-      include: { user: { select: { name: true, signatureUrl: true } } },
-    });
-
     // Read global templates from admin configuration
     const templates = await this.prisma.pdfTemplate.findMany({
       where: { isActive: true },
@@ -175,19 +169,6 @@ export class PagesService {
           ],
         },
       ];
-    }
-
-    // For the PRESENTATION page, append the commercial user's signature if available
-    if (proposal?.user?.signatureUrl) {
-      const presentationIdx = pageDefs.findIndex(
-        (p) => p.pageType === 'PRESENTATION',
-      );
-      if (presentationIdx !== -1) {
-        pageDefs[presentationIdx].blocks.push({
-          blockType: 'IMAGE',
-          content: { url: proposal.user.signatureUrl, caption: '' },
-        });
-      }
     }
 
     // Create pages and blocks

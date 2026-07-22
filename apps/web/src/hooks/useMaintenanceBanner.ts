@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 
 /** Intervalo (ms) de refresco del estado del banner de mantenimiento. */
-const MAINTENANCE_BANNER_REFRESH_MS = 60 * 1000;
+const MAINTENANCE_BANNER_REFRESH_MS = 5 * 60 * 1000; // 5 min
 
 /** Estado del banner de mantenimiento (mensaje + visibilidad). */
 export interface MaintenanceBanner {

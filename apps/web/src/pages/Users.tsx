@@ -22,7 +22,7 @@ interface UserData {
     id: string;
     name: string;
     email: string;
-    role: 'ADMIN' | 'COMMERCIAL';
+    role: 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
     nomenclature: string;
     signatureUrl?: string | null;
     isActive: boolean;
@@ -296,6 +296,7 @@ export default function Users() {
                                             <option value="" disabled>Selecciona un rol</option>
                                             <option value="COMMERCIAL">Comercial</option>
                                             <option value="ADMIN">Administrador</option>
+                                            <option value="REPORTER">Reporter</option>
                                         </select>
                                     </div>
                                 </div>
@@ -421,6 +422,7 @@ export default function Users() {
                                         >
                                             <option value="COMMERCIAL">Comercial</option>
                                             <option value="ADMIN">Administrador</option>
+                                            <option value="REPORTER">Reporter</option>
                                         </select>
                                     </div>
                                 </div>
@@ -529,9 +531,14 @@ export default function Users() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wider ${u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-50 text-blue-600'
-                                                        }`}>
-                                                        {u.role === 'ADMIN' ? 'ADMIN' : 'COMERCIAL'}
+                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wider ${
+                                                        u.role === 'ADMIN'
+                                                            ? 'bg-purple-100 text-purple-700'
+                                                            : u.role === 'REPORTER'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : 'bg-blue-50 text-blue-600'
+                                                    }`}>
+                                                        {u.role === 'ADMIN' ? 'ADMIN' : u.role === 'REPORTER' ? 'REPORTER' : 'COMERCIAL'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4">

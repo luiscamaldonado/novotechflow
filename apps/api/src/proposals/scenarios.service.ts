@@ -328,6 +328,60 @@ export class ScenariosService {
   }
 
   /**
+   * Reordena los escenarios de una propuesta.
+   */
+  async reorderScenarios(
+    proposalId: string,
+    scenarioIds: string[],
+    user: AuthenticatedUser,
+  ) {
+    await this.proposalsService.verifyProposalOwnership(proposalId, user);
+
+    const scenarios = await this.prisma.scenario.findMany({
+      where: { proposalId },
+      select: { id: true },
+    });
+
+    const existingIds = scenarios.map((s) => s.id);
+    const payloadSet = new Set(scenarioIds);
+    const isExactPermutation =
+      scenarioIds.length === existingIds.length &&
+      payloadSet.size === existingIds.length &&
+      existingIds.every((id) => payloadSet.has(id));
+    if (!isExactPermutation) {
+      throw new BadRequestException(
+        'La lista de escenarios debe ser una permutación exacta de los escenarios de la propuesta.',
+      );
+    }
+
+    await this.prisma.$transaction(
+      scenarioIds.map((id, i) =>
+        this.prisma.scenario.update({
+          where: { id },
+          data: { sortOrder: i + 1 },
+        }),
+      ),
+    );
+
+    return this.prisma.scenario.findMany({
+      where: { proposalId },
+      include: {
+        scenarioItems: {
+          where: { parentId: null },
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            item: true,
+            children: {
+              include: { item: true },
+            },
+          },
+        },
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  /**
    * Reordena los ítems padre de un escenario.
    */
   async reorderScenarioItems(

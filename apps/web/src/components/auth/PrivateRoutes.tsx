@@ -15,3 +15,12 @@ export const AdminRoute = () => {
 
     return <Outlet />;
 };
+
+export const ReporterRoute = () => {
+    const { isAuthenticated, user } = useAuthStore();
+
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    if (user?.role === 'REPORTER') return <Navigate to="/dashboard" replace />;
+
+    return <Outlet />;
+};

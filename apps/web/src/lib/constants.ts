@@ -19,6 +19,21 @@ export const MAYORISTA_FLETE_PCT = 1.5;
 /** Nombre del proveedor mayorista. */
 export const PROVEEDOR_MAYORISTA = 'MAYORISTA';
 
+/** Origen (categoria de proveedor) de un item. Dispara el flete: solo MAYORISTA suma. */
+export type ProveedorOrigen = 'MAYORISTA' | 'FABRICANTE' | 'NOVOTECHNO' | 'OTROS';
+
+export const PROVEEDOR_FABRICANTE = 'FABRICANTE';
+export const PROVEEDOR_NOVOTECHNO = 'NOVOTECHNO';
+export const PROVEEDOR_OTROS = 'OTROS';
+
+/** Opciones del selector de origen (value === label). */
+export const PROVEEDOR_OPTIONS: ProveedorOrigen[] = [
+    'MAYORISTA',
+    'FABRICANTE',
+    'NOVOTECHNO',
+    'OTROS',
+];
+
 /** Debounce para búsquedas de autocompletado (ms). */
 export const AUTOCOMPLETE_DEBOUNCE_MS = 200;
 
@@ -28,15 +43,14 @@ export const SUGGESTION_BLUR_DELAY_MS = 200;
 /** Máximo de sugerencias a mostrar en autocompletados. */
 export const MAX_SUGGESTIONS = 20;
 
-/** Labels legibles para cada tipo de ítem. */
-export const ITEM_TYPE_LABELS: Record<string, string> = {
-    PCS: 'PCs',
-    ACCESSORIES: 'Accesorios y Opciones',
-    PC_SERVICES: 'Servicios PCs',
-    SOFTWARE: 'Software',
-    INFRASTRUCTURE: 'Infraestructura',
-    INFRA_SERVICES: 'Servicios de Infraestructura',
-} as const;
+/** Tiempo de debounce para la búsqueda de cruce de cuentas (ms). */
+export const CONFLICT_SEARCH_DEBOUNCE_MS = 500;
+
+/** Longitud mínima del nombre del cliente para activar la búsqueda de conflictos. */
+export const MIN_CONFLICT_SEARCH_LENGTH = 3;
+
+/** Labels de categoría y campos de información rápida: fuente única en @repo/item-display. */
+export { ITEM_TYPE_LABELS, QUICK_SPEC_FIELDS_BY_ITEM_TYPE } from '@repo/item-display';
 
 /** Valor de estado que mantiene visibles las garantías de PCS. */
 export const ESTADO_NUEVO = 'Nuevo';
@@ -63,31 +77,48 @@ export const SPEC_FIELDS_BY_ITEM_TYPE: Record<string, Record<string, SpecFieldDe
         garantiaEquipo: { label: 'Garant\u00eda Equipo', cat: 'GARANTIA_EQUIPO', visibleWhen: { field: 'estado', equals: ESTADO_NUEVO } },
     },
     ACCESSORIES: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo', cat: 'ACC_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         garantia: { label: 'Garant\u00eda', cat: 'ACC_GARANTIA' },
     },
     PC_SERVICES: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Servicio', cat: 'SVC_TIPO' },
         responsable: { label: 'Responsable', cat: 'SVC_RESPONSABLE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         unidadMedida: { label: 'Unidad de Medida', cat: 'SVC_UM' },
     },
     SOFTWARE: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Software', cat: 'SW_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         unidadMedida: { label: 'Unidad de Medida', cat: 'SW_UM' },
     },
     INFRASTRUCTURE: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Infraestructura', cat: 'INFRA_TIPO' },
         fabricante: { label: 'Fabricante', cat: 'FABRICANTE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         garantia: { label: 'Garant\u00eda', cat: 'INFRA_GARANTIA' },
     },
     INFRA_SERVICES: {
+        numeroParte: { label: 'N\u00famero de Parte', cat: 'NUMERO_PARTE', input: 'text' },
         tipo: { label: 'Tipo de Servicio', cat: 'INFRA_SVC_TIPO' },
         responsable: { label: 'Responsable', cat: 'INFRA_SVC_RESPONSABLE' },
+        modelo: { label: 'Modelo', cat: 'MODELO' },
         unidadMedida: { label: 'Unidad de Medida', cat: 'INFRA_SVC_UM' },
     },
 } as const;
+
+// Formato (detectado por la IA) que dispara garantia de bateria automatica.
+// Unico formato inequivocamente movil de FORMATO_VALUES; Workstation es ambiguo
+// (escritorio o portatil) y no se incluye para evitar falsos positivos.
+export const BATTERY_WARRANTY_FORMAT = 'Laptop';
+// Valor por defecto de "Garantia Bateria" para equipos portatiles.
+export const DEFAULT_BATTERY_WARRANTY = '1 a\u00f1o';
 
 /**
  * Determina si un spec field es visible según su regla visibleWhen.

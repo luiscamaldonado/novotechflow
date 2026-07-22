@@ -94,7 +94,7 @@ export default function TechnicalSpecSheet({ item, globalIndex, totalItems, vari
                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
                         Notas Complementarias
                     </h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">
+                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
                         {proposalItem.description}
                     </p>
                 </div>

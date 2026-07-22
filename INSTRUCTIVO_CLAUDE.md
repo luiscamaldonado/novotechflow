@@ -241,6 +241,68 @@ git commit -m "docs: ADR-0XX <descripcion>"
 docker compose exec db psql -U admin -d novotechflow
 ```
 
+## 10. Protocolo de depuración
+
+Aplica a todo bug, regresión o incidente. Complementa el flujo de feature (§5); cuando el trabajo es depurar, mandan las reglas de esta sección. El método general vive en el skill `depuracion-web` (Claude.ai); esta sección es el protocolo operativo del proyecto y lo que los prompts de Claude Code necesitan llevar.
+
+### 10.1 Regla madre — diagnóstico ≠ cambio
+
+Ante un bug reportado, la primera entrega es el **diagnóstico**: causa raíz + evidencia que la respalda + fix mínimo propuesto. **Ningún fix se aplica sin aprobación explícita de Luis.** Una señal que se parece a una falla conocida puede tener otra causa: antes de cualquier acción que cambie estado (ediciones, migraciones, reinicios), la evidencia debe respaldar **esa** acción específica.
+
+### 10.2 Fases
+
+0. **Reproducir y capturar evidencia.** Stack trace, código HTTP, request/response, logs, observado vs esperado. Alcance: ¿un usuario o todos?, ¿qué entorno?, ¿desde cuándo?, ¿qué cambió antes (deploy, dependencia, config, migración)? Sin evidencia, la fase 1 es conseguir evidencia, no proponer fixes.
+1. **Explorar (solo lectura).** Código + historial del repo (`git log`, `git blame`, diffs de deploys recientes). Sin hipótesis todavía.
+2. **Aislar la capa** antes de tocar código:
+
+| Capa | Síntoma típico | Confirmación |
+|---|---|---|
+| Código de aplicación | excepción, lógica incorrecta, estado mal manejado | logs/tests dirigidos |
+| Transporte / red | timeouts intermitentes, latencia sin patrón | logs de infraestructura |
+| Config / entorno | falla solo en un entorno | comparar config entre entornos |
+| Datos / estado | falla con ciertos registros | inspeccionar el dato exacto |
+| Dependencias / build | rompe tras bump de versión o build | changelog y lockfile |
+
+3. **Planear el fix mínimo.** Criterio de verificación definido **antes** de tocar código (qué test, qué flujo de navegador, qué log confirma). El bug fix es solo el fix: sin refactor ni limpieza de paso; `pricing-engine.ts` no se toca salvo que el bug esté ahí. Deuda detectada al paso se registra, no se arregla.
+4. **Ejecutar.** Flujo de dos roles de siempre (§2): diff antes de aplicar, commit atómico, sin pushear.
+5. **Verificar** con el checklist de 10.4.
+6. **Registrar.** ADR si el fix fue arquitectónico o cambió un patrón (§4). Los falsos positivos ("parecía X, era Y") también se registran.
+
+### 10.3 Modelos en depuración
+
+- **Prompts de diagnóstico/búsqueda (solo lectura):** `Modelo: Fable 5 · Sesión: NUEVA` mientras esté incluido en el plan (hasta 2026-07-07; después pasa a créditos → diagnóstico complejo en Opus, resto en Sonnet). Su ventaja documentada es bug-finding recall.
+- **Prompts de fix:** tabla normal de §6 (Haiku/Sonnet/Opus). Lo mecánico no necesita Fable.
+- **Anti-reruteo del clasificador (Fable):** no pedirle que transcriba su razonamiento interno; enmarcar verificaciones de seguridad en modo defensivo ("verificá que el guard niega X en todas las rutas"), nunca como caza de vulnerabilidades; `/clear` entre tareas no relacionadas. Si rerutea a Opus 4.8, la pasada continúa y vale.
+
+### 10.4 Checklist post-cambio (gate)
+
+Sin esto, nada se declara resuelto:
+
+- [ ] Diff de los archivos cambiados mostrado.
+- [ ] Tests dirigidos del flujo tocado (si existen) antes que la suite completa.
+- [ ] `tsc --noEmit` en web y api.
+- [ ] Si algo falla: parar y reportar con la salida real. No continuar.
+- [ ] Nada se declara resuelto sin evidencia de esta sesión.
+- [ ] Flujos con estado (login, timers, polling, exportaciones): verificación del flujo completo en navegador — la hace Luis (CONVENTIONS §H).
+
+### 10.5 Bloque obligatorio en prompts de diagnóstico
+
+Va tal cual en todo prompt de Claude Code cuya tarea sea diagnosticar:
+
+```
+Solo diagnostica y reporta: no apliques ningún fix ni modifiques archivos.
+No declares nada resuelto o confirmado sin evidencia de esta sesión (salida de comando, log, test); si algo falla, repórtalo con la salida real.
+Reporta: causa probable + evidencia + archivo:línea + escenario concreto que lo reproduce.
+```
+
+### 10.6 Pasadas de auditoría (bugs ocultos)
+
+Para buscar bugs que nadie reportó:
+
+- **Una pasada = un invariante.** Sesión NUEVA, solo lectura. Ejemplos: "ningún consumidor del pricing-engine calcula por fuera", "un REPORTER no puede mutar nada por ninguna ruta", "todo timer/polling se limpia al desmontar".
+- **Hallazgo = archivo:línea + escenario que lo dispara + severidad.** Sin escenario reproducible es hipótesis y se marca como tal.
+- Hallazgos a `docs/audits/`. **Demostrar antes de arreglar** (test o script que lo reproduce). Fixes después, por cohortes, con gate por commit (lint + `tsc` + navegador + push de Luis).
+
 ---
 
 > **Regla de oro de este instructivo:** ante cualquier dato que pueda haber cambiado —número de ADR, formato, schema, comportamiento, ruta— Claude **confirma contra el repo real antes de actuar.** No asume, no improvisa, no rellena huecos.

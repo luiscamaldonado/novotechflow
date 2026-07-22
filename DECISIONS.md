@@ -2115,7 +2115,7 @@ Diagnóstico inicial (solo lectura, contra el repo real, HEAD `f9998e7`): 11 hal
 
 ### Pendientes
 
-- **Saneamiento de `useInactivityTimeout` (#4 + #12) — refactor del arranque del hook, con prueba de browser.** #4 es `react-hooks/purity` (`Date.now()` en render, L27) y #12 es `react-hooks/set-state-in-effect` (setState síncrono al montar vía `startTimers()`). Diferidos a una intervención dedicada porque: (a) están **acoplados** — #12 solo es visible con #4 aplicado, no hay estado intermedio con lint limpio; (b) el fix de #12 no es de una línea: el effect de actividad llama `startTimers()` síncronamente al montar, y `startTimers` ejecuta `setShowWarning`/`setSecondsLeft`, por lo que resolverlo exige reestructurar el arranque del hook (inicializar el estado a sus valores correctos o reestructurar el reset) y verificarlo en browser (aviso de inactividad + auto-logout + reset por actividad). Es refactor de lógica, no deuda mecánica.
+- **Saneamiento de `useInactivityTimeout` (#4 + #12) — RESUELTO** (commit `a80302e`, `fix(web): remove impure Date.now and sync setState in useInactivityTimeout`; lint de web en verde, `tsc --noEmit` de web en verde, prueba de browser OK a cargo de Luis: aviso al minuto correcto + cuenta regresiva + auto-logout + reset por actividad + dismiss). El enmascaramiento predicho se dio en cadena al sanear cada impureza: #4 `react-hooks/purity` (`Date.now()` en render, L27) → resuelto con `useRef(0)` (el valor inicial estaba muerto: `scheduleTimers` sobrescribe `lastActivityRef` con `Date.now()` al montar, antes de cualquier lectura). Al caer #4 aflora #12 `react-hooks/set-state-in-effect` en la rama `!token` (L88) → se quita el `setShowWarning(false)` de esa rama y la visibilidad del aviso se **deriva** en el retorno (`showWarning && Boolean(token)`), cubriendo el logout con aviso visible sin depender del desmontaje. Al caer ese, aflora un tercero: `startTimers()` en el effect (L91), porque hacia `setShowWarning(false)`/`setSecondsLeft(60)` sincronos al montar → se parte `startTimers` en `scheduleTimers` (solo agenda los timers, sin reset — seguro al montar porque el estado ya esta en su valor inicial) y `restartTimers` (reset + agenda, invocado solo desde `handleActivity`, en callback de evento fuera del effect). Comportamiento del cronometro identico en todos los caminos. No aparecio un cuarto hallazgo: el hook quedo con lint limpio.
 - **Push de este ADR a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción). Los 6 commits de la remediación ya están en master; este ADR-050 queda local.
 
 ## ADR-051 — Convención de selección de modelo de Claude Code por prompt y refinamiento del flujo decisión-primero
@@ -2290,7 +2290,644 @@ Tres restricciones definieron el diseño. Primera, la app de Felipe vive en otro
 - **Configuración de producción para `/external`** al desplegar: agregar `EXTERNAL_JWT_SECRET` (hex 64 chars distinto del de local) a Railway, sumar el origen público de la app de Felipe a `CORS_ORIGIN` de Railway, y validar el flujo extremo a extremo en producción tras el push.
 - **Limpieza de duplicado de `RESEND_API_KEY` y `RESEND_FROM`** en el `.env` local detectada durante el paso 4 (no afecta funcionalidad: Node usa la última definición). Tarea menor de higiene, no bloquea nada.
 
-## ADR-057 — Adopción del Railway CLI en el flujo de trabajo para lectura de variables y logs de producción, con manejo estricto de secretos
+## ADR-054 — Rol REPORTER de solo lectura: acceso global a propuestas y proyecciones, blindaje deny-by-default en backend y dashboard de solo lectura
+**Fecha:** 2026-06-24
+**Estado:** Implementada y en produccion (`origin/master`). El rol REPORTER y su guard base se desplegaron por la rama `feature/reporter-role-clean`. Nota (ADR-056, 2026-07-04): esta linea corrige el estado previo, que decia "sin pushear en rama": el despliegue ya ocurrio. El endurecimiento posterior de dos endpoints de lectura quedo registrado en el ADR-056.
+
+### Contexto
+Se necesitaba un tipo de usuario que pudiera consultar todas las oportunidades del dashboard y generar los dos reportes de Excel (exportacion del dashboard y reporte de proyeccion), sin capacidad de editar, crear ni navegar a ninguna otra pantalla. El objetivo de negocio es habilitar perfiles de consulta y reporteria sin darles acceso de escritura ni a los modulos operativos.
+
+El enum de roles tenia solo `ADMIN` y `COMMERCIAL`. Los dos `findAll` relevantes (`proposals.service` y `billing-projections.service`) filtraban por dueno para todo lo que no fuera `ADMIN`. La proteccion de escritura de los controladores de `proposals` y `billing-projections` se apoyaba solo en `JwtAuthGuard` a nivel de metodo: cualquier usuario autenticado podia mutar. Las rutas de propuestas del frontend eran accesibles para cualquier rol no-admin. Un requisito central —"no puede entrar a ver ninguna otra cosa"— exigia blindaje real en el backend, no solo ocultar controles en la UI: un usuario con token podria pegar a los endpoints de mutacion directamente.
+
+### Decisión
+1. **Rol REPORTER en el enum y en los tipos.** Se agrego `REPORTER` al enum `Role` de Prisma (migracion `20260623223750_add_reporter_role`) y a las uniones de tipo del JWT (`JwtPayload`, `AuthenticatedUser` en `auth.dto.ts`, y la firma de `login` en `auth.service.ts`), mas `UserRole` en el frontend (`lib/types.ts`).
+2. **Acceso de lectura global.** Los dos `findAll` ahora eximen del filtro por dueno tanto a `ADMIN` como a `REPORTER` (`user.role === 'ADMIN' || user.role === 'REPORTER' ? {} : { userId: user.id }`). REPORTER ve todas las propuestas y proyecciones, igual que ADMIN.
+3. **Blindaje deny-by-default via guard a nivel de clase.** Se creo `ReporterReadOnlyGuard` (`common/guards/reporter.guard.ts`), que calca a `AdminGuard`: extiende `JwtAuthGuard`, autentica con `super.canActivate` y lanza `ForbiddenException` si `request.user.role === 'REPORTER'` y `request.method !== 'GET'`. Se aplico a nivel de clase en `proposals.controller` y `billing-projections.controller`. REPORTER pasa en los GET (lo que el dashboard y los reportes necesitan leer) y rebota con 403 en toda mutacion, incluidas las que se agreguen a futuro en esos controladores.
+4. **Eliminacion de la redundancia de guards.** Como el guard de clase ya autentica, se quitaron los ~33 `@UseGuards(JwtAuthGuard)` redundantes de nivel de metodo en ambos controladores (mas el import sin uso). Esto evita que Passport corra `validate()` —que consulta la DB— dos veces por request. Los dos `@UseGuards(AdminGuard)` de papelera/restore se conservan intactos.
+5. **Encierro de rutas en el frontend.** Se agrego `ReporterRoute` (espejo de `AdminRoute`) que rebota a REPORTER a `/dashboard`. Envuelve solo las 4 rutas de propuestas; `/dashboard` queda accesible para los tres roles y las rutas admin siguen bajo `AdminRoute` (que ya rebota a REPORTER por no ser ADMIN).
+6. **Dashboard de solo lectura.** Se corrigio el ternario de `Dashboard.tsx` que colapsaba todo rol no-ADMIN en `COMMERCIAL` (ahora `user?.role ?? 'COMMERCIAL'`). Se ocultaron para REPORTER todos los controles de mutacion (botones del header, botones de fila, selects de estado/adquisicion, inputs de fecha, en propuestas y proyecciones). Estado y Adquisicion se muestran como badge de solo lectura replicando el formato de `ProposalGroupHeaderRow`. Se conservan filtros, las dos exportaciones y el campo TRM.
+7. **Asignacion del rol en gestion de usuarios.** Se agrego la opcion REPORTER a los dropdowns de crear y editar usuario, se amplio la interface local `UserData`, y se cambio el badge binario de la tabla a tres casos (REPORTER con color propio). El backend no requirio cambios: el payload manda el rol como string, validado por `CreateUserDto` con `@IsEnum(Role)`, y el enum de Prisma ya incluye REPORTER.
+
+### Consecuencias
+- REPORTER lee todo, no muta nada (blindado en backend), y solo navega el dashboard (blindado en frontend). Las dos exportaciones funcionan porque consumen datos ya en memoria; no requirieron endpoints nuevos.
+- El whitelist efectivo de REPORTER es el conjunto de endpoints que el dashboard dispara solo por loguearse: `login`, `verify-code`, `GET /proposals`, `GET /billing-projections`, `GET /app-settings/maintenance-banner`, `POST /presence/heartbeat`, `GET /app-settings/inactivity-timeout`. La TRM es externa al API.
+- **Regla a recordar (limitacion consciente del deny-by-default por controlador):** el guard de clase cierra las mutaciones de `proposals` y `billing-projections`, y la lectura de otros modulos ya esta cerrada por `AdminGuard`. Pero si a futuro se agrega un modulo no-admin nuevo con un GET sin guard de rol, REPORTER podria leerlo hasta que se le aplique su propio guard. Hoy no existe ese hueco (proposals y billing-projections son los unicos no-admin, y sus GET son justo lo que REPORTER debe ver).
+- Beneficio colateral de rendimiento: al quitar los `JwtAuthGuard` redundantes de metodo, los endpoints de esos dos controladores hacen una sola consulta de auth por request en lugar de dos.
+- Verificado en local: creacion de usuario REPORTER, acceso solo al dashboard, ambas exportaciones operativas, controles de mutacion ausentes, rebote desde rutas de propuestas. El boton de reporte de proyeccion depende de que existan proyecciones y TRM cargada (no del rol).
+
+### Archivos
+- `apps/api/prisma/schema.prisma` — `REPORTER` en enum `Role`.
+- `apps/api/prisma/migrations/20260623223750_add_reporter_role/` — migracion del enum.
+- `apps/api/src/auth/dto/auth.dto.ts`, `apps/api/src/auth/auth.service.ts` — `REPORTER` en las uniones de rol del JWT.
+- `apps/api/src/proposals/proposals.service.ts`, `apps/api/src/billing-projections/billing-projections.service.ts` — acceso global de lectura para REPORTER en `findAll`.
+- `apps/api/src/common/guards/reporter.guard.ts` — `ReporterReadOnlyGuard` (nuevo).
+- `apps/api/src/proposals/proposals.controller.ts`, `apps/api/src/billing-projections/billing-projections.controller.ts` — guard de clase aplicado, `JwtAuthGuard` redundante de metodo removido.
+- `apps/web/src/lib/types.ts` — `UserRole` ampliado.
+- `apps/web/src/components/auth/PrivateRoutes.tsx`, `apps/web/src/App.tsx` — `ReporterRoute` y su uso.
+- `apps/web/src/pages/Dashboard.tsx`, `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` — dashboard de solo lectura.
+- `apps/web/src/pages/Users.tsx` — opcion REPORTER en el formulario y badge.
+
+### Commits
+- `8facda9` — `feat(api): add REPORTER role to enum and JWT types`
+- `97564b0` — `feat(api): grant REPORTER read access to all proposals and projections`
+- `69b19bc` — `feat(api): block REPORTER from mutations via controller-level guard`
+- `64359a4` — `refactor(api): drop redundant method-level JwtAuthGuard now covered by class guard`
+- `8604e17` — `feat(web): add ReporterRoute guard to lock REPORTER out of proposal routes`
+- `62e7df5` — `feat(web): make dashboard read-only for REPORTER role`
+- `a6970da` — `feat(web): add REPORTER role option to user management form`
+- Pendiente — commit de este ADR-054 (`docs: ADR-054 REPORTER read-only role`)
+
+### Pendientes
+- **Push diferido.** La feature esta aislada en `feature/reporter-role` sin pushear. El merge a `master` espera a la resolucion (o decision consciente) del incidente de produccion abierto. Orden de merge: `feature/external-api` primero, luego esta rama.
+- **Commit de merge ajeno a la feature.** La rama tiene mergeado localmente el commit del modo-dev 2FA (`fix/local-2fa-dev-mode`, log del codigo en consola en desarrollo) para poder probar en local. Ese cambio es infraestructura de desarrollo, no parte de REPORTER; debe resolverse su destino (rama propia / no arrastrarlo al merge de REPORTER a produccion) antes del push.
+
+## ADR-055 — Protocolo de depuración: diagnóstico antes de cambio, sección 10 del instructivo y skills de Claude.ai
+**Fecha:** 2026-07-04
+**Estado:** Implementada. La sección 10 quedó insertada en `INSTRUCTIVO_CLAUDE.md` en `master` (commit `888a231`, sin pushear). Los skills `depuracion-web` (nuevo) y `novotechflow` (actualizado) y las instrucciones del proyecto viven en Claude.ai, fuera de git.
+
+### Contexto
+Las prácticas de depuración del proyecto (diagnóstico primero, aislar la capa antes de tocar código, no declarar resuelto sin evidencia) se aplicaban por criterio pero no estaban en ninguna fuente de verdad, por lo que dependían de la memoria de cada sesión. Dos hechos motivaron formalizarlas: (1) el incidente de producción abierto desde junio mostró el costo de la disciplina — la señal apunta a capa de transporte y el fix de código propuesto quedó pausado justamente por falta de evidencia de causa raíz; (2) el redespliegue de Claude Fable 5 (2026-07-01), cuya ventaja documentada es bug-finding recall y cuya metodología (medir, loggear, verificar antes de cerrar) coincide con la práctica del proyecto, pero cuyo clasificador reenruta tareas benignas de depuración a Opus 4.8 si el framing es inadecuado. Fable está incluido en el plan hasta 2026-07-07; después pasa a créditos.
+
+### Decisión
+1. **Sección 10 nueva en `INSTRUCTIVO_CLAUDE.md`** como protocolo operativo de depuración: regla madre (diagnóstico ≠ cambio — ningún fix sin aprobación explícita de Luis), fases 0–6 (reproducir/evidencia, explorar solo lectura, aislar la capa, fix mínimo con criterio de verificación previo, ejecutar, verificar, registrar), tabla de aislamiento de capa (código / transporte / config / datos / dependencias), selección de modelos en depuración (Fable 5 para prompts de diagnóstico de solo lectura mientras esté incluido; fixes con la tabla normal de §6), checklist post-cambio como gate, bloque obligatorio de tres líneas para todo prompt de diagnóstico, y pasadas de auditoría para bugs ocultos (una pasada = un invariante, sesión NUEVA, solo lectura, hallazgos a `docs/audits/`, demostrar antes de arreglar).
+2. **Skill `depuracion-web` (Claude.ai, nuevo):** método general de depuración, portable a otros proyectos; en NovoTechFlow convive con el skill `novotechflow`.
+3. **Skill `novotechflow` (Claude.ai, actualizado):** incorpora REPORTER, la API externa (rama `feature/external-api`), la referencia al protocolo de depuración y tres reglas duraderas ya aprendidas por incidentes (DATABASE_URL de Railway siempre por referencia, `pg_dump` antes de migraciones de schema a producción, `prisma generate` tras cambiar de rama con migraciones).
+4. **Instrucciones del proyecto actualizadas** (Claude.ai): bug reportado → primero diagnóstico con evidencia; y todo `.md` que Luis reemplaza a mano se entrega como archivo descargable completo.
+
+### Consecuencias
+- Ningún fix de bug se aplica sin diagnóstico aprobado: la primera entrega ante un bug es causa raíz + evidencia + fix mínimo propuesto.
+- Todo prompt de diagnóstico lleva el bloque de 10.5 y se encabeza `Modelo: Fable 5 · Sesión: NUEVA` hasta 2026-07-07; después, diagnóstico complejo en Opus y el resto en Sonnet.
+- La sección 10 es la fuente operativa dentro del repo; los skills duplican el método por diseño para chats fuera del proyecto. En conflicto, gana `CONVENTIONS.md` y gana el disco.
+- Los skills viven fuera de git y no se versionan aquí: se actualizan solo ante cambios estructurales (modelo de trabajo, regla no negociable, glosario).
+
+### Archivos
+- `INSTRUCTIVO_CLAUDE.md` — sección 10 nueva (única modificación en el repo).
+- Fuera de git: skills `depuracion-web` y `novotechflow`, e instrucciones del proyecto, en Claude.ai.
+
+### Commits
+- `888a231` — `docs: agrega protocolo de depuracion (seccion 10) al instructivo`
+- Pendiente — commit de este ADR-055 (`docs: ADR-055 protocolo de depuracion`)
+
+### Pendientes
+- **Push de ambos commits a `master`** (lo hace Luis; Claude pregunta antes si es el momento — puede haber usuarios en producción). El attachment de `INSTRUCTIVO_CLAUDE.md` en Claude.ai ya quedó reemplazado con contenido idéntico al del disco.
+- **Piloto de pasada de auditoría** (10.6) sobre el invariante de REPORTER, con Fable 5 y solo lectura, idealmente antes de 2026-07-07.
+
+## ADR-056 — Endurecimiento de la superficie de lectura de REPORTER: auditoria de invariante y cierre de dos endpoints fuera del whitelist
+**Fecha:** 2026-07-04
+**Estado:** Implementada. Fix en `master` (commit `e1da449`), verificado en local. Auditoria en `docs/audits/reporter-invariant.md` (commit `9630371`). Ambos commits pendientes de push a `origin/master`.
+
+### Contexto
+El rol REPORTER (ADR-054) ya estaba en produccion (`origin/master`). Aplicando el protocolo de depuracion (INSTRUCTIVO_CLAUDE.md §10.6), se corrio una pasada de auditoria de un invariante con Claude Fable 5, solo lectura, sobre la rama `feature/reporter-role`: "un REPORTER autenticado no puede mutar ningun dato por ninguna ruta, y solo lee los endpoints que el dashboard necesita". La clausula de no-mutacion se cumple en los 13 controladores. La clausula de superficie de lectura no se cumplia en forma estricta: REPORTER podia leer 5 GET adicionales y ejecutar 1 POST de computo (sin mutacion de datos) fuera del whitelist, todo atribuible a la limitacion consciente del ADR-054 (endpoints con solo `JwtAuthGuard` quedan legibles). Dos de esos exponian datos sensibles.
+
+### Decisión
+1. **Cerrar los dos hallazgos de severidad media** con el patron allowlist ya existente en el proyecto (`@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(Role.ADMIN, Role.COMMERCIAL)`, usado en users y templates): `POST /spec-prefill/extract` (parseo de archivos, sin mutacion de datos pero fuera del alcance de solo-lectura) y `GET /clients/search` (enumeracion de nombres y NIT de clientes). Se eligio el patron allowlist y no `ReporterReadOnlyGuard` porque este ultimo solo bloquea no-GET, y uno de los dos endpoints es un GET.
+2. **Aceptar y registrar como bajo impacto** los hallazgos #3 a #6: `GET /proposals/client-history` (no amplia la exposicion real: REPORTER ya ve todas las propuestas por el findAll global del ADR-054), `GET /app-settings/price-thresholds`, `GET /catalogs/*` y `GET /spec-options/suggest` (datos de referencia/config de bajo valor; cerrarlos no justifica el cambio).
+3. **Diferir** el hallazgo #7 (el rol se toma del payload del JWT y no de la DB): no rompe el invariante en la direccion auditada (un token REPORTER siempre lleva REPORTER); su fix es estructural.
+4. **Corregir el Estado del ADR-054**, que habia quedado desactualizado ("sin pushear en rama") cuando el rol ya estaba en produccion.
+
+### Consecuencias
+- REPORTER queda denegado con 403 en los dos endpoints cerrados; ADMIN y COMMERCIAL siguen accediendo.
+- La superficie de lectura de REPORTER fuera del dashboard se reduce a datos de referencia de bajo impacto (#4-#6), documentados y aceptados.
+- El fix reusa un patron ya presente; no introduce un guard nuevo.
+- Verificacion funcional en local (CONVENTIONS §H): sobre `feature/reporter-role` con `e1da449` cherry-pickeado (`8bf4da1`) y el modo-consola de 2FA, login como usuario REPORTER real, dashboard con sus restricciones esperadas y sin acceso a otras pantallas.
+- Limitacion vigente del ADR-054: si a futuro se agrega un modulo no-admin con un GET sin guard de rol, REPORTER podria leerlo hasta aplicarle su guard.
+
+### Archivos
+- `apps/api/src/spec-prefill/spec-prefill.controller.ts`, `apps/api/src/clients/clients.controller.ts` — patron @Roles(ADMIN, COMMERCIAL) + RolesGuard (commit `e1da449`, master).
+- `docs/audits/reporter-invariant.md` — auditoria completa (commit `9630371`).
+- `DECISIONS.md` — correccion del Estado del ADR-054 (este commit).
+
+### Commits
+- `e1da449` — `fix(api): deny REPORTER on spec-prefill extract and clients search`
+- `9630371` — `docs: audit reporter read-only invariant`
+- Pendiente — commit de este ADR-056 (`docs: ADR-056 harden REPORTER read surface`)
+
+### Pendientes
+- **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): incluye `e1da449`, `9630371` y el commit de este ADR-056.
+- La rama de prueba `feature/reporter-role` conserva el cherry-pick `8bf4da1` (solo para verificacion local); no se mergea.
+- Hallazgos #4-#6 aceptados; #7 diferido por ser estructural.
+
+## ADR-057 — getMaintenanceBanner a lectura pura: fin de la escritura en un GET y ajuste de intervalos de polling
+**Fecha:** 2026-07-06
+**Estado:** Implementada. Backend (commit `f383288`) y frontend (commit `42d19b4`) en local, `tsc` verde en ambos proyectos. Los dos commits mas el de este ADR quedan pendientes de push a `origin/master`.
+
+### Contexto
+Durante el incidente de lentitud intermitente del 23 de junio (`ERR_HTTP2_PROTOCOL_ERROR` + 502 esporadicos en `apps/web` y `apps/api`), la evidencia apunto a un blip de la capa compartida de Railway (edge/HTTP2): el error aparecio en los dos servicios, incluido un `.png` estatico del front, con CPU ~0, RAM plana, Error Rate 0.0% y sin `P2024`. El incidente no volvio a ocurrir y se calmo solo; era transitorio y global, no atribuible a codigo del proyecto.
+
+En el mismo diagnostico se confirmo, por los logs de Prisma, un defecto real e independiente del incidente: `getMaintenanceBanner()` abria dos transacciones `upsert` (BEGIN/COMMIT sostenido 1-3s) en cada `GET /app-settings/maintenance-banner`. Un endpoint de lectura escribia en cada llamada. El front pollea ese endpoint cada 60s (`useMaintenanceBanner.ts`, montado ademas en dos componentes en paralelo) y `/presence/active` cada 30s (`useActiveUsers.ts`). Ese patron (Opcion A: endurecer el getter + bajar el ruido de polling) quedo pausado en su momento para no venderlo como cura del incidente. Cerrado el incidente por autoresolucion, se retomo como hardening.
+
+### Decisión
+1. **`getMaintenanceBanner()` pasa a lectura pura:** un unico `findMany` de las dos keys (`maintenance_banner_message`, `maintenance_banner_active`) con defaults en memoria (`message: ''`, `active: false`) cuando alguna no existe. Cero escritura en el GET.
+2. **La unica escritura se mueve al `PATCH` del admin:** `updateMaintenanceBanner()` pasa de `update` plano a `upsert`, para que la fila se cree la primera vez que un admin toca el banner. Se descarto sembrar con `onModuleInit` o `seed.ts`: agrega piezas y una escritura al arranque sin beneficio: el getter ya resuelve el default en memoria y la lectura queda garantizada sin escrituras en cualquier entorno.
+3. **Subir los intervalos de polling** (hardening, sin cambio de UX): banner de 60s a 5 min (el banner solo cambia cuando un admin programa mantenimiento); active-users de 30s a 60s (panel solo-admin, volumen bajo).
+
+### Consecuencias
+- El `GET /app-settings/maintenance-banner` deja de abrir transacciones; se elimina el par de `upsert` sostenidos por request y el ruido asociado.
+- La fila de cada key no existe en DB hasta el primer `PATCH` del admin; irrelevante para la lectura, que ya devuelve el default.
+- El antipatron upsert-en-getter sigue presente en `getInactivityTimeoutMinutes()` y en price-thresholds; no se toca (no se pollean como el banner). Deuda registrada, no corregida aqui.
+- `useMaintenanceBanner` se sigue montando en dos componentes (banner global + control de admin), con dos timers en paralelo cuando el admin esta en el dashboard; subir el intervalo mitiga, deduplicar queda como mejora futura.
+- El write de `last_seen_at` por heartbeat de presencia (era la Opcion B) no se toca: subir el intervalo de `useActiveUsers` baja lecturas del panel, no los writes del heartbeat.
+- Verificacion funcional en navegador (CONVENTIONS §H) pendiente a cargo de Luis: banner visible/oculto segun estado, edicion del banner por admin persiste, panel de usuarios activos refresca.
+
+### Archivos
+- `apps/api/src/app-settings/app-settings.service.ts` — `getMaintenanceBanner()` a `findMany` + defaults en memoria; `updateMaintenanceBanner()` de `update` a `upsert`; JSDoc actualizado (commit `f383288`).
+- `apps/web/src/hooks/useMaintenanceBanner.ts` — intervalo 60s a 5 min (commit `42d19b4`).
+- `apps/web/src/hooks/useActiveUsers.ts` — intervalo 30s a 60s (commit `42d19b4`).
+- `DECISIONS.md` — este ADR (este commit).
+
+### Commits
+- `f383288` — `fix(app-settings): make getMaintenanceBanner a pure read`
+- `42d19b4` — `perf(web): raise app-settings polling intervals`
+- Pendiente — commit de este ADR-057 (`docs: ADR-057 maintenance banner pure read`)
+
+### Pendientes
+- **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): incluye `f383288`, `42d19b4` y el commit de este ADR-057.
+- Verificacion funcional en navegador a cargo de Luis (banner, edicion admin, panel de activos).
+- Deuda registrada, no abordada: upsert-en-getter en inactivity y price-thresholds; doble timer de `useMaintenanceBanner`; write de `last_seen_at` del heartbeat.
+
+## ADR-058 — Cruce de Cuentas como herramienta suelta con ruta propia
+**Fecha:** 2026-07-07
+**Estado:** Implementado en master (commits 9e07d29 + 72e9c37), pendiente de push a origin/master y deploy de apps/web en Railway.
+
+### Contexto
+El "cruce de cuentas" (deteccion de solapamiento comercial: al teclear el nombre del cliente, lista propuestas del ultimo ano de cualquier comercial que coincidan, para no cruzar cuentas) existia unicamente embebido en la pantalla de creacion de propuesta (NewProposal.tsx): un useEffect debounced mas un panel lateral, ambos inline. Para consultarlo habia que entrar al flujo de crear una propuesta, aun cuando la intencion fuera solo verificar si un cliente ya lo trabaja alguien. Se pidio exponer esa consulta como funcion independiente accesible desde el sidebar del Dashboard, debajo de "Nueva Propuesta", para todos los roles, sin alterar el comportamiento actual dentro de NewProposal.
+
+El endpoint que alimenta la consulta ya existia: GET /proposals/client-history -> findPotentialConflicts(), lectura pura (Prisma findMany, contains case-insensitive sobre clientName o subject, ultimo ano, max 10), sin filtro por comercial (comportamiento intencional, revisado en auditoria 2026-04-05). Bajo ReporterReadOnlyGuard a nivel de clase, que deja pasar GETs. No se necesito backend nuevo, endpoint nuevo ni migracion.
+
+### Decision
+1. Extraer las piezas inline de cruce de cuentas de NewProposal.tsx a unidades reutilizables, sin cambio de comportamiento (refactor puro): hook useAccountConflicts (la busqueda debounced), componente ConflictPanel en components/proposals/, interface ConflictRecord a lib/types.ts, y las constantes CONFLICT_SEARCH_DEBOUNCE_MS / MIN_CONFLICT_SEARCH_LENGTH a lib/constants.ts. NewProposal pasa a consumir el hook y el componente, y su panel se mantiene identico (mismo lugar, mismo debounce, misma UI). Fuente unica, sin duplicar codigo.
+2. Crear la pantalla suelta pages/tools/AccountCrossCheck.tsx, que reusa el mismo hook y el mismo panel con un input de cliente propio. Cero logica de negocio nueva, cero llamada api nueva.
+3. Registrar la ruta /tools/account-cross-check en App.tsx FUERA del bloque ReporterRoute, hermana de /dashboard, dentro de AppLayout + PrivateRoute. Al ser una consulta de solo lectura y pedirse para todos los roles, REPORTER debe poder usarla; ponerla bajo ReporterRoute (como estan las rutas de /proposals/*) lo habria rebotado al dashboard. Esta es la diferencia deliberada con "Nueva Propuesta": esa es mutacion y sigue vetada a REPORTER; el cruce es lectura y va para todos.
+4. Agregar el item "Cruce de Cuentas" (icono Search) al array navItems de Sidebar.tsx, despues de "Nueva Propuesta", visible para todos los roles (no en adminItems).
+
+### Consecuencias
+- El cruce de cuentas queda con una sola implementacion consumida en dos lugares (NewProposal y la herramienta suelta); un cambio futuro en la busqueda o el panel se hace una sola vez.
+- REPORTER ahora ve y usa "Cruce de Cuentas" sin rebote; es coherente con que REPORTER ya ve todas las propuestas (ADR-054) y el endpoint es un GET permitido por su guard. No expone dato nuevo.
+- Queda un patron nuevo en el proyecto: herramientas sueltas de solo-lectura bajo /tools/, fuera de ReporterRoute, reutilizando piezas extraidas de un flujo mayor.
+- El match del endpoint tambien pega contra subject, por lo que puede traer propuestas de otros clientes cuyo asunto contenga el texto; comportamiento preexistente heredado, no modificado aqui.
+
+### Archivos
+- `apps/web/src/hooks/useAccountConflicts.ts` — hook nuevo con la busqueda debounced (commit `9e07d29`).
+- `apps/web/src/components/proposals/ConflictPanel.tsx` — panel extraido, reutilizable (commit `9e07d29`).
+- `apps/web/src/lib/types.ts` — interface ConflictRecord (commit `9e07d29`).
+- `apps/web/src/lib/constants.ts` — CONFLICT_SEARCH_DEBOUNCE_MS, MIN_CONFLICT_SEARCH_LENGTH (commit `9e07d29`).
+- `apps/web/src/pages/proposals/NewProposal.tsx` — consume hook + panel, sin cambio de comportamiento (commit `9e07d29`).
+- `apps/web/src/pages/tools/AccountCrossCheck.tsx` — pantalla suelta nueva (commit `72e9c37`).
+- `apps/web/src/App.tsx` — ruta /tools/account-cross-check fuera de ReporterRoute (commit `72e9c37`).
+- `apps/web/src/layouts/Sidebar.tsx` — item Cruce de Cuentas en navItems (commit `72e9c37`).
+
+### Commits
+- `9e07d29` — `refactor(web): extract cruce de cuentas to reusable hook and component`
+- `72e9c37` — `feat(web): add Cruce de Cuentas standalone tool with own route`
+- Pendiente — commit de este ADR-058 (`docs: ADR-058 cruce de cuentas standalone tool`)
+
+### Pendientes
+- **Push de `master` a `origin/master`** (lo hace Luis cuando no haya comerciales en produccion): dispara deploy de apps/web en Railway. Cambio 100% frontend; api no se toca.
+- Verificacion en navegador con un usuario REPORTER real confirmada por Luis (item entra sin rebote, panel funciona).
+
+## ADR-059 — Ciudad de emisión obligatoria en el constructor del documento
+
+**Fecha:** 2026-07-09
+**Estado:** Aceptado
+
+### Contexto
+
+El campo "Ciudad de emisión" del constructor del documento (`ProposalDocBuilder`) tenía un valor por defecto hardcodeado `'Bogotá D.C.'` en tres sitios: los estados locales `selectedCity` y `savedCity`, y como fallback al cargar la propuesta (`data.issueCity || 'Bogotá D.C.'`). No existía validación de obligatoriedad en ninguna capa: ni marca visual en el campo, ni bloqueo de la generación del PDF, ni restricción en el DTO (`@IsOptional()`) o el schema (`issueCity String?`).
+
+Esto producía dos problemas. Primero, la persistencia de la ciudad es manual (botón "✓ Guardar", que solo aparece si el valor cambió); una propuesta donde el usuario dejaba el default sin tocar quedaba con `issue_city` NULL en la base, mostrando "Bogotá D.C." solo por el default en memoria. Segundo, la ciudad alimenta el marcador `µCiudad` del documento vía `replaceMarkers`, que no sustituye valores vacíos: una ciudad en `""` dejaría el literal `µCiudad` sin reemplazar en el PDF final.
+
+### Decisión
+
+Hacer la ciudad de emisión obligatoria y vacía por defecto en documentos nuevos, forzando una elección explícita del usuario:
+
+1. **Backfill de datos.** Migración de datos (no de schema) que rellena `issue_city = 'Bogotá D.C.'` en todas las propuestas con el campo NULL, preservando el valor que ya venían mostrando. Idempotente (`WHERE "issue_city" IS NULL`).
+2. **Vacío por defecto.** Eliminados los tres defaults hardcodeados en `ProposalDocBuilder`; el campo arranca en `''` para documentos nuevos. Tras el backfill, toda propuesta existente ya trae su ciudad, así que el cambio solo afecta a documentos nuevos.
+3. **Marca visual de obligatorio.** `CityCombobox` recibe una prop `required`; muestra un asterisco rojo en el label y un borde inferior rojo cuando el campo está vacío. Se activa solo en propuestas editables (`required={!isReadOnly}`).
+4. **Bloqueo del PDF.** El botón "Vista Previa PDF" se deshabilita mientras la ciudad esté vacía, con tooltip explicativo. Esto impide llegar a la generación del documento sin ciudad, evitando el marcador `µCiudad` sin reemplazar.
+
+El DTO del backend se deja como `@IsOptional()`: `PATCH /proposals/:id` es un update parcial y forzar la presencia del campo rompería otros updates de la propuesta. La obligatoriedad se garantiza en el frontend (default vacío + bloqueo del PDF), no en el contrato del PATCH.
+
+### Consecuencias
+
+- Los documentos nuevos exigen una elección explícita de ciudad antes de generar el PDF; se elimina la clase de bug del marcador `µCiudad` sin reemplazar por ciudad vacía.
+- Las propuestas existentes (incluidas las cerradas/solo-lectura, que no se pueden editar) conservan su ciudad gracias al backfill; ninguna queda con el PDF roto.
+- La migración modifica datos de producción. Es idempotente y fue precedida de `pg_dump`.
+- La obligatoriedad vive solo en el frontend. Un cliente de la API que haga PATCH directo aún puede dejar `issueCity` nulo; se aceptó por no romper la naturaleza parcial del endpoint.
+
+### Archivos
+
+- `apps/api/prisma/migrations/20260709005733_backfill_issue_city_default/migration.sql` — backfill de datos.
+- `apps/web/src/pages/proposals/components/CityCombobox.tsx` — prop `required`, asterisco, borde de aviso.
+- `apps/web/src/pages/proposals/ProposalDocBuilder.tsx` — eliminación de los defaults, paso de `required`, bloqueo del botón PDF.
+
+### Commits
+
+- `eec6fdd` — chore(db): backfill issueCity for existing proposals
+- `6ef618e` — feat(proposals): make issue city required, empty by default
+
+### Pendientes
+
+Ninguno.
+
+## ADR-060 — Persistencia de la TRM del día al crear el escenario: fin de la TRM flotante en memoria
+
+**Fecha:** 2026-07-09
+**Estado:** Aceptado
+
+### Contexto
+
+La TRM de conversión de un escenario (`Scenario.conversionTrm`, `Float?` nullable) nacía en NULL: `createScenario` en el backend acepta el campo (`CreateScenarioDto` con `@IsOptional() @IsNumber()`) y lo persiste (`data.conversionTrm ?? undefined`), pero el frontend nunca lo enviaba — el POST de `createScenario` en `useScenarios.ts` mandaba solo `{ name, description }`. La TRM del día, obtenida por fetch a `co.dolarapi.com`, vivía únicamente como estado local de React (`trm.valor`) y solo se persistía si el usuario editaba el campo a mano o pulsaba "Hoy" en el `ScenarioHeader` (`updateConversionTrm` → PATCH).
+
+Esto producía un escenario con `conversionTrm` NULL en la base pese a mostrar un precio "correcto" en pantalla. La ventana de Cálculos (`useScenarios`) lo enmascaraba con un fallback en memoria: `effectiveConversionTrm = conversionTrm ?? trm?.valor`, que cae a la TRM del día en vivo cuando el campo persistido es NULL. La ventana de Construcción (`useProposalScenarios`) NO tiene ese fallback: pasa `scenario.conversionTrm` crudo al pricing-engine. Con TRM NULL, la guarda de `convertCost` (`if (itemCurrency === scenarioCurrency || !trm || trm <= 0) return unitCost`) devuelve el costo en COP sin dividir; en un escenario USD, un costo de ~6.111.111 COP se rotulaba como USD 6.111.111 y disparaba una falsa alarma de precio techo ("Revisa antes de continuar"). La aritmética confirma la causa: 6.111.111 / 1.829,87 ≈ 3.340, la TRM del día sin aplicar. La validación piso/techo es correcta y no viola CONVENTIONS §J; el defecto era la TRM NULL que recibía aguas arriba.
+
+El diseño original (ADR-003) preveía el campo TRM "pre-poblado con la TRM del día", pero esa pre-población se implementó solo como el fallback en memoria de Cálculos —display-only, nunca persistido—, no como un valor real en la base.
+
+### Decisión
+
+Persistir la TRM del día en el escenario desde su creación, en lugar de dejarla flotar en memoria. Cambio mínimo en el frontend: `createScenario` en `apps/web/src/hooks/useScenarios.ts` agrega `conversionTrm: trm?.valor` al payload del POST. El optional chaining produce `undefined` cuando `trm` es NULL, de modo que el backend crea sin TRM igual que antes (sin persistir 0 ni NULL explícito); no hay regresión en el camino sin TRM disponible.
+
+No se tocó el backend: el DTO ya aceptaba el campo y `createScenario` ya lo persistía. No se tocó el fallback de Cálculos (`effectiveConversionTrm`): sigue cubriendo escenarios que aún no tienen TRM persistida. `cloneScenario` ya copia `conversionTrm` del origen, así que una vez que las fuentes dejen de nacer en NULL, los clones heredan un valor real sin cambios adicionales.
+
+El campo `Scenario.conversionTrm` se mantiene nullable (sin migración de schema): escenarios creados antes de este cambio siguen en NULL y el fallback de Cálculos los cubre mientras tanto.
+
+### Consecuencias
+
+- Todo escenario nuevo nace con la TRM del día persistida; la falsa alarma de precio techo por TRM NULL no vuelve a aparecer en escenarios creados a partir de este cambio.
+- Cálculos, Construcción y el PDF ven el mismo número para escenarios nuevos: la TRM deja de recalcularse sola al pasar de día, y el precio USD de una propuesta nueva queda determinista una vez creado el escenario.
+- Escenarios preexistentes con `conversionTrm` NULL no se corrigen con este cambio (es hacia adelante). Siguen mostrándose bien en Cálculos por el fallback, pero disparan la falsa alarma en Construcción hasta que el usuario fije la TRM a mano (editar el campo o botón "Hoy") o se ejecute el backfill pendiente.
+- El cambio es de una sola línea en el frontend; el backend quedó intacto.
+
+### Archivos
+
+- `apps/web/src/hooks/useScenarios.ts` — `createScenario` agrega `conversionTrm: trm?.valor` al payload del POST.
+
+### Commits
+
+- `22bf7ed` — fix(scenarios): persist daily TRM on scenario creation
+
+### Pendientes
+
+- Backfill de escenarios existentes con `conversionTrm` NULL (estampar la TRM del día para congelarlos en el valor que Cálculos ya muestra). Requiere conteo previo contra producción para dimensionar alcance por estado de propuesta. El caso reportado, COT-LM01525-2 / Escenario 2 (GANADA, USD), es uno de ellos.
+- `changeCurrency` (toggle de moneda en `ScenarioHeader`) no estampa TRM al cambiar la moneda; un escenario que cambia a USD sin TRM persistida reproduce la condición NULL. Fuera de alcance de este fix.
+- Guarda de `convertCost` en `pricing-engine.ts`: la condición `!trm || trm <= 0` mezcla "misma moneda, no convertir" (correcto) con "hay que convertir pero falta TRM" (devuelve sin convertir, silencioso). El segundo caso debería fallar ruidoso en vez de producir un número plausible pero falso. Cambio de mayor alcance en el pricing-engine, evaluar por separado.
+
+## ADR-061 — Reordenamiento de escenarios en el constructor de cálculos
+
+**Fecha:** 2026-07-09
+**Estado:** Aceptado
+
+### Contexto
+
+El sidebar de escenarios (ScenarioSidebar) permitía crear, clonar y borrar escenarios, pero no cambiar su orden. El modelo Scenario ya tenía el campo `sortOrder Int @default(0)` y `getScenariosByProposalId` ya ordenaba por él (`orderBy: { sortOrder: 'asc' }`), pero no existía forma de persistir un cambio de orden: el DTO y el servicio de update genérico (`updateScenario`) no incluían `sortOrder` en su whitelist, y no había endpoint ni método de hook para reordenar. El reordenamiento de ítems dentro de un escenario (`reorderScenarioItems`, `reorderItems`) ya existía end-to-end y sirvió de plantilla.
+
+### Decisión
+
+Reordenamiento end-to-end espejando el patrón ya probado del reorder de ítems, sin tocar el update genérico de escenarios.
+
+Backend: nuevo endpoint dedicado `PATCH /proposals/:id/scenarios/reorder` (body `{ scenarioIds: string[] }`), con `ReorderScenariosDto` y método `reorderScenarios` en scenarios.service.ts. El método verifica ownership de la propuesta reusando `verifyProposalOwnership` (el mismo mecanismo que `getScenariosByProposalId`), valida que el payload sea una permutación exacta de los escenarios de la propuesta (misma longitud y mismo conjunto, rechazando duplicados) y lanza BadRequestException si no lo es, y asigna `sortOrder` por índice en una `$transaction` atómica. Devuelve los escenarios de la propuesta con sus ítems ordenados, mismo shape que `GET /proposals/:id/scenarios`. La escritura queda automáticamente negada a REPORTER por el `ReporterReadOnlyGuard` de clase, sin decorador extra.
+
+Frontend: método `reorderScenarios(orderedScenarioIds)` en useScenarios.ts, con actualización optimista que reordena el array `scenarios` en estado (lo que dispara la animación `layout` del sidebar) y persistencia fire-and-forget con debounce (`SCENARIO_REORDER_DEBOUNCE_MS`, reusada) sobre un ref/timer dedicado, paralelo al de ítems, con flush-on-unmount. En ScenarioSidebar, botones Subir/Bajar (ChevronUp/ChevronDown) por fila, deshabilitados en los extremos, con un helper `moveScenario` que intercambia el id adyacente y llama al hook.
+
+### Consecuencias
+
+1. El orden de los escenarios es persistente y editable desde la UI; el reorden se refleja al recargar.
+2. Se decidió NO agregar `sortOrder` al `updateScenario`/`UpdateScenarioDto` genérico: el reordenamiento va por su propio endpoint, manteniendo el update genérico acotado a los campos editables por el usuario (name, currency, description, conversionTrm).
+3. El endpoint dedicado es atómico (una `$transaction`) y de paso normaliza la secuencia de `sortOrder`, que create/clone/delete dejan con huecos. No se reindexó create/clone/delete: quedan fuera de alcance.
+4. La interfaz local `Scenario` del hook no recibió `sortOrder`: el orden lo determina la posición en el array, no un campo tipado en el frontend.
+
+### Archivos
+
+- `apps/api/src/proposals/dto/proposals.dto.ts` — nuevo `ReorderScenariosDto`
+- `apps/api/src/proposals/scenarios.service.ts` — nuevo método `reorderScenarios`
+- `apps/api/src/proposals/proposals.controller.ts` — nueva ruta `PATCH :id/scenarios/reorder`
+- `apps/web/src/hooks/useScenarios.ts` — método `reorderScenarios`, refs dedicados y flush-on-unmount
+- `apps/web/src/pages/proposals/components/ScenarioSidebar.tsx` — botones Subir/Bajar y helper `moveScenario`
+- `apps/web/src/pages/proposals/ProposalCalculations.tsx` — enhebrado del prop `reorderScenarios`
+
+### Commits
+
+- `cccc649` — feat(scenarios): add reorder endpoint
+- `bb6448d` — feat(scenarios): add reorder UI
+
+### Pendientes
+
+- Verificación en navegador (Luis): reordenar, persistencia tras F5, botones deshabilitados en extremos, escenario activo preservado.
+- El endpoint asigna `sortOrder` base 1 (`i + 1`), homogéneo con `reorderScenarioItems` y `createScenario`. Sin acción pendiente; se deja registrado por si se audita la consistencia de `sortOrder`.
+- Revisar la regla de encoding "escapes Unicode en strings JS/TS" (INSTRUCTIVO §7, instrucciones del proyecto §5) frente a la realidad del código: scenarios.service.ts y el resto usan acentos UTF-8 reales en literales y compilan/despliegan bien. Definir en una pasada dedicada si se actualiza la regla o se convierten los stragglers; no tocar ahora.
+
+## ADR-062 — Catálogo global de proveedores con contactos y toggles de obligatoriedad de campos
+
+**Fecha:** 2026-07-10
+**Estado:** Aceptado
+
+### Contexto
+
+El constructor de propuestas registraba el "origen" de cada ítem (MAYORISTA / FABRICANTE / NOVOTECHNO / OTROS) como texto suelto dentro del JSON `internalCosts` del ítem, que además dispara el flete (solo MAYORISTA suma 1.5%). Ese origen no identifica al tercero concreto ni a su contacto comercial. El objetivo del negocio es trazabilidad: si el comercial que llevaba la relación se va, el que llega debe encontrar con quién se cotizó. Se requería una base de proveedores compartida entre los ~6 usuarios, deduplicada, que se fuera enriqueciendo con el uso. Se disponía de un CSV inicial de ~2000 terceros (nombre + NIT), sin contactos.
+
+### Decisión
+
+Se agrega un catálogo global de proveedores como entidad propia, separado del origen del ítem (que se conserva intacto en `internalCosts`, junto con su acople al flete). Dos tablas nuevas: `SupplierCompany` (nombre normalizado, `nit` opcional y único donde exista, `source` CSV/MANUAL para separar los dos pozos, auditoría de creación) y `SupplierContact` (1—N por empresa: nombre obligatorio, teléfono y correo opcionales). El ítem (`ProposalItem`) referencia empresa y contacto vía dos FK nullable (`supplierCompanyId`, `supplierContactId`), con `ON DELETE SET NULL` para que borrar un proveedor nunca borre ítems; los contactos caen en cascada con su empresa.
+
+El módulo `suppliers` expone el catálogo como global compartido: GET de lista alfabética con contactos anidados y POST de creación (empresa y contacto), todo para cualquier usuario autenticado. Es una excepción consciente al patrón de ownership/IDOR del resto de la app: un catálogo compartido no tiene dueño por fila. La creación de empresas es solo para el pozo MANUAL (origen OTROS): sin NIT (se captura fuera de esta app), con el nombre normalizado server-side (trim, colapsar espacios, quitar puntos, MAYÚSCULAS, acentos conservados) y dedup por nombre normalizado idéntico que responde 409. Las empresas del CSV entran por seed aparte y quedan duras por el `@unique` del NIT.
+
+Adicionalmente, se agregan tres toggles en `app_settings` (`supplier_contact_name_required`, `supplier_contact_phone_required`, `supplier_contact_email_required`), con default `true`, para que un admin pueda relajar la obligatoriedad de los campos de contacto si generan fricción a los comerciales. Se calca el patrón de settings existente (GET para cualquier autenticado con upsert idempotente; PATCH solo admin), con el PATCH en `upsert` (no `update`) para no depender de que el GET haya sembrado la key antes.
+
+Este ADR cubre solo el backend (schema + módulo + toggles). El consumo en el constructor y la UI de administración de los toggles son trabajo de frontend posterior.
+
+### Consecuencias
+
+1. El origen del ítem y su acople al flete quedan intactos: el catálogo es aditivo y no toca el pricing-engine ni el JSON `internalCosts`.
+2. La migración es estrictamente aditiva (enum nuevo, dos columnas nullable en `proposal_items`, dos tablas, índices, cinco FK). Las columnas nuevas nacen 100% NULL; sin backfill ni pérdida de datos.
+3. El dedup de empresas MANUAL se apoya en `findFirst` por nombre normalizado (no hay `@@unique([name])` en el schema). Es una limitación conocida: existe una ventana de carrera teórica entre dos POST idénticos concurrentes, despreciable con ~6 usuarios y resultado fusionable, no corrupción. Upgrade path si aparece presión de duplicados: agregar `@@unique([name])` y atrapar P2002→409. No se hizo hoy para no arriesgar el seed (dos nombres normalizados idénticos con NIT distinto) ni encadenar otra migración.
+4. Las empresas del CSV con NIT distinto pero mismo nombre normalizado conviven sin problema (el dedup MANUAL es por nombre; el del CSV es por NIT). El NIT se persiste como dígitos crudos (sin puntos ni guion) para que el `@unique` sea robusto.
+5. El FK `supplier_contact_id` no tiene índice (solo `supplier_company_id`); por diseño, dado que hoy las columnas están vacías. Si los lookups o borrados por contacto se vuelven ruta caliente, evaluar `@@index([supplierContactId])`.
+6. Al desplegar a producción, el `CREATE INDEX` y los `ADD FOREIGN KEY` sobre `proposal_items` toman locks de escritura breves (Prisma no usa CONCURRENTLY); sub-segundo con el volumen actual, pero conviene el push en baja carga.
+
+### Archivos
+
+- `apps/api/prisma/schema.prisma` — enum `SupplierSource`, modelos `SupplierCompany` y `SupplierContact`, dos FK nullable + índice en `ProposalItem`, relaciones inversas en `User`
+- `apps/api/prisma/migrations/20260710230645_add_supplier_catalog/migration.sql` — migración aditiva del catálogo
+- `apps/api/src/suppliers/suppliers.service.ts` — normalización de nombre, `findAll`, `createCompany` (dedup 409), `createContact`
+- `apps/api/src/suppliers/suppliers.controller.ts` — GET lista / POST empresa / POST contacto, JWT a nivel clase, sin ownership
+- `apps/api/src/suppliers/suppliers.module.ts` — módulo del catálogo
+- `apps/api/src/suppliers/dto/create-supplier-company.dto.ts` — DTO de empresa (solo nombre)
+- `apps/api/src/suppliers/dto/create-supplier-contact.dto.ts` — DTO de contacto (nombre obligatorio, teléfono/correo opcionales)
+- `apps/api/src/app.module.ts` — registro de `SuppliersModule`
+- `apps/api/src/app-settings/app-settings.service.ts` — tres keys, interfaz `SupplierFieldRequirements`, getter idempotente y setter en upsert
+- `apps/api/src/app-settings/app-settings.controller.ts` — GET (SkipThrottle) / PATCH (AdminGuard) de los toggles
+- `apps/api/src/app-settings/dto/update-supplier-field-requirements.dto.ts` — DTO de los toggles (tres booleanos opcionales)
+
+### Commits
+
+- `626732b` — feat(suppliers): add supplier company and contact catalog schema
+- `11db726` — feat(suppliers): add suppliers module with global catalog endpoints
+- `1a16f7f` — feat(app-settings): add supplier contact field requirement toggles
+
+### Pendientes
+
+- Limpieza y seed del CSV de ~2000 terceros a `SupplierCompany` (source CSV, NIT como dígitos crudos), como pasada aparte antes de exponer el catálogo. Decisiones abiertas del CSV: casos sin NIT colombiano válido (extranjeras/placeholder) y una entrada hondureña (BANCO FICOHSA) cuyo NIT recortado quedó en rango por coincidencia.
+- Frontend del constructor (fase posterior): picker de empresa con creación gated a OTROS, difuso "¿quisiste decir X?" en cliente, captura de contactos, lectura de los toggles para pintar obligatoriedad. Campo OC (texto, obligatorio en NOVOTECHNO) como concern aparte.
+- UI de administración de los tres toggles en /admin/settings.
+- Verificación en navegador (Luis) una vez exista el frontend.
+
+## ADR-063 — Clonado de propuestas con fidelidad total y dos flujos diferenciados
+
+**Fecha:** 2026-07-13
+**Estado:** Aceptado
+
+### Contexto
+
+El clonado de propuestas (`POST /proposals/:id/clone`, botones "Clonar versión" y "Clonar como nueva propuesta" en la fila del Dashboard) tenía dos problemas. Primero, `cloneProposal` copiaba de forma incompleta: perdía overrides de `ScenarioItem` (`sortOrder`, `unitCostOverride`, `unitPriceOverride` y, crítico, `isDiluted`), el `conversionTrm` del escenario, `issueCity` y los vínculos de proveedor del ítem, y no copiaba en absoluto las `ProposalPage` ni sus `ProposalPageBlock`. Un clon nacía con números distintos al original (la dilución redistribuye costos según `isDiluted` por ítem) y sin ninguna página del documento; la única forma de repoblar era `/pages/initialize`, que trae plantillas default del admin, no lo que el usuario había editado.
+
+Segundo, los dos botones eran la misma llamada cambiando solo `cloneType`: ninguno capturaba datos ni pasaba por el formulario. El requisito era que "Clonar versión" capturara estado, adquisición y fecha de cierre obligatorios antes de clonar, y que "Clonar como nueva propuesta" pasara por el formulario "Nueva propuesta" para permitir editar el cliente (y el resto de campos de cabecera) antes de generar la propuesta independiente.
+
+### Decisión
+
+1. **Fidelidad total en `cloneProposal`.** El método copia ahora todos los campos de `Scenario` y `ScenarioItem` (raíz e hijos), incluido `isDiluted`, más `issueCity` y los vínculos de proveedor del ítem. Se agrega copia profunda de páginas y bloques: el orden de creación pasa a Proposal → Páginas+Bloques (poblando un `pageIdMap`) → ProposalItems (remapeando `pageId` con ese mapa) → Escenarios+ScenarioItems, para respetar la FK `ProposalItem.pageId` sin apuntar nunca al original. `billingDate` y `manualAmount` se dejan deliberadamente en null: son del ciclo de facturación, no de las tres ventanas, y una propuesta clonada no debe heredarlos. La fidelidad aplica a los dos flujos por igual, al compartir endpoint.
+
+2. **`POST /proposals/:id/clone` acepta overrides opcionales.** `CloneProposalDto` gana `status`, `acquisitionType`, `closeDate` (para el modal de versión) y `clientId`, `clientName`, `subject`, `issueDate`, `validityDays`, `validityDate` (para el modo clon del formulario). El `status` valida con `@IsEnum(ProposalStatus)` (los seis estados, no solo `ELABORACION`/`PROPUESTA`). Los seis campos de cabecera se aplican solo cuando `cloneType === 'NEW_PROPOSAL'`; en `NEW_VERSION` se conserva la copia desde el original. La obligatoriedad de los campos la fuerza la UI, no el DTO.
+
+3. **"Clonar versión" → modal.** Nuevo `useCloneVersion` + `CloneVersionModal` (patrón `useProjections`/`ProjectionModal`): captura estado (los seis vía `ALL_STATUSES`), adquisición (VENTA/DaaS) y fecha de cierre, los tres obligatorios, y clona con `cloneType: 'NEW_VERSION'` + esos overrides.
+
+4. **"Clonar como nueva propuesta" → modo clon del formulario.** `NewProposal` detecta `?cloneFrom={id}`, precarga el formulario vía `GET /proposals/:id`, permite editar todos los campos de cabecera, oculta el toggle de consecutivo (fuerza AUTO) y el campo de monto, y al "Guardar y continuar" clona con `cloneType: 'NEW_PROPOSAL'` + overrides en vez de crear vacío. El botón del Dashboard reroutea a `/proposals/new?cloneFrom={id}`.
+
+5. **Wiring por bifurcación (Opción A).** `ProposalVersionRow` conserva un único `onClone(id, cloneType)`; `handleCloneGated` bifurca por `cloneType` (versión → modal, nueva → reroute), respetando el gate de higiene de datos previo. No se altera la firma del componente de fila.
+
+### Consecuencias
+
+1. Un clon reproduce fielmente las tres ventanas (Constructor de Propuesta, Ventana de Cálculos, Construcción del Documento), incluidos los números, que antes divergían por la pérdida de `isDiluted`.
+2. El candado anti-doble-clic `cloning` de la fila quedó sin propósito: ningún botón dispara ya una petición desde la fila ("Clonar versión" abre un modal con su propio `cloningVersion`; "Clonar como nueva propuesta" hace `navigate`). Se eliminó de las tres capas (`useDashboard`, `Dashboard`, `ProposalVersionRow`).
+3. `handleClone` de `useDashboard` quedó sin consumidores tras el reroute y se eliminó.
+4. `ClientAutocomplete` no sincroniza `defaultValue` tras el montaje; la precarga asíncrona del modo clon requiere forzar un remount con `key` cuando termina la carga para que el cliente se vea seleccionado.
+
+### Archivos
+
+- `apps/api/src/proposals/proposals.service.ts` — fidelidad total + parámetro `overrides` en `cloneProposal`.
+- `apps/api/src/proposals/dto/proposals.dto.ts` — `CloneProposalDto` con los nueve overrides opcionales.
+- `apps/api/src/proposals/proposals.controller.ts` — paso de overrides al service.
+- `apps/web/src/hooks/useCloneVersion.ts` — hook del modal de versión (nuevo).
+- `apps/web/src/pages/dashboard/CloneVersionModal.tsx` — modal de versión (nuevo).
+- `apps/web/src/pages/proposals/NewProposal.tsx` — modo clon (precarga, submit bifurcado, ocultamiento de consecutivo/monto).
+- `apps/web/src/pages/Dashboard.tsx` — wiring del modal, reroute, limpieza de `cloning`/`handleClone`.
+- `apps/web/src/hooks/useDashboard.ts` — eliminación de `handleClone`/`cloning`.
+- `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` — eliminación del prop `cloning`.
+
+### Commits
+
+- `026ffce` — fix(proposals): clone copies scenario overrides, dilution, pages and blocks
+- `1e90a83` — feat(proposals): clone accepts status, acquisitionType and closeDate overrides
+- `4fe7d10` — fix(proposals): clone status accepts any ProposalStatus
+- `c03ac2d` — feat(dashboard): clone version modal captures close date, acquisition and status
+- `bf7ac39` — feat(proposals): clone as new proposal accepts client and form field overrides
+- `9368104` — feat(proposals): new proposal form clone mode prefills from base and clones on submit
+
+### Pendientes
+
+- `scenarios.service.ts` (botón "Clonar escenario", endpoint aparte) no copia `sortOrder` en hijos ni `unitCostOverride` en ningún nivel — deuda preexistente registrada, fuera del alcance de este ADR.
+- `currentVersion` en `Proposal` no se escribe en ningún flujo del backend; sin impacto hoy, pendiente de decidir si se usa o se elimina.
+
+## ADR-064 — Frontend del catálogo de proveedores: sección en el constructor, dedup difuso y obligatoriedad solo en ítems nuevos
+
+**Fecha:** 2026-07-14
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-062 dejó el backend del catálogo completo y el seed de 2040 empresas en producción, con el frontend y el campo OC explícitamente fuera de alcance. Al bajar a implementarlo apareció un gap real: la migración creó las columnas `supplier_company_id` / `supplier_contact_id` en `proposal_items`, pero el write path del ítem no las conocía. Tanto `CreateProposalItemDto` como `UpdateProposalItemDto` son clases escritas a mano, y `addProposalItem` / `updateProposalItem` arman el `data` de Prisma campo por campo, sin spread: un campo que no esté listado no se escribe nunca. Peor, con `forbidNonWhitelisted: true` un payload con esos campos habría devuelto 400. Sin ese addendum, el frontend no persistía nada.
+
+También quedó a la vista que los dos FK garantizan que empresa y contacto existan, pero no que estén relacionados entre sí: un ítem podía apuntar a la empresa A con un contacto de la empresa B, y Postgres lo aceptaba. Eso corrompe justo la trazabilidad que motiva el feature.
+
+### Decisión
+
+Se completa el write path y se construye la UI, sin tocar el origen (`internalCosts.proveedor`) ni su acople al flete.
+
+Backend: los dos FK se agregan a ambos DTOs con `@IsOptional() @IsUUID()`, y explícitamente a los dos objetos `data` del service. Un helper privado `assertSupplierContactBelongsToCompany` valida la pertenencia contacto→empresa y responde 400 si no calza; en el update se valida sobre los valores efectivos (lo que viene en el DTO, o lo que el ítem ya tenía si el campo está ausente). En el create los FK van con `?? null`; en el update van directos, sin `?? undefined`, para preservar la semántica de ADR-022: campo ausente = no tocar, `null` = desasignar, uuid = asignar.
+
+Frontend: `useSuppliers` trae el catálogo completo una sola vez al montar el builder y lo filtra en memoria (~2000 empresas; sin fetch por tecla, sin debounce); solo el fetch inicial es best-effort silencioso, mientras que `createCompany` y `createContact` propagan el error para que el 409 de nombre duplicado llegue al usuario. `SupplierPicker` calca `CityCombobox` pero opera sobre IDs, corta el render a 50 resultados y bloquea el Enter (con 2000 empresas, autoseleccionar por accidente es peligroso). `NewSupplierModal` muestra los similares como botones seleccionables, no como un aviso ignorable, y expone el nombre normalizado antes de crear. `SupplierSection` orquesta todo con un único callback `onChange({ supplierCompanyId, supplierContactId })`: cambiar de empresa siempre resetea el contacto en el mismo acto, lo que hace imposible el estado que el guard del backend rechaza. Las cuatro opciones de origen se centralizan en `PROVEEDOR_OPTIONS`, reemplazando los `<option>` hardcodeados inline.
+
+La obligatoriedad se aplica **solo a ítems nuevos** (`enforceRequired = !editingItemId`). Un comercial que edita una propuesta ajena de hace meses no sabe quién fue el proveedor; exigírselo produciría datos inventados, que en una base cuya finalidad es trazabilidad es peor que un dato ausente. Los tres toggles se administran desde una card nueva en `/admin/settings`, con guardado inmediato al togglear (PATCH parcial), sin botón Guardar.
+
+### Consecuencias
+
+1. El picker muestra el catálogo completo en cualquier origen; lo que restringe la creación es `allowCreate` (solo OTROS), no un filtro por `source`. Filtrar dejaría las empresas creadas manualmente inutilizables desde MAYORISTA/FABRICANTE: ni seleccionables ni creables, un callejón sin salida. `source` sigue distinguiendo lo sembrado de lo agregado por los usuarios.
+2. Regla A asumida: los ítems históricos sin proveedor nunca serán forzados a tenerlo. La base se enriquece solo con ítems nuevos.
+3. Teléfono y correo son derivados del contacto seleccionado y se muestran de solo lectura (referencia viva). No existe PATCH de contactos: corregir el teléfono de un contacto ya guardado no es posible todavía.
+4. Semántica de los toggles: `nameRequired` exige seleccionar un contacto para el ítem; `phoneRequired` / `emailRequired` exigen esos campos al **crear** un contacto nuevo, no al seleccionar uno existente. Si aplicaran al seleccionar, un contacto viejo sin teléfono bloquearía la edición del ítem — el mismo problema retroactivo que resuelve la regla A.
+5. El form de ítems no tiene superficie para los errores del backend: el `catch` de `saveItem` muestra un `alert()` genérico. El 400 de pertenencia es un guard de servidor puro y no debería verse desde la UI, que resetea el contacto al cambiar de empresa.
+6. `duplicateItem` arrastra los dos FK del ítem original. Es lo deseado (se duplica un ítem del mismo proveedor) y quedan consistentes entre sí porque viajan juntos.
+7. El difuso corre en el cliente con Levenshtein sobre nombres normalizados y sin sufijo societario, saltando comparaciones cuando la diferencia de longitud supera el 40% (una diferencia mayor no puede alcanzar el umbral de 0.82). No requiere extensión de Postgres.
+8. `initialItemForm` inicializa los dos FK en `null` explícito: con `undefined` el PATCH los interpretaría como "no tocar" y desasignar sería imposible.
+
+### Archivos
+
+- `apps/api/src/proposals/dto/proposals.dto.ts` — los dos FK en `CreateProposalItemDto` y `UpdateProposalItemDto`
+- `apps/api/src/proposals/proposals.service.ts` — helper `assertSupplierContactBelongsToCompany` y wiring de los FK en create y update
+- `apps/web/src/lib/types.ts` — `SupplierCompany`, `SupplierContact`, `SupplierFieldRequirements`, y los dos FK al top level de `ProposalItem`
+- `apps/web/src/lib/constants.ts` — `ProveedorOrigen`, `PROVEEDOR_OPTIONS` y las constantes de origen
+- `apps/web/src/lib/supplierMatch.ts` — normalización espejo del backend, Levenshtein y `findSimilarCompanies`
+- `apps/web/src/hooks/useSuppliers.ts` — catálogo global (fetch único, crear empresa, crear contacto)
+- `apps/web/src/hooks/useSupplierFieldRequirements.ts` — lectura y actualización de los toggles
+- `apps/web/src/pages/proposals/components/SupplierPicker.tsx` — combobox de empresa sobre IDs
+- `apps/web/src/pages/proposals/components/NewSupplierModal.tsx` — alta de empresa con similares seleccionables
+- `apps/web/src/pages/proposals/components/SupplierSection.tsx` — bloque del constructor, condicional por origen
+- `apps/web/src/pages/proposals/components/NewContactFields.tsx` — alta de contacto inline
+- `apps/web/src/pages/proposals/components/supplierFieldStyles.tsx` — estilos y `RequiredMark` compartidos
+- `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx` — wiring, validación de la regla A y `PROVEEDOR_OPTIONS`
+- `apps/web/src/hooks/useProposalBuilder.ts` — FK en `initialItemForm` y en el payload
+- `apps/web/src/pages/admin/components/SupplierFieldsSettings.tsx` — card de los tres toggles
+- `apps/web/src/pages/admin/SettingsAdmin.tsx` — composición de la card nueva
+
+### Commits
+
+- `56d9c55` — feat(proposals): wire supplier FKs into item write path with contact ownership check
+- `7a6cd2b` — feat(suppliers): add frontend types, origin constants and catalog hooks
+- `0087ab8` — feat(suppliers): add supplier picker combobox and fuzzy name matching
+- `782cfe3` — feat(suppliers): add new supplier modal with duplicate detection
+- `8644df8` — feat(suppliers): add supplier section with company picker and contact capture
+- `015baf2` — feat(suppliers): wire supplier section into item builder
+- `6d0fc42` — fix(suppliers): clear item error when origin changes
+- `0d3893b` — feat(suppliers): add supplier field requirement toggles to admin settings
+
+### Pendientes
+
+- No existe PATCH de contactos: editar nombre, teléfono o correo de un contacto ya guardado requiere endpoint nuevo. Evaluar cuando aparezca la necesidad real.
+- El dedup de empresas MANUAL sigue apoyado en `findFirst` por nombre normalizado, sin `@@unique([name])` (limitación ya registrada en ADR-062). El difuso del cliente lo mitiga, no lo cierra.
+- Push a producción pendiente al cierre de esta sesión: nueve commits, sin migración nueva (el schema entró con ADR-062).
+
+## ADR-065 — Campo OC para origen NOVOTECHNO: referencia de trazabilidad en internalCosts, sin módulo de inventario
+
+**Fecha:** 2026-07-14
+**Estado:** Aceptado
+
+### Contexto
+
+El catálogo de proveedores (ADR-062, ADR-064) cubre los ítems que se cotizan a un tercero: empresa y contacto comercial. El origen NOVOTECHNO es distinto: el ítem sale de inventario propio, que NovoTechno ya compró antes a un proveedor mediante una orden de compra. Ahí no hay tercero que registrar, pero sí una necesidad de trazabilidad equivalente: saber con qué OC entró ese ítem al inventario. La OC vive en otra aplicación; en NovoTechFlow es solo una referencia.
+
+### Decisión
+
+Un campo `oc` de texto libre dentro de `internalCosts`, obligatorio únicamente cuando el origen es NOVOTECHNO y solo en ítems nuevos (misma regla A de ADR-064). Sin columna nueva ni migración: es un identificador externo del que no hay integridad referencial que garantizar —al contrario de los FK de proveedor—, y `internalCosts` ya es el contenedor del origen y del flete, que es su vecindario natural. El backend no requirió cambios: `internalCosts` viaja completo en el payload y ambos DTOs lo aceptan como `Record<string, unknown>`.
+
+El campo se renderiza en el mismo panel "Estructura Comercial", condicional al origen, y nunca coexiste con la sección de proveedor (que retorna null en NOVOTECHNO). El comportamiento es simétrico al de los FK: entrar a NOVOTECHNO limpia empresa y contacto; salir de NOVOTECHNO limpia el OC. Cada origen persiste solo lo suyo.
+
+Se descartó modelar una entidad de OC o inventario: no existe módulo de inventario en el sistema y construir uno para almacenar un número sería especulativo (YAGNI). Si algún día hay integración real con la aplicación donde viven las OC, este campo es el punto de anclaje.
+
+### Consecuencias
+
+1. Sin validación de formato ni existencia: el OC es texto libre. Un número mal escrito no se detecta. Aceptado: el dato autoritativo vive en otra aplicación.
+2. El borrado del OC al salir de NOVOTECHNO funciona por una vía indirecta: `oc: undefined` hace que `JSON.stringify` omita la clave, y como el backend reemplaza `internalCosts` completo (no hace merge), la clave desaparece del JSON persistido. Correcto hoy, pero es una dependencia implícita: si el backend pasara a hacer merge de `internalCosts`, este borrado dejaría de funcionar en silencio.
+3. Los ítems históricos con origen NOVOTECHNO y sin OC se siguen editando sin exigir el campo (regla A). Nunca serán forzados a tenerlo.
+4. Al vivir en JSONB y no en columna, el OC no es indexable ni consultable con eficiencia. Si aparece la necesidad de buscar ítems por OC, habrá que promoverlo a columna.
+
+### Archivos
+
+- `apps/web/src/lib/types.ts` — campo `oc?: string` en `InternalCosts`
+- `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx` — render condicional del campo, limpieza al cambiar de origen y validación en ítems nuevos
+
+### Commits
+
+- `0969805` — feat(proposals): add purchase order field for NOVOTECHNO origin
+
+### Pendientes
+
+- Verificación en navegador (Luis): campo visible solo en NOVOTECHNO, ítem nuevo sin OC no guarda, cambiar de origen limpia el valor, persistencia tras F5.
+- Si alguna vez se integra con la aplicación donde viven las órdenes de compra, evaluar promover `oc` a columna con validación real contra esa fuente.
+
+## ADR-066 — Firma del usuario resuelta en render, no como snapshot en el documento
+
+**Fecha:** 2026-07-18
+**Estado:** Aceptado
+
+### Contexto
+
+Un usuario comercial (Carolina Casas, nomenclatura CC) reportó que su firma, subida desde la ventana de administración de usuarios, no aparecía en la propuesta COT-CC00005-1, mientras que sí aparecía en otras propuestas suyas, nuevas y viejas. El patrón no era monótono en el tiempo: propuestas más viejas mostraban la firma y otras más nuevas no.
+
+El diagnóstico contra producción (solo lectura) reveló la causa raíz. Las páginas de una propuesta no se crean al crear la propuesta, sino de forma diferida (lazy), la primera vez que alguien abre el documento y se dispara `POST /proposals/:id/pages/initialize`. Al inicializarse, `initializeDefaultPages` leía la firma del usuario dueño en ese instante y la copiaba como un bloque IMAGE dentro de la página PRESENTATION: una foto del estado de la firma en el momento de abrir el documento por primera vez. Como `initializeDefaultPages` es idempotente y no re-inicializa si ya existen páginas, esa foto nunca se actualizaba después.
+
+Cruzando los `createdAt` reales de cada página PRESENTATION con el momento de subida de la firma, el patrón colapsó en un solo evento: la firma se subió una única vez, en la ventana 2026-07-17 21:07–22:24 UTC. Todo documento abierto por primera vez antes de esa hora quedó sin firma; todo documento abierto después la capturó. COT-CC00005-1 abrió su documento a las 19:30 UTC, antes de la subida, y quedó congelada sin firma. No era la edad de la propuesta lo que importaba, sino cuándo se abrió el documento por primera vez.
+
+El modelo de snapshot tiene además dos defectos de fondo: la firma no era un dato vivo (cambiarla no afectaba propuestas ya inicializadas), y el bloque IMAGE de la firma era indistinguible de una imagen normal insertada por el usuario. El único intento de distinguirlos, la heurística `url.includes('/signatures/')` en el render, estaba muerto desde la migración de firmas a data URI base64 (abril 2026): un data URI nunca contiene `/signatures/`.
+
+### Decisión
+
+La firma deja de copiarse dentro del documento y pasa a resolverse en tiempo de render, desde el usuario dueño de la propuesta.
+
+En backend, `getProposalById` incluye ahora `user: { name, nomenclature, signatureUrl }` del dueño, e `initializeDefaultPages` deja de inyectar el bloque IMAGE de firma: las propuestas nuevas nacen sin bloque de firma. En frontend, el render de la página PRESENTATION pinta la firma del dueño al final de la página, después de los bloques, como elemento aparte. La firma se resuelve desde el dueño de la propuesta (traído por el backend), no desde el usuario logueado (`authStore`), para que un administrador que abra la propuesta de un comercial vea la firma correcta y no la propia.
+
+Al dejar de ser un bloque, la firma ya no necesita marcador ni heurística: todo bloque IMAGE vuelve a ser una imagen normal, sin excepción, y la firma se pinta por una vía separada condicionada a `pageType === 'PRESENTATION'`. La heurística `url.includes('/signatures/')` se elimina.
+
+Se descartó la alternativa de mantener el snapshot con un botón de "actualizar firma" en el documento, porque deja al usuario la carga de saber que debe accionarlo. Se aceptó explícitamente la consecuencia de que las propuestas ya enviadas muestren en la app la firma actual del dueño y no la del momento de envío: el registro de lo enviado al cliente es el PDF archivado, no la vista de la app.
+
+### Consecuencias
+
+1. Se elimina la clase completa de bug: ningún documento futuro puede quedar sin firma por haberse abierto antes de que el dueño la cargara. La firma es un dato vivo del usuario.
+2. Las propuestas ya inicializadas que tenían el bloque IMAGE-firma snapshot mostraban la firma dos veces (el bloque viejo más la firma nueva en render). Se identificaron y borraron los bloques residuales en producción: COT-CC00004-1 (blockId 6542a08e-7b66-45f9-87e0-575eed6b8aab) y COT-CC00010-1 (blockId 5306e9d8-9209-4cba-b364-ad1f2a83c5cc), con pg_dump previo de proposal_page_blocks y verificación precheck/postcheck.
+3. Una propuesta abierta en la app ya no refleja necesariamente la firma que llevaba el PDF enviado al cliente, si el dueño cambió su firma después. Es un cambio de contrato deliberado: la app muestra el estado actual, el PDF archivado es el registro de lo enviado.
+4. Deuda de reconciliación con la rama feature/wysiwyg-pages. Ese trabajo (en diseño, sin mergear) extrae el render de páginas de PdfPreviewModal a lib/renderPageHtml.ts y añade una segunda vía de render (useContentPageSheets / PageSheetsPreview). Este fix se construyó sobre la estructura inline de master (render dentro de PdfPreviewModal, 3 archivos). Cuando wysiwyg se mergee, hay que unificar las dos versiones del render de firma: la lógica del append de firma debe quedar en buildPageHtml (que ya recibe pageType y ownerSignatureUrl en la rama) y propagarse a sus dos call sites, no duplicada en el modal.
+
+### Archivos
+
+- `apps/api/src/proposals/proposals.service.ts` — `getProposalById` incluye `user: { name, nomenclature, signatureUrl }` del dueño
+- `apps/api/src/proposals/pages.service.ts` — `initializeDefaultPages` deja de inyectar el bloque IMAGE de firma; se elimina el fetch de `proposal` que solo servía para eso
+- `apps/web/src/lib/types.ts` — `ProposalDetail.user` gana `signatureUrl?`
+- `apps/web/src/components/proposals/PdfPreviewModal.tsx` — prop `ownerSignatureUrl`; se elimina la heurística `url.includes('/signatures/')`; se pinta la firma del dueño al final de PRESENTATION
+- `apps/web/src/pages/proposals/ProposalDocBuilder.tsx` — pasa `ownerSignatureUrl={proposal?.user?.signatureUrl}` al modal
+
+### Commits
+
+- `642c185` — refactor(proposals): resolve owner signature at render instead of snapshot
+- `a952373` — feat(proposals): render owner signature on presentation page
+
+### Pendientes
+
+- Reconciliar el render de firma con feature/wysiwyg-pages al mergear esa rama (ver consecuencia 4)
+- Bug preexistente, aparte de este fix: el preview de firma en la ventana Usuarios (`Users.tsx:552`) usa `${apiBase}${u.signatureUrl}` en vez de `resolveImageUrl`, lo que produce una URL malformada con un data URI. No afecta el render en propuestas
+
+## ADR-067 — Campos numeroParte/modelo en todas las categorías y paquete compartido @repo/item-display
+
+**Fecha:** 2026-07-21
+**Estado:** Aceptado
+
+### Contexto
+
+El contrato de la API externa debe entregar, por categoría de ítem, número de parte, modelo y una descripción rápida coherente con lo que el usuario captura en el Constructor de Propuesta. Solo la categoría PCS tenía los campos de specs `numeroParte` y `modelo`; las otras cinco categorías no los capturaban. Además, la lógica de display estaba fragmentada y parcialmente duplicada: `buildQuickDescription` en `apps/web/src/lib/itemDescription.ts`, una copia adaptada en `apps/api/src/external/external-spec-fields.ts` (deuda registrada en el ADR-059 de la rama `feature/external-api`), y una constante divergente `QUICK_SPEC_FIELDS_BY_ITEM_TYPE` para la "información rápida" del Excel, con campos y separador propios (` · `).
+
+### Decisión
+
+1. **Campos nuevos de specs**: se agregaron `numeroParte` (input de texto, cat `NUMERO_PARTE`) y `modelo` (cat `MODELO`, autocompletado compartido) a las cinco categorías no-PCS de `SPEC_FIELDS_BY_ITEM_TYPE`. El render es automático vía `SpecFieldsSection`; las specs viven en el JSON `technicalSpecs`, sin migración.
+2. **Paquete compartido `@repo/item-display`** (`packages/item-display`, molde de `@repo/pricing-engine`): fuente única de `ITEM_TYPE_LABELS`, `resolveItemTypeLabel`, `pickSpecString`, `buildQuickDescription`, `buildExcelQuickSpecs` y `getUnitOfMeasure`.
+3. **Definición unificada de descripción rápida** (pantalla, PDF y API externa), separador ` | `: PCS (formato, fabricante, modelo, procesador, memoriaRam, almacenamiento, garantiaBateria, garantiaEquipo); ACCESSORIES e INFRASTRUCTURE (tipo, fabricante, modelo, garantia); SOFTWARE (tipo, fabricante, modelo); PC_SERVICES e INFRA_SERVICES (tipo, responsable, modelo).
+4. **Información rápida del Excel**: la misma definición de pantalla más `unidadMedida` en SOFTWARE, PC_SERVICES e INFRA_SERVICES, conservando su separador histórico ` · ` vía parámetro de `buildExcelQuickSpecs`. Decisión de producto: el formato visible del Excel no cambia.
+5. `apps/web` consume el paquete: `itemDescription.ts` y las constantes migradas quedan como re-exports; `exportExcel.ts` delega en `buildExcelQuickSpecs`; `vite.config`, Dockerfile de web y ambos workflows de CI compilan el paquete antes del build/typecheck; los chips de specs del Constructor de Propuesta se renderizan data-driven desde `QUICK_SPEC_FIELDS_BY_ITEM_TYPE` (incluye `unidadMedida` en pantalla, decisión de producto).
+
+### Consecuencias
+
+- El usuario captura número de parte y modelo en las seis categorías; la descripción rápida los refleja en pantalla, PDF y Excel.
+- Una sola fuente de lógica de display en el monorepo. La copia `external-spec-fields.ts` de la rama `feature/external-api` se reemplazará por este paquete tras el merge (sanea la deuda del ADR-059 de esa rama).
+- El gate local de `docker build` de web no corre en Windows (el `COPY` sin `.dockerignore` arrastra junctions de pnpm); el gate válido es el job `docker-build` del CI. Deuda registrada: `.dockerignore` raíz.
+- Los ADR-057 y ADR-059 de feature/external-api colisionan con la numeración ya usada en master; se renumeran en el merge.
+
+### Archivos
+
+- `apps/web/src/lib/constants.ts` — campos nuevos en `SPEC_FIELDS_BY_ITEM_TYPE`; constantes de display migradas a re-export.
+- `packages/item-display/` (nuevo) — package.json, tsconfig.json, src/index.ts.
+- `apps/web/src/lib/itemDescription.ts` — re-export del paquete.
+- `apps/web/src/lib/exportExcel.ts` — delega en `buildExcelQuickSpecs`.
+- `apps/web/package.json`, `apps/web/vite.config.ts`, `apps/web/Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/pr-check.yml`, `pnpm-lock.yaml`.
+
+### Commits
+
+- `f4adf4d` — feat(web): add part number and model spec fields to non-PC categories
+- `3d65ad5` — feat(item-display): add shared item display package with unified quick description logic
+- `478ecd0` — feat(web): consume @repo/item-display as single source for item display logic
+- Pendiente — commit de este ADR (`docs: ADR-067 item display package and new spec fields`)
+
+### Pendientes
+
+- **Verificación en navegador** (Luis): campos nuevos en las 5 categorías, descripción rápida nueva en pantalla/PDF, Excel con ` · ` y `modelo`.
+- **`.dockerignore` raíz** para habilitar docker build local en Windows (afecta también al Dockerfile de api).
+- **Merge a `feature/external-api`**: renumerar los ADR de la rama en colisión (057 y 059) y reemplazar `external-spec-fields.ts` por el paquete.
+
+## ADR-068 — Adopción del Railway CLI en el flujo de trabajo para lectura de variables y logs de producción, con manejo estricto de secretos
 
 **Fecha:** 2026-07-05
 **Estado:** Aceptado
@@ -2329,7 +2966,7 @@ Restricción de entorno: el CLI no está en winget, y la regla del proyecto (§8
 
 ### Commits
 
-- Pendiente — commit de este ADR-057 (`docs: ADR-057 adopt railway cli for read-only variables and logs`)
+- Pendiente — commit de este ADR (`docs: ADR-057 adopt railway cli for read-only variables and logs`)
 
 ### Pendientes
 
@@ -2337,7 +2974,7 @@ Restricción de entorno: el CLI no está en winget, y la regla del proyecto (§8
 - **Reglas de manejo de secretos aplicadas al MCP:** trasladar las reglas 4 y 5 de este ADR al uso del MCP (variables solo por nombre, logs redactados y acotados).
 - **Habilitación de escrituras seguras (etapa futura, si se decide):** crear variables solo en entornos no-prod, o en prod con confirmación explícita de Luis (equivalente al gate del push). Fuera de alcance de este ADR.
 
-## ADR-059 — Enriquecimiento del contrato de la API externa: marca, número de parte, formato, modelo y quick specs derivados de technicalSpecs
+## ADR-069 — Enriquecimiento del contrato de la API externa: marca, número de parte, formato, modelo y quick specs derivados de technicalSpecs
 
 **Fecha:** 2026-07-08
 **Estado:** Aceptado
@@ -2374,7 +3011,7 @@ Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente
 ### Commits
 
 - `ba476c3` — feat(external): expose brand, part number, format, model and quick specs from technical specs
-- Pendiente — commit de este ADR-059 (`docs: ADR-059 enrich external api contract from technical specs`)
+- Pendiente — commit de este ADR (`docs: ADR-059 enrich external api contract from technical specs`)
 
 ### Pendientes
 

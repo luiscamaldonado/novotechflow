@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { useDashboard, getSubtotalUsd } from '../hooks/useDashboard';
 import { useProjections } from '../hooks/useProjections';
+import { useCloneVersion } from '../hooks/useCloneVersion';
 import { useNotifications } from '../hooks/useNotifications';
 import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG } from '../lib/constants';
 import { exportDashboardToExcel } from '../lib/exportDashboard';
@@ -17,6 +18,7 @@ import BillingCards from './dashboard/BillingCards';
 import PipelineCards from './dashboard/PipelineCards';
 import ProjectionModal from './dashboard/ProjectionModal';
 import DataHygieneModal from './dashboard/DataHygieneModal';
+import CloneVersionModal from './dashboard/CloneVersionModal';
 import type { HygieneIssue } from '../lib/dashboardValidation';
 import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
@@ -78,7 +80,7 @@ export default function Dashboard() {
         loading, proposals, filtered, proposalGroups, filteredProjectionRows,
         billingCardsVenta, billingCardsDaas,
         pipelineCards, forecastCurrentQuarter, forecastNextQuarter,
-        cloning, projections, activeRowsUnfiltered, setProjections,
+        projections, activeRowsUnfiltered, setProjections,
         trmRate, setTrmRate,
         trmCurrentMonthAvg, trmPreviousMonthAvg, isLoadingTrmAverages,
         showFilters, setShowFilters, codeFilter, setCodeFilter, clientFilter, setClientFilter, subjectFilter, setSubjectFilter,
@@ -95,13 +97,13 @@ export default function Dashboard() {
         closeMonthFilter, setCloseMonthFilter,
         billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
-        handleStatusChange, handleDateChange, handleClone, handleDelete, getBoardHygieneIssues,
+        handleStatusChange, handleDateChange, handleDelete, getBoardHygieneIssues, loadProposals,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
         handleProjectionStatusChange, handleProjectionDateChange,
         toggleStatusFilter, clearFilters,
     } = useDashboard();
 
-    const userRole: UserRole = user?.role === 'ADMIN' ? 'ADMIN' : 'COMMERCIAL';
+    const userRole: UserRole = user?.role ?? 'COMMERCIAL';
 
     const {
         showProjectionModal, setShowProjectionModal,
@@ -109,6 +111,12 @@ export default function Dashboard() {
         openNewProjectionModal, openEditProjectionModal,
         handleSaveProjection, handleDeleteProjection,
     } = useProjections(setProjections);
+
+    const {
+        showCloneVersionModal, setShowCloneVersionModal,
+        cloneVersionForm, setCloneVersionForm, cloningVersion,
+        openCloneVersionModal, handleSaveCloneVersion,
+    } = useCloneVersion(loadProposals);
 
     const {
         notifications, warnings, urgents, unreadWarnings, unreadUrgents,
@@ -143,7 +151,10 @@ export default function Dashboard() {
         runWithCleanBoard(() => navigate(`/proposals/${id}/builder`));
 
     const handleCloneGated = (id: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') =>
-        runWithCleanBoard(() => handleClone(id, cloneType));
+        runWithCleanBoard(() => {
+            if (cloneType === 'NEW_VERSION') openCloneVersionModal(id);
+            else navigate(`/proposals/new?cloneFrom=${id}`);
+        });
 
     if (loading) {
         return (
@@ -189,20 +200,24 @@ export default function Dashboard() {
                             placeholder="—"
                         />
                     </div>
-                    <button
-                        onClick={openNewProjectionModal}
-                        className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-violet-600/25"
-                    >
-                        <Receipt className="h-5 w-5" />
-                        <span>Proyección de Facturación</span>
-                    </button>
-                    <button
-                        onClick={() => runWithCleanBoard(() => navigate('/proposals/new'))}
-                        className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/25"
-                    >
-                        <PlusCircle className="h-5 w-5" />
-                        <span>Nueva Propuesta</span>
-                    </button>
+                    {user?.role !== 'REPORTER' && (
+                        <>
+                            <button
+                                onClick={openNewProjectionModal}
+                                className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-violet-600/25"
+                            >
+                                <Receipt className="h-5 w-5" />
+                                <span>Proyección de Facturación</span>
+                            </button>
+                            <button
+                                onClick={() => runWithCleanBoard(() => navigate('/proposals/new'))}
+                                className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/25"
+                            >
+                                <PlusCircle className="h-5 w-5" />
+                                <span>Nueva Propuesta</span>
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -396,7 +411,6 @@ export default function Dashboard() {
                                                     row={group.activeVersion}
                                                     userRole={userRole}
                                                     trmRate={trmRate}
-                                                    cloning={cloning}
                                                     onStatusChange={handleStatusChange}
                                                     onDateChange={handleDateChange}
                                                     onAcquisitionChange={handleAcquisitionChange}
@@ -423,7 +437,6 @@ export default function Dashboard() {
                                                         row={v}
                                                         userRole={userRole}
                                                         trmRate={trmRate}
-                                                        cloning={cloning}
                                                         isChild
                                                         isActiveVersion={v.id === group.activeVersion.id}
                                                         onStatusChange={handleStatusChange}
@@ -446,22 +459,24 @@ export default function Dashboard() {
                                         return (
                                             <tr key={`proj-${row.id}`} className="hover:bg-violet-50/30 transition-colors group bg-violet-50/10">
                                                 <td className="px-4 py-4 text-center">
-                                                    <div className="flex items-center justify-center space-x-1">
-                                                        <button
-                                                            onClick={() => openEditProjectionModal(pr)}
-                                                            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
-                                                            title="Editar proyección"
-                                                        >
-                                                            <Edit2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteProjection(row.id, row.code)}
-                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                            title="Eliminar proyección"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
+                                                    {user?.role !== 'REPORTER' && (
+                                                        <div className="flex items-center justify-center space-x-1">
+                                                            <button
+                                                                onClick={() => openEditProjectionModal(pr)}
+                                                                className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                                                                title="Editar proyección"
+                                                            >
+                                                                <Edit2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteProjection(row.id, row.code)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                                title="Eliminar proyección"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-5 py-4">
                                                     <div className="flex items-center gap-2">
@@ -492,39 +507,51 @@ export default function Dashboard() {
                                                     usdEstimate={usdEst}
                                                 />
                                                 <td className="px-4 py-4 text-center">
-                                                    <select
-                                                        value={pr.acquisitionType || ''}
-                                                        onChange={(e) => handleProjectionAcquisitionChange(row.id, e.target.value as AcquisitionType)}
-                                                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 ${
-                                                            pr.acquisitionType && ACQUISITION_CONFIG[pr.acquisitionType]
-                                                                ? `${ACQUISITION_CONFIG[pr.acquisitionType].bg} ${ACQUISITION_CONFIG[pr.acquisitionType].text} ${ACQUISITION_CONFIG[pr.acquisitionType].border}`
-                                                                : 'bg-gray-50 text-gray-400 border-gray-200'
-                                                        }`}
-                                                    >
-                                                        <option value="">— Seleccionar —</option>
-                                                        <option value="VENTA">Venta</option>
-                                                        <option value="DAAS">DaaS</option>
-                                                    </select>
+                                                    {user?.role !== 'REPORTER' ? (
+                                                        <select
+                                                            value={pr.acquisitionType || ''}
+                                                            onChange={(e) => handleProjectionAcquisitionChange(row.id, e.target.value as AcquisitionType)}
+                                                            className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 ${
+                                                                pr.acquisitionType && ACQUISITION_CONFIG[pr.acquisitionType]
+                                                                    ? `${ACQUISITION_CONFIG[pr.acquisitionType].bg} ${ACQUISITION_CONFIG[pr.acquisitionType].text} ${ACQUISITION_CONFIG[pr.acquisitionType].border}`
+                                                                    : 'bg-gray-50 text-gray-400 border-gray-200'
+                                                            }`}
+                                                        >
+                                                            <option value="">— Seleccionar —</option>
+                                                            <option value="VENTA">Venta</option>
+                                                            <option value="DAAS">DaaS</option>
+                                                        </select>
+                                                    ) : pr.acquisitionType && ACQUISITION_CONFIG[pr.acquisitionType] ? (
+                                                        <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${ACQUISITION_CONFIG[pr.acquisitionType].bg} ${ACQUISITION_CONFIG[pr.acquisitionType].text} ${ACQUISITION_CONFIG[pr.acquisitionType].border}`}>{ACQUISITION_CONFIG[pr.acquisitionType].label}</span>
+                                                    ) : (
+                                                        <span className="text-[10px] text-gray-300">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
-                                                    <select
-                                                        value={row.status}
-                                                        onChange={(e) => handleProjectionStatusChange(row.id, e.target.value as ProposalStatus)}
-                                                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-violet-600/20`}
-                                                    >
-                                                        {PROJECTION_STATUSES.map(s => (
-                                                            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                                                        ))}
-                                                    </select>
-                                                    <div className="mt-2">
-                                                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-0.5">Fecha de facturación</span>
-                                                        <input
-                                                            type="date"
-                                                            value={pr.billingDate ? new Date(pr.billingDate).toISOString().split('T')[0] : ''}
-                                                            onChange={(e) => handleProjectionDateChange(row.id, e.target.value)}
-                                                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px]"
-                                                        />
-                                                    </div>
+                                                    {user?.role !== 'REPORTER' ? (
+                                                        <select
+                                                            value={row.status}
+                                                            onChange={(e) => handleProjectionStatusChange(row.id, e.target.value as ProposalStatus)}
+                                                            className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-violet-600/20`}
+                                                        >
+                                                            {PROJECTION_STATUSES.map(s => (
+                                                                <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border}`}>{cfg.label}</span>
+                                                    )}
+                                                    {user?.role !== 'REPORTER' && (
+                                                        <div className="mt-2">
+                                                            <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-0.5">Fecha de facturación</span>
+                                                            <input
+                                                                type="date"
+                                                                value={pr.billingDate ? new Date(pr.billingDate).toISOString().split('T')[0] : ''}
+                                                                onChange={(e) => handleProjectionDateChange(row.id, e.target.value)}
+                                                                className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px]"
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -556,6 +583,16 @@ export default function Dashboard() {
                 onClose={() => setHygieneModalOpen(false)}
                 onGoToFix={() => setHygieneModalOpen(false)}
             />
+
+            {showCloneVersionModal && (
+                <CloneVersionModal
+                    form={cloneVersionForm}
+                    setForm={setCloneVersionForm}
+                    saving={cloningVersion}
+                    onSave={handleSaveCloneVersion}
+                    onClose={() => setShowCloneVersionModal(false)}
+                />
+            )}
 
             {/* Notification Panel */}
             {showAllNotifications && (

@@ -118,6 +118,7 @@ export function useScenarios(proposalId: string | undefined) {
             const res = await api.post(`/proposals/${proposalId}/scenarios`, {
                 name,
                 description: '',
+                conversionTrm: trm?.valor,
             });
             setScenarios(prev => [...prev, { ...res.data, scenarioItems: [] }]);
             setActiveScenarioId(res.data.id);
@@ -359,11 +360,28 @@ export function useScenarios(proposalId: string | undefined) {
             .catch((error: unknown) => console.error(error));
     }, []);
 
+    const scenarioReorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingScenarioReorderRef = useRef<string[] | null>(null);
+
+    const flushScenarioReorder = useCallback(() => {
+        if (scenarioReorderTimerRef.current !== null) {
+            clearTimeout(scenarioReorderTimerRef.current);
+            scenarioReorderTimerRef.current = null;
+        }
+        const pending = pendingScenarioReorderRef.current;
+        if (pending === null) return;
+        pendingScenarioReorderRef.current = null;
+        api
+            .patch(`/proposals/${proposalId}/scenarios/reorder`, { scenarioIds: pending })
+            .catch((error: unknown) => console.error(error));
+    }, [proposalId]);
+
     useEffect(() => {
         return () => {
             flushReorder();
+            flushScenarioReorder();
         };
-    }, [flushReorder]);
+    }, [flushReorder, flushScenarioReorder]);
 
     const reorderItems = (orderedParentIds: string[]) => {
         if (!activeScenarioId) return;
@@ -386,6 +404,18 @@ export function useScenarios(proposalId: string | undefined) {
         pendingReorderRef.current = { scenarioId, itemIds: orderedParentIds };
         if (reorderTimerRef.current !== null) clearTimeout(reorderTimerRef.current);
         reorderTimerRef.current = setTimeout(flushReorder, SCENARIO_REORDER_DEBOUNCE_MS);
+    };
+
+    const reorderScenarios = (orderedScenarioIds: string[]) => {
+        setScenarios(prev =>
+            orderedScenarioIds
+                .map(id => prev.find(s => s.id === id))
+                .filter((s): s is Scenario => s !== undefined),
+        );
+
+        pendingScenarioReorderRef.current = orderedScenarioIds;
+        if (scenarioReorderTimerRef.current !== null) clearTimeout(scenarioReorderTimerRef.current);
+        scenarioReorderTimerRef.current = setTimeout(flushScenarioReorder, SCENARIO_REORDER_DEBOUNCE_MS);
     };
 
     const updateMargin = async (siId: string, margin: string) => {
@@ -556,6 +586,7 @@ export function useScenarios(proposalId: string | undefined) {
         clearUnitPriceOverride,
         renameScenario,
         cloneScenario,
+        reorderScenarios,
         reorderItems,
     };
 }

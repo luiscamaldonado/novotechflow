@@ -12,6 +12,7 @@ import {
   IsObject,
   IsIn,
   ValidateIf,
+  IsUUID,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ItemType, ProposalStatus, AcquisitionType } from '@prisma/client';
@@ -181,6 +182,14 @@ export class CreateProposalItemDto {
   @IsInt()
   @Min(0)
   deliveryDays?: number;
+
+  @IsOptional()
+  @IsUUID()
+  supplierCompanyId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  supplierContactId?: string | null;
 }
 
 /**
@@ -243,6 +252,14 @@ export class UpdateProposalItemDto {
   @IsInt()
   @Min(0)
   deliveryDays?: number;
+
+  @IsOptional()
+  @IsUUID()
+  supplierCompanyId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  supplierContactId?: string | null;
 }
 
 /**
@@ -351,6 +368,43 @@ export class ApplyMarginDto {
 export class CloneProposalDto {
   @IsIn(['NEW_VERSION', 'NEW_PROPOSAL'])
   cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL';
+
+  @IsOptional()
+  @IsEnum(ProposalStatus)
+  status?: ProposalStatus;
+
+  @IsOptional()
+  @IsEnum(AcquisitionType)
+  acquisitionType?: AcquisitionType;
+
+  @IsOptional()
+  @IsDateString()
+  closeDate?: string;
+
+  @IsOptional()
+  @IsString()
+  clientId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  clientName?: string;
+
+  @IsOptional()
+  @IsString()
+  subject?: string;
+
+  @IsOptional()
+  @IsDateString()
+  issueDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  validityDays?: number;
+
+  @IsOptional()
+  @IsDateString()
+  validityDate?: string;
 }
 
 // ── Proposal Pages DTOs ──────────────────────────────────────
@@ -425,4 +479,14 @@ export class ReorderBlocksDto {
 export class ReorderScenarioItemsDto {
   @IsString({ each: true })
   itemIds: string[];
+}
+
+// ── Scenarios Reorder DTO ────────────────────────────────────
+
+/**
+ * DTO para reordenar escenarios dentro de una propuesta.
+ */
+export class ReorderScenariosDto {
+  @IsString({ each: true })
+  scenarioIds: string[];
 }

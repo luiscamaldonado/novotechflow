@@ -8,16 +8,36 @@ import {
     Cpu, DollarSign
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import type { ProposalItem, ProposalDetail } from '../../lib/types';
-import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA } from '../../lib/constants';
+import type { ProposalItem, ProposalDetail, TechnicalSpecs } from '../../lib/types';
+import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, PROVEEDOR_OPTIONS, PROVEEDOR_NOVOTECHNO, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY, QUICK_SPEC_FIELDS_BY_ITEM_TYPE, SPEC_FIELDS_BY_ITEM_TYPE } from '../../lib/constants';
 import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '@repo/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import PrefillModal from './components/PrefillModal';
+import SupplierSection from './components/SupplierSection';
 import { useProposalBuilder } from '../../hooks/useProposalBuilder';
+import { useSuppliers } from '../../hooks/useSuppliers';
+import { useSupplierFieldRequirements } from '../../hooks/useSupplierFieldRequirements';
 import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
 import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
+
+/** Clases base de un chip de specs en la tabla de items. */
+const SPEC_CHIP_BASE_CLASS = 'px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border';
+/** Color por campo: conserva el codigo de colores que tenian los chips hardcodeados. */
+const SPEC_CHIP_COLOR_BY_FIELD: Record<string, string> = {
+    modelo: 'bg-rose-50 text-rose-600 border-rose-100/50',
+    procesador: 'bg-indigo-50 text-indigo-600 border-indigo-100/50',
+    memoriaRam: 'bg-emerald-50 text-emerald-600 border-emerald-100/50',
+    almacenamiento: 'bg-amber-50 text-amber-600 border-amber-100/50',
+    garantiaBateria: 'bg-cyan-50 text-cyan-600 border-cyan-100/50',
+    garantiaEquipo: 'bg-cyan-50 text-cyan-600 border-cyan-100/50',
+    garantia: 'bg-emerald-50 text-emerald-600 border-emerald-100/50',
+    responsable: 'bg-indigo-50 text-indigo-600 border-indigo-100/50',
+    unidadMedida: 'bg-emerald-50 text-emerald-600 border-emerald-100/50',
+};
+/** Color por defecto de un chip sin color propio. */
+const SPEC_CHIP_COLOR_DEFAULT = 'bg-slate-100 text-slate-500 border-slate-200/50';
 
 export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -29,12 +49,15 @@ export default function ProposalItemsBuilder() {
     } = useProposalBuilder(id);
 
     const { isReadOnly } = useProposalReadOnly(proposal);
+    const { companies, isLoading: isLoadingCompanies, createCompany, createContact } = useSuppliers();
+    const { requirements } = useSupplierFieldRequirements();
 
     // UI state
     const [isAddingItem, setIsAddingItem] = useState(false);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [itemForm, setItemForm] = useState<ProposalItem>(initialItemForm);
     const [isPrefillOpen, setIsPrefillOpen] = useState(false);
+    const [itemError, setItemError] = useState<string | null>(null);
 
     const handleUpdateProposal = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -80,6 +103,9 @@ export default function ProposalItemsBuilder() {
         const { name } = e.target;
         let { value } = e.target;
 
+        // Cambiar el origen invalida cualquier mensaje de validación previo.
+        if (name === 'internal.proveedor') setItemError(null);
+
         // Convertir coma a punto y dejar solo números y un punto
         if (['unitCost', 'marginPct', 'unitPrice', 'internal.fletePct', 'quantity'].includes(name)) {
             value = value.replace(/,/g, '.');
@@ -110,11 +136,18 @@ export default function ProposalItemsBuilder() {
 
                 // Dependencia directa de proveedor a flete
                 if (internalField === 'proveedor') {
-                    next.internalCosts = { 
-                        ...prev.internalCosts, 
+                    next.internalCosts = {
+                        ...prev.internalCosts,
                         proveedor: value,
-                        fletePct: value === PROVEEDOR_MAYORISTA ? MAYORISTA_FLETE_PCT : 0 
+                        fletePct: value === PROVEEDOR_MAYORISTA ? MAYORISTA_FLETE_PCT : 0
                     };
+                    // Cada origen guarda solo lo suyo.
+                    if (value === PROVEEDOR_NOVOTECHNO) {
+                        next.supplierCompanyId = null;
+                        next.supplierContactId = null;
+                    } else {
+                        next.internalCosts.oc = undefined;
+                    }
                 } else {
                     next.internalCosts = {
                         ...prev.internalCosts,
@@ -169,8 +202,40 @@ export default function ProposalItemsBuilder() {
         }));
     };
 
+    const handlePrefillApply = (specs: TechnicalSpecs) => {
+        setItemForm((prev) => {
+            const nextSpecs: TechnicalSpecs = { estado: prev.technicalSpecs?.estado, ...specs };
+            if (nextSpecs.formato === BATTERY_WARRANTY_FORMAT) {
+                nextSpecs.garantiaBateria = DEFAULT_BATTERY_WARRANTY;
+            }
+            return { ...prev, technicalSpecs: nextSpecs };
+        });
+    };
+
+    const handleClearSpecs = () => {
+        if (!window.confirm('Esto borrar\u00e1 todos los campos de caracter\u00edsticas de este \u00edtem. \u00bfContinuar?')) return;
+        setItemForm((prev) => ({ ...prev, technicalSpecs: {} }));
+    };
+
     const handleSaveItem = async (e: React.FormEvent) => {
         e.preventDefault();
+        setItemError(null);
+        const origen = itemForm.internalCosts?.proveedor || PROVEEDOR_MAYORISTA;
+        // Regla A: la obligatoriedad de proveedor solo aplica a items nuevos.
+        if (!editingItemId && origen !== PROVEEDOR_NOVOTECHNO) {
+            if (!itemForm.supplierCompanyId) {
+                setItemError('Seleccione la empresa proveedora.');
+                return;
+            }
+            if (requirements.nameRequired && !itemForm.supplierContactId) {
+                setItemError('Seleccione el contacto del proveedor.');
+                return;
+            }
+        }
+        if (!editingItemId && origen === PROVEEDOR_NOVOTECHNO && !itemForm.internalCosts?.oc?.trim()) {
+            setItemError('Ingrese el número de OC.');
+            return;
+        }
         const success = await saveItem(itemForm, editingItemId);
         if (success) {
             setIsAddingItem(false);
@@ -183,6 +248,7 @@ export default function ProposalItemsBuilder() {
         setItemForm(item);
         setEditingItemId(item.id || null);
         setIsAddingItem(true);
+        setItemError(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -192,6 +258,7 @@ export default function ProposalItemsBuilder() {
         setItemForm(newItem);
         setEditingItemId(null);
         setIsAddingItem(true);
+        setItemError(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -335,7 +402,7 @@ export default function ProposalItemsBuilder() {
                                              <span>EXPANDIR</span>
                                         </button>
                                     )}
-                                    {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
+                                    {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); setItemError(null); }} className="flex items-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs font-black uppercase tracking-widest">
                                         <Plus className="h-5 w-5" />
                                         <span>NUEVO ITEM</span>
                                     </button>}
@@ -397,6 +464,7 @@ export default function ProposalItemsBuilder() {
                                             onSelectSuggestion={selectSuggestion}
                                             fetchSuggestions={fetchSpecSuggestions}
                                             isReadOnly={isReadOnly}
+                                            onClear={handleClearSpecs}
                                         />
 
                                         {/* Descripción General */}
@@ -432,10 +500,9 @@ export default function ProposalItemsBuilder() {
                                              <div className="space-y-2">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Origen (Prov)</label>
                                                 <select name="internal.proveedor" value={itemForm.internalCosts?.proveedor || 'MAYORISTA'} onChange={handleItemChange} disabled={isReadOnly} className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 focus:ring-2 focus:ring-slate-700 appearance-none disabled:opacity-60 disabled:cursor-not-allowed">
-                                                    <option value="MAYORISTA">MAYORISTA</option>
-                                                    <option value="FABRICANTE">FABRICANTE</option>
-                                                    <option value="NOVOTECHNO">NOVOTECHNO</option>
-                                                    <option value="OTROS">OTROS</option>
+                                                    {PROVEEDOR_OPTIONS.map(opt => (
+                                                        <option key={opt} value={opt}>{opt}</option>
+                                                    ))}
                                                 </select>
                                             </div>
                                             <div className="space-y-2">
@@ -494,11 +561,48 @@ export default function ProposalItemsBuilder() {
                                                     <option value="false">0%</option>
                                                 </select>
                                             </div>
+
+                                            {(itemForm.internalCosts?.proveedor || PROVEEDOR_MAYORISTA) === PROVEEDOR_NOVOTECHNO && (
+                                                <div className="col-span-full border-t border-slate-800 pt-6 mt-2">
+                                                    <div className="space-y-2 md:max-w-xs">
+                                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                                            OC (Orden de Compra)
+                                                            <span className="text-red-400 ml-0.5">*</span>
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            name="internal.oc"
+                                                            value={itemForm.internalCosts?.oc || ''}
+                                                            onChange={handleItemChange}
+                                                            disabled={isReadOnly}
+                                                            placeholder="número de OC del inventario"
+                                                            className="w-full px-5 py-4 rounded-2xl bg-slate-800 border-none text-sm font-black text-slate-300 placeholder:text-slate-500 placeholder:font-medium focus:ring-2 focus:ring-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <SupplierSection
+                                                origen={itemForm.internalCosts?.proveedor || PROVEEDOR_MAYORISTA}
+                                                companies={companies}
+                                                isLoadingCompanies={isLoadingCompanies}
+                                                supplierCompanyId={itemForm.supplierCompanyId}
+                                                supplierContactId={itemForm.supplierContactId}
+                                                onChange={next => setItemForm(prev => ({ ...prev, ...next }))}
+                                                requirements={requirements}
+                                                enforceRequired={!editingItemId}
+                                                disabled={isReadOnly}
+                                                createCompany={createCompany}
+                                                createContact={createContact}
+                                            />
                                         </div>
                                     </div>
 
-                                    <div className="flex justify-end space-x-4 pt-4">
-                                        {!isReadOnly && <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
+                                    <div className="flex justify-end items-center space-x-4 pt-4">
+                                        {itemError && (
+                                            <p className="text-xs font-bold text-red-500">{itemError}</p>
+                                        )}
+                                        {!isReadOnly && <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); setItemError(null); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
                                             Descartar
                                         </button>}
                                         {!isReadOnly && <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
@@ -534,7 +638,7 @@ export default function ProposalItemsBuilder() {
                                             <div className="max-w-xs mx-auto space-y-4 grayscale opacity-40">
                                                 <Cpu className="h-20 w-20 mx-auto text-indigo-300" />
                                                 <p className="text-sm font-bold text-slate-400">Su arquitectura aún no tiene componentes definidos.</p>
-                                                {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); }} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>}
+                                                {!isReadOnly && <button onClick={() => { setItemForm(initialItemForm); setEditingItemId(null); setIsAddingItem(true); setItemError(null); }} className="px-6 py-2 border-2 border-indigo-100 rounded-xl text-indigo-600 hover:bg-indigo-50 text-[10px] font-black uppercase tracking-widest transition-all">Añadir PRIMER ITEM</button>}
                                             </div>
                                         </td>
                                     </tr>
@@ -556,49 +660,18 @@ export default function ProposalItemsBuilder() {
                                                 <div className="flex flex-col">
                                                     <span className="font-black text-slate-900 text-base mb-1 tracking-tight">{i.name}</span>
                                                     {i.description && <span className="text-[11px] text-slate-400 font-bold mb-2 italic">"{i.description}"</span>}
-                                                    {i.itemType === 'PCS' && i.technicalSpecs && (
+                                                    {i.technicalSpecs && (
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.modelo && <span className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-rose-100/50">{i.technicalSpecs.modelo}</span>}
-                                                            {i.technicalSpecs.procesador && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.procesador}</span>}
-                                                            {i.technicalSpecs.memoriaRam && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.memoriaRam}</span>}
-                                                            {i.technicalSpecs.almacenamiento && <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-amber-100/50">{i.technicalSpecs.almacenamiento}</span>}
-                                                            {i.technicalSpecs.garantiaEquipo && <span className="px-2.5 py-1 bg-cyan-50 text-cyan-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-cyan-100/50">{i.technicalSpecs.garantiaEquipo}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'ACCESSORIES' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.garantia && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.garantia}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'PC_SERVICES' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.responsable && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.responsable}</span>}
-                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-amber-100/50">{i.technicalSpecs.unidadMedida}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'SOFTWARE' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-purple-50 text-purple-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-purple-100/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.unidadMedida}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'INFRASTRUCTURE' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.garantia && <span className="px-2.5 py-1 bg-orange-50 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-orange-100/50">{i.technicalSpecs.garantia}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'INFRA_SERVICES' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.responsable && <span className="px-2.5 py-1 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm">{i.technicalSpecs.responsable}</span>}
-                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.unidadMedida}</span>}
+                                                            {(QUICK_SPEC_FIELDS_BY_ITEM_TYPE[i.itemType] ?? []).map((field) => {
+                                                                const value = (i.technicalSpecs as Record<string, string | undefined>)?.[field]?.trim();
+                                                                if (!value) return null;
+                                                                const label = SPEC_FIELDS_BY_ITEM_TYPE[i.itemType]?.[field]?.label ?? field;
+                                                                return (
+                                                                    <span key={field} className={cn(SPEC_CHIP_BASE_CLASS, SPEC_CHIP_COLOR_BY_FIELD[field] ?? SPEC_CHIP_COLOR_DEFAULT)}>
+                                                                        {label}: {value}
+                                                                    </span>
+                                                                );
+                                                            })}
                                                         </div>
                                                     )}
                                                 </div>
@@ -641,12 +714,7 @@ export default function ProposalItemsBuilder() {
             <PrefillModal
                 isOpen={isPrefillOpen}
                 onClose={() => setIsPrefillOpen(false)}
-                onApply={(specs) =>
-                    setItemForm((prev) => ({
-                        ...prev,
-                        technicalSpecs: { ...prev.technicalSpecs, ...specs },
-                    }))
-                }
+                onApply={handlePrefillApply}
             />
         </div>
     );
