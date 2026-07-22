@@ -2925,7 +2925,7 @@ El contrato de la API externa debe entregar, por categoría de ítem, número de
 
 - **Verificación en navegador** (Luis): campos nuevos en las 5 categorías, descripción rápida nueva en pantalla/PDF, Excel con ` · ` y `modelo`.
 - **`.dockerignore` raíz** para habilitar docker build local en Windows (afecta también al Dockerfile de api).
-- **Merge a `feature/external-api`**: renumerar los ADR de la rama en colisión (057 y 059) y reemplazar `external-spec-fields.ts` por el paquete.
+- **Merge a `feature/external-api`**: renumerar los ADR de la rama en colisión (057 y 059) y reemplazar `external-spec-fields.ts` por el paquete. — **Ejecutado**: merge f11f074; renumeración 057→068 y 059→069; `external-spec-fields.ts` reemplazado por el paquete.
 
 ## ADR-068 — Adopción del Railway CLI en el flujo de trabajo para lectura de variables y logs de producción, con manejo estricto de secretos
 
@@ -2994,7 +2994,7 @@ Enriquecer el contrato de la API externa tomando el dato desde `technicalSpecs`,
 3. Mismo tratamiento en `ExternalChildItemOut` (sub-ítems).
 4. La lógica de display (`buildQuickDescription`, `ITEM_TYPE_LABELS`, más el helper `pickSpecString`) se replica en un archivo nuevo `apps/api/src/external/external-spec-fields.ts`, adaptada al tipado `Record<string, unknown>` del backend (coerción `typeof === 'string'`, sin `any`).
 
-Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente de la rama (que ya arrastra la colisión del ADR-057); no toca estructura de paquetes.
+Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente de la rama (que ya arrastraba la colisión del hoy ADR-068); no toca estructura de paquetes.
 
 ### Consecuencias
 
@@ -3015,5 +3015,5 @@ Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente
 
 ### Pendientes
 
-- **Extracción a paquete compartido** de `buildQuickDescription` / `ITEM_TYPE_LABELS` (elimina el duplicado web/api), al mergear la rama.
-- **Renumeración del ADR-057 de esta rama** (Railway CLI) al mergear a master, por colisión con el ADR-057 de master (getMaintenanceBanner).
+- **Extracción a paquete compartido** de `buildQuickDescription` / `ITEM_TYPE_LABELS` (elimina el duplicado web/api), al mergear la rama. — **Ejecutado**: el paquete es `@repo/item-display` (ADR-067); la copia local se eliminó tras el merge.
+- **Renumeración del ADR-057 de esta rama** (Railway CLI) al mergear a master, por colisión con el ADR-057 de master (getMaintenanceBanner). — **Ejecutado** en el merge: 057→068, 059→069.
