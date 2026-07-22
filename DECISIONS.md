@@ -3049,4 +3049,4 @@ Seis campos planos nuevos en `ExternalItemOut` y `ExternalChildItemOut`: `tipo` 
 
 ### Pendientes
 
-- **Prueba end-to-end** con data de proveedor poblada: asignar proveedor a los ítems de `COT-LU00002-1` en `postgres-external` o copiar una propuesta reciente con catálogo asignado.
+- **Prueba end-to-end** con data de proveedor poblada: asignar proveedor a los ítems de `COT-LU00002-1` en `postgres-external` o copiar una propuesta reciente con catálogo asignado. — **Ejecutado**: `COT-LU00003-1` clonada desde la local `COT-LMA00008-1` (6 categorías, 6/6 ítems con proveedor, catálogo de 5 empresas + 5 contactos clonado); los 4 criterios del contrato verificados contra el endpoint real.
