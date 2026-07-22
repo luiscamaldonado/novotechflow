@@ -2586,11 +2586,13 @@ Segundo, los dos botones eran la misma llamada cambiando solo `cloneType`: ningu
 - `c03ac2d` — feat(dashboard): clone version modal captures close date, acquisition and status
 - `bf7ac39` — feat(proposals): clone as new proposal accepts client and form field overrides
 - `9368104` — feat(proposals): new proposal form clone mode prefills from base and clones on submit
+- `fa4b3d6` — fix(proposals): controller forwards clone header overrides, normalize empty clientId
 
 ### Pendientes
 
 - `scenarios.service.ts` (botón "Clonar escenario", endpoint aparte) no copia `sortOrder` en hijos ni `unitCostOverride` en ningún nivel — deuda preexistente registrada, fuera del alcance de este ADR.
 - `currentVersion` en `Proposal` no se escribe en ningún flujo del backend; sin impacto hoy, pendiente de decidir si se usa o se elimina.
+- Carrera en la precarga del modo clon de `NewProposal`: si el usuario edita el cliente antes de que el GET de la base resuelva, el `setFormData` de la precarga pisa la elección y el remount por `key` la revierte visualmente. Bug latente registrado; fix en tarea aparte.
 
 ## ADR-064 — Frontend del catálogo de proveedores: sección en el constructor, dedup difuso y obligatoriedad solo en ítems nuevos
 
