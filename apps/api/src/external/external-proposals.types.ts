@@ -9,10 +9,10 @@ export const externalProposalInclude = {
         where: { parentId: null },
         orderBy: { sortOrder: 'asc' },
         include: {
-          item: true,
+          item: { include: { supplierCompany: true, supplierContact: true } },
           children: {
             orderBy: { sortOrder: 'asc' },
-            include: { item: true },
+            include: { item: { include: { supplierCompany: true, supplierContact: true } } },
           },
         },
       },

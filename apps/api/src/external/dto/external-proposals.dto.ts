@@ -9,12 +9,18 @@ export interface ExternalItemOut {
   partNumber: string | null;
   formato: string | null;
   modelo: string | null;
+  tipo: string | null;
+  responsable: string | null;
   quickSpecs: string;
   quantity: number;
   unitCost: number;
   costCurrency: string;
   fletePct: number | null;
   proveedor: string | null;
+  supplierCompanyName: string | null;
+  supplierContactName: string | null;
+  supplierContactPhone: string | null;
+  supplierContactEmail: string | null;
   marginPct: number | null;
   marginPctOverride: number | null;
   unitCostOverride: number | null;
@@ -38,6 +44,8 @@ export interface ExternalChildItemOut {
   partNumber: string | null;
   formato: string | null;
   modelo: string | null;
+  tipo: string | null;
+  responsable: string | null;
   quickSpecs: string;
   quantity: number;
   unitCost: number;
@@ -45,6 +53,10 @@ export interface ExternalChildItemOut {
   unitCostOverride: number | null;
   fletePct: number | null;
   proveedor: string | null;
+  supplierCompanyName: string | null;
+  supplierContactName: string | null;
+  supplierContactPhone: string | null;
+  supplierContactEmail: string | null;
   isTaxable: boolean;
   deliveryDays: number | null;
   technicalSpecs: Record<string, unknown> | null;
