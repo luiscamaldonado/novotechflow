@@ -5,5 +5,5 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: { include: ['@repo/item-display'] },
-  build: { commonjsOptions: { include: [/@repo\/item-display/, /node_modules/] } },
+  build: { commonjsOptions: { include: [/item-display/, /node_modules/] } },
 })
