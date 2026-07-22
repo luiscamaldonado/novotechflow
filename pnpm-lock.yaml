@@ -44,6 +44,9 @@ importers:
       '@prisma/client':
         specifier: 5.10.2
         version: 5.10.2(prisma@5.10.2)
+      '@repo/item-display':
+        specifier: workspace:*
+        version: link:../../packages/item-display
       '@repo/pricing-engine':
         specifier: workspace:*
         version: link:../../packages/pricing-engine

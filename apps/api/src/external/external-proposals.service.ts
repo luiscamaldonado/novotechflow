@@ -15,7 +15,7 @@ import type {
   ExternalItemOut,
   ExternalChildItemOut,
 } from './dto/external-proposals.dto';
-import { buildQuickDescription, pickSpecString, resolveItemTypeLabel } from './external-spec-fields';
+import { buildQuickDescription, pickSpecString, resolveItemTypeLabel } from '@repo/item-display';
 
 type ScenarioItemRel =
   ExternalProposalWithRelations['scenarios'][number]['scenarioItems'][number];
