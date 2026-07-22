@@ -31,11 +31,11 @@ export function pickSpecString(specs: SpecsInput, key: string): string | null {
  * Campos que componen la descripcion rapida por categoria (pantalla, PDF y API externa).
  */
 export const QUICK_DESCRIPTION_FIELDS_BY_ITEM_TYPE: Record<string, readonly string[]> = {
-  PCS: ['fabricante', 'modelo', 'procesador', 'memoriaRam', 'almacenamiento', 'garantiaEquipo'],
-  ACCESSORIES: ['tipo', 'fabricante', 'modelo'],
+  PCS: ['formato', 'fabricante', 'modelo', 'procesador', 'memoriaRam', 'almacenamiento', 'garantiaBateria', 'garantiaEquipo'],
+  ACCESSORIES: ['tipo', 'fabricante', 'modelo', 'garantia'],
   SOFTWARE: ['tipo', 'fabricante', 'modelo'],
   PC_SERVICES: ['tipo', 'responsable', 'modelo'],
-  INFRASTRUCTURE: ['tipo', 'fabricante', 'modelo'],
+  INFRASTRUCTURE: ['tipo', 'fabricante', 'modelo', 'garantia'],
   INFRA_SERVICES: ['tipo', 'responsable', 'modelo'],
 };
 
@@ -44,11 +44,11 @@ export const QUICK_DESCRIPTION_FIELDS_BY_ITEM_TYPE: Record<string, readonly stri
  * mas unidadMedida en las categorias que la manejan.
  */
 export const QUICK_SPEC_FIELDS_BY_ITEM_TYPE: Record<string, readonly string[]> = {
-  PCS: ['fabricante', 'modelo', 'procesador', 'memoriaRam', 'almacenamiento', 'garantiaEquipo'],
-  ACCESSORIES: ['tipo', 'fabricante', 'modelo'],
+  PCS: ['formato', 'fabricante', 'modelo', 'procesador', 'memoriaRam', 'almacenamiento', 'garantiaBateria', 'garantiaEquipo'],
+  ACCESSORIES: ['tipo', 'fabricante', 'modelo', 'garantia'],
   SOFTWARE: ['tipo', 'fabricante', 'modelo', 'unidadMedida'],
   PC_SERVICES: ['tipo', 'responsable', 'modelo', 'unidadMedida'],
-  INFRASTRUCTURE: ['tipo', 'fabricante', 'modelo'],
+  INFRASTRUCTURE: ['tipo', 'fabricante', 'modelo', 'garantia'],
   INFRA_SERVICES: ['tipo', 'responsable', 'modelo', 'unidadMedida'],
 };
 
