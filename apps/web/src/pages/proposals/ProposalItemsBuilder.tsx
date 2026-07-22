@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { ProposalItem, ProposalDetail, TechnicalSpecs } from '../../lib/types';
-import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, PROVEEDOR_OPTIONS, PROVEEDOR_NOVOTECHNO, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY } from '../../lib/constants';
+import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, PROVEEDOR_OPTIONS, PROVEEDOR_NOVOTECHNO, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY, QUICK_SPEC_FIELDS_BY_ITEM_TYPE, SPEC_FIELDS_BY_ITEM_TYPE } from '../../lib/constants';
 import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '../../lib/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import PrefillModal from './components/PrefillModal';
@@ -21,6 +21,23 @@ import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
 import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
+
+/** Clases base de un chip de specs en la tabla de items. */
+const SPEC_CHIP_BASE_CLASS = 'px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border';
+/** Color por campo: conserva el codigo de colores que tenian los chips hardcodeados. */
+const SPEC_CHIP_COLOR_BY_FIELD: Record<string, string> = {
+    modelo: 'bg-rose-50 text-rose-600 border-rose-100/50',
+    procesador: 'bg-indigo-50 text-indigo-600 border-indigo-100/50',
+    memoriaRam: 'bg-emerald-50 text-emerald-600 border-emerald-100/50',
+    almacenamiento: 'bg-amber-50 text-amber-600 border-amber-100/50',
+    garantiaBateria: 'bg-cyan-50 text-cyan-600 border-cyan-100/50',
+    garantiaEquipo: 'bg-cyan-50 text-cyan-600 border-cyan-100/50',
+    garantia: 'bg-emerald-50 text-emerald-600 border-emerald-100/50',
+    responsable: 'bg-indigo-50 text-indigo-600 border-indigo-100/50',
+    unidadMedida: 'bg-emerald-50 text-emerald-600 border-emerald-100/50',
+};
+/** Color por defecto de un chip sin color propio. */
+const SPEC_CHIP_COLOR_DEFAULT = 'bg-slate-100 text-slate-500 border-slate-200/50';
 
 export default function ProposalItemsBuilder() {
     const { id } = useParams<{ id: string }>();
@@ -643,49 +660,18 @@ export default function ProposalItemsBuilder() {
                                                 <div className="flex flex-col">
                                                     <span className="font-black text-slate-900 text-base mb-1 tracking-tight">{i.name}</span>
                                                     {i.description && <span className="text-[11px] text-slate-400 font-bold mb-2 italic">"{i.description}"</span>}
-                                                    {i.itemType === 'PCS' && i.technicalSpecs && (
+                                                    {i.technicalSpecs && (
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.modelo && <span className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-rose-100/50">{i.technicalSpecs.modelo}</span>}
-                                                            {i.technicalSpecs.procesador && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.procesador}</span>}
-                                                            {i.technicalSpecs.memoriaRam && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.memoriaRam}</span>}
-                                                            {i.technicalSpecs.almacenamiento && <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-amber-100/50">{i.technicalSpecs.almacenamiento}</span>}
-                                                            {i.technicalSpecs.garantiaEquipo && <span className="px-2.5 py-1 bg-cyan-50 text-cyan-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-cyan-100/50">{i.technicalSpecs.garantiaEquipo}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'ACCESSORIES' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.garantia && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.garantia}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'PC_SERVICES' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.responsable && <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-indigo-100/50">{i.technicalSpecs.responsable}</span>}
-                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-amber-100/50">{i.technicalSpecs.unidadMedida}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'SOFTWARE' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-purple-50 text-purple-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-purple-100/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.unidadMedida}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'INFRASTRUCTURE' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.fabricante && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.fabricante}</span>}
-                                                            {i.technicalSpecs.garantia && <span className="px-2.5 py-1 bg-orange-50 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-orange-100/50">{i.technicalSpecs.garantia}</span>}
-                                                        </div>
-                                                    )}
-                                                    {i.itemType === 'INFRA_SERVICES' && i.technicalSpecs && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-1">
-                                                            {i.technicalSpecs.tipo && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-slate-200/50">{i.technicalSpecs.tipo}</span>}
-                                                            {i.technicalSpecs.responsable && <span className="px-2.5 py-1 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm">{i.technicalSpecs.responsable}</span>}
-                                                            {i.technicalSpecs.unidadMedida && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border border-emerald-100/50">{i.technicalSpecs.unidadMedida}</span>}
+                                                            {(QUICK_SPEC_FIELDS_BY_ITEM_TYPE[i.itemType] ?? []).map((field) => {
+                                                                const value = (i.technicalSpecs as Record<string, string | undefined>)?.[field]?.trim();
+                                                                if (!value) return null;
+                                                                const label = SPEC_FIELDS_BY_ITEM_TYPE[i.itemType]?.[field]?.label ?? field;
+                                                                return (
+                                                                    <span key={field} className={cn(SPEC_CHIP_BASE_CLASS, SPEC_CHIP_COLOR_BY_FIELD[field] ?? SPEC_CHIP_COLOR_DEFAULT)}>
+                                                                        {label}: {value}
+                                                                    </span>
+                                                                );
+                                                            })}
                                                         </div>
                                                     )}
                                                 </div>
