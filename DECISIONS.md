@@ -2819,3 +2819,57 @@ El enrutamiento de modelo/esfuerzo queda alineado a la guía oficial vigente y F
 - Renumerar en `feature/wysiwyg-pages` el ADR-067 (vista previa WYSIWYG) a ADR-069 antes del merge: colisiona con el ADR-067 de master (numeroParte/`@repo/item-display`). El ADR del modelo de secciones tomará el 070.
 - Reemplazar el attachment `INSTRUCTIVO_CLAUDE.md` del proyecto en Claude.ai con la versión de este commit (gana el disco).
 - Actualizar las instrucciones del proyecto en Claude.ai (español neutro, referencia a Railway MCP) — entrega manual a Luis.
+
+## ADR-069 — Estados APLAZADA y CANCELADA: terminales, fuera de proyección y exentos de higiene
+
+**Fecha:** 2026-07-23
+**Estado:** Implementado
+
+### Contexto
+
+El enum `ProposalStatus` tenía seis valores y no existía forma de registrar una propuesta que queda sin seguimiento comercial: ni la que el cliente pospone, ni la que se cae. El requerimiento fue que ambas situaciones se vean como estado propio en la tabla de registros del dashboard, para propuestas existentes y nuevas.
+
+El frontend duplica el enum a mano como unión de literales en `apps/web/src/lib/types.ts`, y los subconjuntos de negocio —pipeline, forecast, proyección, exenciones de higiene— están declarados por separado en varios archivos en vez de derivarse de una sola fuente. Cualquier estado nuevo obliga a revisarlos todos.
+
+Restricción de ejecución: la base local tenía aplicada la migración `20260718193601_add_section_model_to_proposal_page`, que solo existe en el directorio de `feature/wysiwyg-pages`. `prisma migrate status` (5.10.2) no reporta ese desfase —solo verifica que las migraciones locales estén aplicadas, no lo inverso—, pero `migrate dev --create-only` sí lo detecta contra la shadow database y ofrece resetear la base.
+
+### Decisión
+
+- **Dos estados, no uno combinado**: `APLAZADA` y `CANCELADA` como valores separados del enum. Un solo estado fusionado impediría después medir cuántas propuestas se retoman y cuántas mueren, y obligaría a reclasificar a mano lo ya marcado.
+- **Terminales y no facturables**: quedan fuera de Proyección Venta y Proyección DaaS sin tocar código, porque `computeBillingCards` solo suma filas en `FACTURADA` y `PENDIENTE_FACTURAR`. `FORECAST_STATUSES` no se modifica, así que tampoco inflan el forecast.
+- **Visibles en el pipeline**: entran a `PIPELINE_STATUSES` como dos tarjetas nuevas. La grilla pasa de `lg:grid-cols-4` fijo a `lg:grid-cols-3 xl:grid-cols-6` para alojar seis tarjetas.
+- **Exentos de las reglas de higiene**: nueva constante `TERMINAL_STATUSES` en `dashboardValidation.ts`; los dos estados se agregan a `R5_EXEMPT_STATUSES` y la regla R2 (`ACQUISITION_REQUIRED`) los excluye. Sin esta exención, cada propuesta aplazada o cancelada quedaría como aviso permanente y bloquearía crear, editar y clonar a los usuarios no ADMIN vía `runWithCleanBoard`.
+- **No disponibles al crear**: `CreateProposalDto` mantiene `@IsIn([ELABORACION, PROPUESTA])`. `NewProposal.tsx` ya tenía los dos estados iniciales hardcodeados como botones, no derivados de `ALL_STATUSES`, por lo que no requirió cambio y no se creó una constante `CREATION_STATUSES`.
+- **Migración generada desde `feature/wysiwyg-pages`**: allí el directorio de migraciones y la base local coinciden y no hay desfase. El `migration.sql` resultante se movió por `$env:TEMP` a una rama corta desde `master` y se aplicó con `migrate deploy`, que no usa shadow database ni puede resetear. Se evitó el reset sin perder datos locales.
+
+### Consecuencias
+
+- `ALTER TYPE ... ADD VALUE` es de una sola vía: quitar un valor exige recrear el tipo, reescribir la columna `status` y su `@@index([status])`. Los nombres quedan fijos una vez desplegados.
+- La base local quedó con una migración registrada que `feature/wysiwyg-pages` no tiene en su directorio: el espejo exacto del desfase anterior. Se resuelve al rebasar esa rama sobre `master` después del push. Mientras tanto, correr `migrate dev` en esa rama volvería a ofrecer reset.
+- `STATUS_CONFIG` es `Record<ProposalStatus, ...>` estricto y forzó la exhaustividad en compilación. `STATUS_FILL` en `exportDashboard.ts` es `Record<string, ...>` suelto: un valor nuevo sin entrada no habría fallado el `tsc`, solo habría salido sin color en el Excel. La cobertura se agregó a mano.
+- `BillingProjection` reutiliza el mismo enum y sus DTO son interfaces planas con `status?: string`, sin `class-validator`. Con dos valores más, el endpoint de proyecciones acepta ahora `APLAZADA` y `CANCELADA` sin validación en la capa API.
+- El cambio de estado desde el dashboard sigue sin máquina de estados: cualquiera de los ocho valores es elegible para una propuesta existente, en ambos sentidos. Aplazar o cancelar es reversible.
+
+### Archivos
+
+- `apps/api/prisma/schema.prisma` — enum `ProposalStatus`
+- `apps/api/prisma/migrations/20260723192442_add_proposal_status_aplazada_cancelada/migration.sql`
+- `apps/web/src/lib/types.ts` — unión `ProposalStatus`
+- `apps/web/src/lib/constants.ts` — `STATUS_CONFIG`, `ALL_STATUSES`
+- `apps/web/src/hooks/useDashboard.ts` — `PIPELINE_STATUSES`
+- `apps/web/src/pages/dashboard/PipelineCards.tsx` — grilla de tarjetas
+- `apps/web/src/lib/exportDashboard.ts` — `STATUS_FILL`
+- `apps/web/src/lib/dashboardValidation.ts` — `TERMINAL_STATUSES`, `R5_EXEMPT_STATUSES`, regla R2
+
+### Commits
+
+- `5fe1ca1` — feat(proposals): add APLAZADA and CANCELADA to ProposalStatus enum
+- `2e1e57d` — feat(dashboard): support APLAZADA and CANCELADA proposal statuses
+
+### Pendientes
+
+- **Renumeración en `feature/wysiwyg-pages`**: esa rama tiene un ADR numerado 069 que ahora colisiona. Se renumera con `str_replace` puntual al rebasar sobre `master`. La numeración la manda `master`.
+- **`BillingProjection` sin validación de estado**: sus DTO son interfaces con `status?: string` y un cast en runtime. Falta un DTO con `class-validator` que restrinja el conjunto permitido.
+- **Subconjuntos de estado dispersos**: `PIPELINE_STATUSES`, `FORECAST_STATUSES`, `PROJECTION_STATUSES`, `R5_EXEMPT_STATUSES` y `TERMINAL_STATUSES` viven en tres archivos distintos. Evaluar derivarlos de una sola declaración para que un estado nuevo no obligue a auditar todo.
+- **`STATUS_FILL` con tipado suelto**: pasarlo a `Record<ProposalStatus, ...>` para que el compilador exija exhaustividad, como ya hace `STATUS_CONFIG`.
+- **Verificación en producción**: confirmar tras el despliegue que los dos estados aparecen en el selector y que las proyecciones no los suman.
