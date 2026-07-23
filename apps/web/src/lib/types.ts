@@ -7,7 +7,7 @@
 export type UserRole = 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
 
 /** Posibles estados de una propuesta. */
-export type ProposalStatus = 'ELABORACION' | 'PROPUESTA' | 'GANADA' | 'PERDIDA' | 'PENDIENTE_FACTURAR' | 'FACTURADA';
+export type ProposalStatus = 'ELABORACION' | 'PROPUESTA' | 'GANADA' | 'PERDIDA' | 'PENDIENTE_FACTURAR' | 'FACTURADA' | 'APLAZADA' | 'CANCELADA';
 
 /** Tipos de adquisición. */
 export type AcquisitionType = 'VENTA' | 'DAAS';

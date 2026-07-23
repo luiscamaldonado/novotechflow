@@ -27,6 +27,8 @@ const STATUS_FILL: Record<string, { bg: string; fg: string }> = {
     PERDIDA:            { bg: 'FFFEE2E2', fg: 'FF991B1B' },
     PENDIENTE_FACTURAR: { bg: 'FFFFEDD5', fg: 'FF9A3412' },
     FACTURADA:          { bg: 'FFCCFBF1', fg: 'FF134E4A' },
+    APLAZADA:           { bg: 'FFF3E8FF', fg: 'FF6B21A8' },
+    CANCELADA:          { bg: 'FFF1F5F9', fg: 'FF1E293B' },
 };
 
 /** Acquisition → { fill, font } for Excel cells. */

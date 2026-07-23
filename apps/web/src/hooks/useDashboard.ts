@@ -52,7 +52,7 @@ export interface BillingCards {
 }
 
 /** Statuses displayed in the pipeline cards. */
-const PIPELINE_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA'];
+const PIPELINE_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA', 'APLAZADA', 'CANCELADA'];
 
 /** Statuses that count towards the active forecast (not yet won/lost). */
 const FORECAST_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA'];
