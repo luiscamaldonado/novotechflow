@@ -20,6 +20,8 @@ enum ProposalStatus {
   PERDIDA
   PENDIENTE_FACTURAR
   FACTURADA
+  APLAZADA
+  CANCELADA
 }
 
 enum ItemType {
