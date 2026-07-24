@@ -260,7 +260,6 @@ export class PagesService {
         title: data.title,
         variables: data.variables as object | undefined,
       },
-      include: { blocks: { orderBy: { sortOrder: 'asc' } } },
     });
   }
 
@@ -297,7 +296,7 @@ export class PagesService {
         }),
       ),
     );
-    return this.getPagesByProposalId(proposalId);
+    return data.pageIds.map((id, index) => ({ id, sortOrder: index + 1 }));
   }
 
   /**
@@ -364,6 +363,13 @@ export class PagesService {
     return this.prisma.proposalPageBlock.update({
       where: { id: blockId },
       data: { content: contentToSave as object | undefined },
+      select: {
+        id: true,
+        pageId: true,
+        blockType: true,
+        sortOrder: true,
+        createdAt: true,
+      },
     });
   }
 
@@ -396,9 +402,6 @@ export class PagesService {
         }),
       ),
     );
-    return this.prisma.proposalPageBlock.findMany({
-      where: { pageId },
-      orderBy: { sortOrder: 'asc' },
-    });
+    return data.blockIds.map((id, index) => ({ id, sortOrder: index + 1 }));
   }
 }
