@@ -2873,3 +2873,67 @@ Restricción de ejecución: la base local tenía aplicada la migración `2026071
 - **Subconjuntos de estado dispersos**: `PIPELINE_STATUSES`, `FORECAST_STATUSES`, `PROJECTION_STATUSES`, `R5_EXEMPT_STATUSES` y `TERMINAL_STATUSES` viven en tres archivos distintos. Evaluar derivarlos de una sola declaración para que un estado nuevo no obligue a auditar todo.
 - **`STATUS_FILL` con tipado suelto**: pasarlo a `Record<ProposalStatus, ...>` para que el compilador exija exhaustividad, como ya hace `STATUS_CONFIG`.
 - **Verificación en producción**: confirmar tras el despliegue que los dos estados aparecen en el selector y que las proyecciones no los suman.
+
+## ADR-070 — Cierre del incidente de crecimiento de DB y payloads calientes (cohorte 1)
+
+**Fecha:** 2026-07-24
+**Estado:** Aceptada
+
+### Contexto
+
+Incidente abierto desde junio 2026: lentitud intermitente en producción con ERR_HTTP2_PROTOCOL_ERROR y 502 esporádicos en `/presence/active` y `/app-settings/maintenance-banner`. En julio se sumó el hallazgo de que la base de producción pesaba 918 MB frente a un dump de junio de 71 MB.
+
+Diagnóstico (restauración local del dump del 23-jul, rescate del dump truncado de junio como testigo, lecturas de metadata en producción y experimento A/B de colisión poll↔payload contra producción):
+
+- El 97% de la base es `proposal_page_blocks` (886 MB vivos, casi todo TOAST); el 94% es la columna `content` (jsonb). El 98% del peso de esa columna son bytes duplicados: la plantilla "PROPUESTA DE VALOR" contiene una imagen base64 de ~2,5 MB que `initializeDefaultPages` materializa como bloque propio en cada propuesta (286 copias = 709 MB) y `cloneProposal` re-duplica en cada clon o versión.
+- El crecimiento es lineal (~9–10 MB/día) desde el 5 de mayo (lanzamiento del builder de páginas), sin salto. El aparente salto 71→637 MB era un artefacto: el dump del 12-jun estaba truncado — el `pg_dump` fue interrumpido por el reinicio de Postgres del deploy `pre184`, 14 minutos después de iniciado, y quedó archivado seis semanas como backup válido.
+- Postgres está sano (bloat ~2%, autovacuum coherente): el tamaño de la base no es la causa directa de la lentitud.
+- Las rutas calientes movían bytes desproporcionados: el guard JWT seleccionaba `signatureUrl` (hasta 763 kB de base64) en cada request autenticado y lo descartaba; abrir el doc builder descargaba el payload completo dos veces (5,6 MB p50 ×2, sin compresión); guardar una imagen movía ~10 MB entre subida y ecos; editar un título echoaba ~2,6 MB.
+- Falsos positivos descartados con evidencia: el fan-out del dashboard (payload real 0,3–1,3 MB), los upserts en el GET del maintenance-banner (ya era lectura pura; el patrón sí existía en `price-thresholds`, `supplier-field-requirements` e `inactivity-timeout`) y el tamaño de la base como causa de la lentitud.
+- El mecanismo exacto de los 502 no se reprodujo con tráfico GET (una descarga de 4,4 MB no degradó los polls ni en conexiones aisladas ni multiplexados en h2); queda como hipótesis el path de escritura bajo concurrencia (parse y validación de bodies de MBs, base64 síncrono del upload, transacción del clone).
+
+### Decisión
+
+Atacar el incidente en dos cohortes. Cohorte 1 (esta, táctica, sin migración de schema) en la rama `fix/incident-payloads`:
+
+1. El guard JWT valida con select mínimo: nuevo `findOneByIdForAuth` (`id`, `isActive`); `signatureUrl` deja de viajar Postgres→Node en cada request.
+2. Los GET de app-settings pasan a lectura pura con defaults en memoria (patrón `getMaintenanceBanner`); los write paths que hacían `update` seco pasan a `upsert` (cierra un bug latente P2025 con fila ausente).
+3. `compression()` (gzip) en el API.
+4. El builder monta con la respuesta del POST `initialize` (payload idéntico al GET): una sola descarga; las mutaciones actualizan estado local sin consumir ecos.
+5. Respuestas de mutación adelgazadas: `updatePage` sin `blocks`, `updateBlock` sin `content`, reorders retornan `[{id, sortOrder}]`.
+
+Cohorte 2 (estructural, feature propia con ADR propio, tras llegar `feature/wysiwyg-pages` a master): extraer las imágenes del JSONB a una tabla de assets deduplicada por hash dentro de Postgres (se mantiene "sin storage externo"), bloques y plantillas por referencia, endpoint de assets cacheable, con migración de datos sobre `pg_dump` previo.
+
+### Consecuencias
+
+- Payloads calientes reducidos: montaje del builder a la mitad, mutaciones de MBs a kBs, requests autenticados sin arrastre de firmas, JSON de texto comprimido (el base64 solo comprime ~25–30%).
+- El crecimiento de la base sigue activo (~2,5 MB por propuesta nueva) hasta la cohorte 2.
+- Divergencia aceptada en RICH_TEXT: el html local queda pre-sanitización hasta la próxima recarga (se autocorrige).
+- Ventana de deploy: una pestaña con bundle viejo contra el API nuevo crashea el builder al renombrar o reordenar (sin pérdida de datos; se recupera con refresh). Push sin usuarios activos o avisando refrescar.
+- `findOneById` queda sin callers (limpieza futura).
+- Verificación causal invertida: si la lentitud persiste tras el deploy, el incidente se reabre con waterfall de navegador en uso real como primer paso.
+- El protocolo de backups queda señalado: sin verificación post-dump archivó un backup corrupto seis semanas; todo dump nuevo se verifica al crearlo (`pg_restore -l` completo + tamaño plausible).
+
+### Archivos
+
+- `apps/api/src/auth/jwt.strategy.ts`, `apps/api/src/users/users.service.ts`
+- `apps/api/src/app-settings/app-settings.service.ts`
+- `apps/api/src/main.ts`, `apps/api/package.json`, `pnpm-lock.yaml`
+- `apps/web/src/hooks/useProposalPages.ts`
+- `apps/api/src/proposals/pages.service.ts`
+
+### Commits
+
+- `7901d12` fix(auth): use minimal select in jwt validation
+- `dce0be6` fix(app-settings): convert config GETs to pure reads
+- `ade7594` feat(api): enable gzip response compression
+- `54dd1b4` fix(web): use initialize response and local updates in doc builder
+- `f25dced` fix(api): slim mutation responses in pages endpoints
+
+### Pendientes
+
+- Cohorte 2: assets deduplicados por hash (ADR propio al implementarla).
+- Verificación post-dump en el protocolo de backups.
+- Limpieza de `findOneById` sin callers.
+- Errores prettier preexistentes en `app-settings.service.ts` (heredados de master).
+- Escape Unicode literal en text node JSX de `BlockEditor.tsx` (cosmético, registrado aparte).
