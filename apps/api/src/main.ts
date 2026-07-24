@@ -14,6 +14,9 @@ const compression = require('compression');
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // 1 y no true: con true, una XFF forjada decide req.ip si el edge appendea (anexo trust proxy en docs/diagnostico-2026-07-24-deps-bundle.md)
+  app.set('trust proxy', 1);
+
   app.use(compression());
 
   app.use(json({ limit: '50mb' }));
