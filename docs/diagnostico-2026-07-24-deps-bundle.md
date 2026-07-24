@@ -421,3 +421,397 @@ Dato asociado, ya medido en el Bloque B: la imagen `nginx:alpine` por defecto tr
 7. **Alcance real del `express` no declarado (A.3-bis).** No se determinó si el import de [main.ts:8](apps/api/src/main.ts:8) llega a resolverse dentro del contenedor. Depende de la misma incógnita de la pregunta 2: si el `COPY` de `node_modules` preserva el layout de `.pnpm` o no. Tampoco se comprobó si `pnpm build` fallaría en un entorno con `node-linker=isolated` estricto.
 
 8. **Cifras de gzip reales servidas.** Todas las cifras gzip del Bloque B las calcula Vite en build. Dado el Bloque C (`gzip off`), no se midió qué entrega realmente el nginx de producción ni si Railway interpone alguna capa de compresión en el edge por delante del contenedor.
+
+---
+
+# Anexo: exposición de Swagger
+
+**Fecha de medición:** 2026-07-24. **Rama:** `chore/audit-deps-y-bundle` @ `7033683`, árbol de trabajo limpio.
+**Alcance:** solo diagnóstico. **No se modificó `main.ts` ni ningún otro código de aplicación.** El fix de la sección D.11–D.12 está redactado pero **no aplicado**.
+**Servicio medido:** servicio Railway `novotechflow` (el API NestJS), entorno `production`.
+
+> Nota sobre el commit desplegado: el despliegue activo es `410db2f` (`SUCCESS`, 2026-07-24T18:12:57Z), dos commits por detrás de la rama local. `git diff 410db2f 7033683 -- apps/api/src/main.ts apps/api/src/app.module.ts apps/api/src/auth/auth.controller.ts` sale **vacío**: los tres ficheros relevantes son idénticos entre lo desplegado y lo medido en local. Los dos commits de diferencia son `17b4979` (docs) y `7033683` (nginx de `apps/web`). Las mediciones de red y la lectura de código describen, por tanto, el mismo código.
+
+---
+
+## A — Código
+
+### A.1 — `apps/api/src/main.ts`, línea 60 al final del bootstrap
+
+Transcripción textual:
+
+```ts
+60	    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+61	  }
+62	
+63	  // Serve uploaded images as static files
+64	  app.useStaticAssets(uploadsPath, { prefix: '/uploads/' });
+65	
+66	  // Swagger / OpenAPI
+67	  const swaggerConfig = new DocumentBuilder()
+68	    .setTitle('NovoTechFlow API')
+69	    .setDescription('API de cotizaciones comerciales para NOVOTECHNO')
+70	    .setVersion('1.0')
+71	    .addBearerAuth()
+72	    .build();
+73	  const document = SwaggerModule.createDocument(app, swaggerConfig);
+74	  SwaggerModule.setup('api/docs', app, document);
+75	
+76	  await app.listen(process.env.PORT ?? 3000);
+77	}
+78	bootstrap();
+```
+
+> Corrección de numeración respecto al enunciado y al diagnóstico previo: el bloque de Swagger está en **[main.ts:66-74](apps/api/src/main.ts:66)**, no en 72-73. Las líneas 72-73 citadas antes corresponden a `.build();` y `createDocument(...)`. El fichero completo tiene 78 líneas.
+
+**Confirmado: no hay ninguna guarda de entorno.** Entre `app.useStaticAssets(...)` ([main.ts:64](apps/api/src/main.ts:64)) y `await app.listen(...)` ([main.ts:76](apps/api/src/main.ts:76)) no existe ningún `if`, ningún ternario, ni ninguna lectura de `process.env` distinta de `PORT`. El bloque se ejecuta incondicionalmente en todo arranque del proceso.
+
+### A.2 — Variables de entorno que controlen Swagger
+
+**No existe ninguna.** Búsquedas ejecutadas y su resultado:
+
+| Búsqueda | Ámbito | Resultado |
+|---|---|---|
+| `SWAGGER｜API_DOCS｜DOCS_｜_DOCS｜docs-yaml｜SwaggerModule｜DocumentBuilder` (case-insensitive) | `apps/api/` completo | 23 hits, **todos** son `import` de decoradores (`ApiTags`, `ApiProperty`, `ApiBearerAuth`, `ApiOperation`), la dependencia en `package.json:33`, y las 4 líneas de `main.ts`. Ninguno es una lectura de entorno. |
+| `SWAGGER｜DOCS｜NODE_ENV` (case-insensitive) | todos los `.env*` del repo (`.env`, `apps/api/.env`, `apps/api/.env.example`, backup) | **0 coincidencias** |
+
+Contenido íntegro de las variables declaradas en [apps/api/.env.example](apps/api/.env.example): `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`. **No hay ninguna entrada relativa a Swagger, docs ni `NODE_ENV`**, ni usada ni muerta.
+
+### A.3 — `NODE_ENV` en producción
+
+Servicio identificado con `railway status` (el CLI está enlazado a proyecto `novotechflow` / entorno `production`, sin servicio fijado). El servicio del API se llama **`novotechflow`** — no `api`:
+
+```
+Services
+  - api-external:  Online · https://api-external-production-9ce0.up.railway.app
+  - novotechflow:  Online · https://novotechflow-production.up.railway.app
+  - web:           Online · https://web-production-55504.up.railway.app
+```
+
+`railway variable list --json --service novotechflow` respondió correctamente. **`NODE_ENV` existe y vale `production`.**
+
+> Advertencia operativa: `railway variable list --json` imprime los **valores en claro** de todos los secretos del servicio (`DATABASE_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `RESEND_API_KEY`). Es el comportamiento conocido del CLI v5.23.3, también con salida de tabla. Ninguno de esos valores se ha transcrito a este documento. Si el comando se ejecuta en un terminal compartido o cuya salida se registra, conviene tenerlo presente.
+
+Variables no sensibles relevantes para este anexo:
+
+| Variable | Valor |
+|---|---|
+| `NODE_ENV` | `production` |
+| `PORT` | `3000` |
+| `RAILWAY_PUBLIC_DOMAIN` | `novotechflow-production.up.railway.app` |
+| `CORS_ORIGIN` | `https://web-production-55504.up.railway.app` |
+
+El servicio declara **8 variables propias** (el resto son inyectadas por Railway). `NODE_ENV=production` está correctamente fijado, lo cual hace **técnicamente viable** la opción de derivar la guarda de `NODE_ENV` (se evalúa en D.11).
+
+---
+
+## B — Alcanzabilidad real
+
+### B.4 — Dominio público
+
+**`novotechflow-production.up.railway.app`**, tomado de `RAILWAY_PUBLIC_DOMAIN` y confirmado por `railway status`. Servicio `Online`, región `us-west2`, **`numReplicas = 1`** (dato que importa en la sección C).
+
+### B.5 — Medición con `curl.exe`, sin credenciales
+
+Ninguna petición de esta sección llevó cabecera `Authorization`, cookie ni credencial de ningún tipo. Cliente anónimo desde una máquina Windows doméstica, fuera de la red de Railway.
+
+| Endpoint | HTTP | Bytes | Content-Type | Tiempo |
+|---|---:|---:|---|---:|
+| `/api/docs` | **200** | 3 126 | `text/html; charset=utf-8` | 0,523 s |
+| `/api/docs-yaml` | **200** | 44 413 | `text/yaml; charset=utf-8` | 0,444 s |
+| `/api/docs-json` | **200** | 34 151 | `application/json; charset=utf-8` | 0,415 s |
+| `/api/docs/swagger-ui-init.js` | **200** | 75 480 | `application/javascript; charset=utf-8` | — |
+
+Las dos últimas filas no estaban en el enunciado. Se añaden porque `SwaggerModule.setup()` registra **cuatro** rutas, no una, y omitirlas daría una imagen incompleta de la superficie expuesta (ver B.7-bis).
+
+### B.6 — Interpretación
+
+**Sí. Los cuatro endpoints responden `200 OK` a un cliente anónimo desde internet, sin autenticación de ningún tipo.** No hay 401, no hay 403, no hay 404, no hay redirección. El cuerpo se entrega completo y es directamente legible.
+
+### B.7 — Qué se está publicando
+
+Primeras 40 líneas de `GET /api/docs-yaml`:
+
+```yaml
+openapi: 3.0.0
+paths:
+  /:
+    get:
+      operationId: AppController_getHello
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      tags:
+        - App
+  /app-settings/inactivity-timeout:
+    get:
+      operationId: AppSettingsController_getInactivityTimeout
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Obtener timeout de inactividad (minutos)
+      tags:
+        - app-settings
+    patch:
+      operationId: AppSettingsController_updateInactivityTimeout
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInactivityTimeoutDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Actualizar timeout de inactividad (solo admin)
+      tags:
+        - app-settings
+```
+
+Dimensión del spec (contado sobre `/api/docs-json`, que es el mismo documento en JSON):
+
+| Métrica | Valor |
+|---|---:|
+| **Rutas distintas (claves de `paths`)** | **65** |
+| Operaciones (pares ruta+método) | 93 |
+| Esquemas en `components.schemas` | 43 |
+| Líneas del YAML | 1 895 |
+| Esquemas de seguridad | 1 (`bearer`) |
+
+Reparto de las 65 rutas por primer segmento:
+
+| Grupo | Rutas | | Grupo | Rutas |
+|---|---:|---|---|---:|
+| `proposals` | 26 | | `billing-projections` | 2 |
+| `admin` | 11 | | `catalogs` | 2 |
+| `templates` | 6 | | `presence` | 2 |
+| `app-settings` | 4 | | `suppliers` | 2 |
+| `auth` | 3 | | `clients` | 1 |
+| `users` | 3 | | `spec-options` | 1 |
+| `/` (raíz) | 1 | | `spec-prefill` | 1 |
+
+Es decir: se publica el **mapa completo de la API**, incluidas las 11 rutas bajo `/admin`, los nombres de operación internos (`AppSettingsController_updateInactivityTimeout`), las descripciones en lenguaje natural de cada endpoint (`"solo admin"`), y los 43 esquemas de request/response con sus campos y tipos. El spec **no contiene secretos ni datos de negocio** — es metadatos de la superficie HTTP —, pero equivale a entregar la documentación de reconocimiento completa a cualquiera que pida la URL.
+
+### B.7-bis — `/api/docs-yaml` no es el único vector
+
+Dato que condiciona la elección del fix (D.11): **el HTML de `/api/docs` no carga el spec desde `/api/docs-yaml` ni desde `/api/docs-json`.** `SwaggerModule.serveSwaggerUi()` genera `/api/docs/swagger-ui-init.js` con el documento **incrustado en el propio JavaScript**. Verificado: ese fichero pesa 75 480 bytes (más que el YAML y que el JSON) y contiene los marcadores `"swaggerDoc"`, `AppController_getHello` y `securitySchemes`.
+
+Consecuencia práctica: **bloquear `/api/docs-yaml` y dejar `/api/docs` no oculta nada.** El spec íntegro seguiría descargable en `/api/docs/swagger-ui-init.js`, y además en `/api/docs-json`.
+
+---
+
+## C — Throttle
+
+### C.10 — Configuración del `ThrottlerModule`
+
+[app.module.ts:35](apps/api/src/app.module.ts:35), forma de array sin nombre (es decir, el throttler `default`):
+
+```ts
+ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }]),
+```
+
+**`ttl = 60000 ms` (60 s), `limit = 30` peticiones.** Registrado como guarda global en [app.module.ts:38](apps/api/src/app.module.ts:38):
+
+```ts
+providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+```
+
+Sobrescrituras por ruta encontradas en `apps/api/src`:
+
+| Decorador | Ubicación | Efecto |
+|---|---|---|
+| `@Throttle({ default: { limit: 5, ttl: 60000 } })` | [auth.controller.ts:20](apps/api/src/auth/auth.controller.ts:20) (`POST /auth/login`) | 5 / 60 s |
+| `@Throttle({ default: { limit: 5, ttl: 60000 } })` | [auth.controller.ts:34](apps/api/src/auth/auth.controller.ts:34) (`POST /auth/verify-code`) | 5 / 60 s |
+| `@Throttle({ default: { limit: 3, ttl: 60000 } })` | [auth.controller.ts:41](apps/api/src/auth/auth.controller.ts:41) (`POST /auth/resend-code`) | 3 / 60 s |
+| `@SkipThrottle()` | `app-settings.controller.ts:58` y `:105`, `presence.controller.ts:29` y `:37`, `proposals.controller.ts:81` | exentos |
+
+Versión instalada: `@nestjs/throttler@6.5.0`.
+
+### C.8 — 10 peticiones secuenciales a `/api/docs-yaml`
+
+| # | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| HTTP | 200 | 200 | 200 | 200 | 200 | 200 | 200 | 200 | 200 | 200 |
+
+**Ningún 429.** El hallazgo previo no queda desmentido por esta prueba.
+
+> **Pero esta prueba, por sí sola, no demuestra nada.** Con `limit = 30` por ventana de 60 s, 10 peticiones **no pueden** disparar un 429 ni siquiera en una ruta correctamente protegida. El resultado es exactamente el que se obtendría con el throttler funcionando. Se ejecutó tal como se pidió, pero la conclusión hay que sostenerla con la evidencia de C.8-bis, no con esta tabla.
+
+### C.8-bis — Prueba decisiva: cabeceras `X-RateLimit-*` (sin carga adicional)
+
+`ThrottlerGuard` de v6.5.0 escribe tres cabeceras en **toda** respuesta que pase por él (`throttler.guard.js:135-137`):
+
+```js
+res.header(`${this.headerPrefix}-Limit...`, limit);
+res.header(`${this.headerPrefix}-Remaining...`, Math.max(0, limit - totalHits));
+res.header(`${this.headerPrefix}-Reset...`, timeToExpire);
+```
+
+Su presencia o ausencia es una firma directa de si la guarda se ejecutó. Medido:
+
+| Petición | Cabeceras devueltas |
+|---|---|
+| `GET /api/docs-yaml` | `HTTP/1.1 200 OK` — **ninguna cabecera `X-RateLimit-*`, ninguna `Retry-After`** |
+| `POST /auth/login` | `HTTP/1.1 401` + `x-ratelimit-limit: 5` + `x-ratelimit-remaining: 4` + `x-ratelimit-reset: 60` |
+
+**Conclusión firme: el `ThrottlerGuard` nunca se ejecuta para `/api/docs-yaml`.** No es que permita las peticiones — es que la ruta no atraviesa el pipeline de guardas de Nest en absoluto. Esto confirma el mecanismo apuntado en el diagnóstico previo, y ahora verificado sobre el paquete instalado: `swagger-module.js` registra las rutas con `httpAdapter.get()` (líneas `197`, `198`, `210`, `221`), es decir, directamente sobre el adaptador Express, por debajo del router de Nest. El `APP_GUARD` de [app.module.ts:38](apps/api/src/app.module.ts:38) solo cubre rutas resueltas por el router.
+
+### C.9 — Control contra una ruta del router de Nest
+
+Se eligió `POST /auth/login` con credenciales inválidas a propósito (`nonexistent@example.invalid` / `deliberately-wrong`), porque su `@Throttle` de **5/60 s** sí permite superar el umbral dentro del presupuesto de 10 peticiones.
+
+**Primer intento — inválido, se descarta.** Las 10 peticiones devolvieron `400`:
+
+| # | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| HTTP | 400 | 400 | 400 | 400 | 400 | 400 | 400 | 400 | 400 | 400 |
+
+Causa: el escapado `'{\"email\":...}'` en PowerShell llega literal a `curl.exe`, produciendo JSON malformado. El `400` lo emite el middleware `body-parser` de Express, que corre **antes** que cualquier guarda de Nest. Las peticiones nunca alcanzaron el `ThrottlerGuard`, así que la prueba no medía nada. Se repitió con el cuerpo en fichero (`--data-binary "@login.json"`).
+
+**Segundo intento — válido:**
+
+| # | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| HTTP | 401 | 401 | 401 | 401 | 401 | 401 | 401 | 401 | 401 | 401 |
+
+`401` confirma que la petición llega al handler. Pero **tampoco aparece ningún 429**, pese a que el límite de esa ruta es 5 y se hicieron 10 peticiones.
+
+**El control falló en su propósito: no demuestra que el throttler funcione en general. Demuestra lo contrario.**
+
+### C.9-bis — Hallazgo no previsto: el throttler es inoperante en producción para todas las rutas
+
+Tres peticiones consecutivas a `POST /auth/login`, leyendo la cabecera:
+
+```
+req 1 : 401 | x-ratelimit-limit: 5 | x-ratelimit-remaining: 4 | x-ratelimit-reset: 60
+req 2 : 401 | x-ratelimit-limit: 5 | x-ratelimit-remaining: 4 | x-ratelimit-reset: 60
+req 3 : 401 | x-ratelimit-limit: 5 | x-ratelimit-remaining: 4 | x-ratelimit-reset: 60
+```
+
+`remaining` se queda clavado en **4** y `reset` en **60**. Como el valor es `limit - totalHits`, un `remaining` de 4 significa `totalHits = 1`: **cada petición estrena su propio contador**. La guarda se ejecuta, cuenta, y escribe en una clave distinta cada vez.
+
+Hipótesis descartadas:
+
+- **Varias réplicas con almacenamiento en memoria separado.** Descartada: el manifiesto del despliegue declara `numReplicas = 1` en `us-west2`.
+- **Código desplegado sin los decoradores.** Descartada: `git show 410db2f:apps/api/src/auth/auth.controller.ts` contiene los tres `@Throttle`, y el diff contra `7033683` es vacío. Además la cabecera `x-ratelimit-limit: 5` prueba que el decorador está activo.
+
+Causa identificada: `ThrottlerGuard.getTracker()` devuelve `req.ip` (`throttler.guard.js:141-142`), y la clave se deriva de ese valor. Express solo resuelve `req.ip` desde `X-Forwarded-For` si `trust proxy` está habilitado. **Verificado: `trust proxy` no se configura en ningún punto de `apps/api/src`** — `main.ts` no contiene `app.set('trust proxy', ...)`. Detrás del proxy de Railway, `req.ip` toma la dirección de origen de la conexión interna, que varía entre peticiones. Resultado: una clave distinta por petición y un límite que nunca se alcanza.
+
+**Esto queda fuera del alcance que Luis pidió y no se ha tocado.** Se registra aquí porque (a) es material —`/auth/login` no tiene protección efectiva contra fuerza bruta, ni la tiene ninguna otra ruta—, (b) apareció como resultado directo del control solicitado, y (c) cambia la lectura del hallazgo original: `/api/docs-yaml` no es *la excepción* a un throttler que funciona; es una ruta sin guarda dentro de un sistema cuyo throttler tampoco está limitando el resto. Merece su propia decisión, aparte de este anexo.
+
+### C — Resumen de la evidencia
+
+| Afirmación | Estado | Prueba |
+|---|---|---|
+| `/api/docs-yaml` no pasa por el `ThrottlerGuard` | **Confirmado** | Ausencia total de cabeceras `X-RateLimit-*` (C.8-bis) |
+| 10 peticiones a `/api/docs-yaml` sin 429 | Confirmado, **no concluyente por sí solo** | `limit=30` > 10 (C.8) |
+| El throttler protege el resto de rutas | **Refutado** | `remaining` fijo en 4 en `/auth/login` (C.9-bis) |
+
+### Carga generada
+
+~18 peticiones a los endpoints de docs y ~23 `POST` a `/auth/login` con credenciales deliberadamente inválidas contra una cuenta inexistente (`@example.invalid`). No hay lógica de bloqueo de cuenta en el código, y ninguna cuenta real fue objetivo. Las 10 peticiones extra a `/auth/login` fueron necesarias porque la primera tanda nunca alcanzó la capa medida.
+
+---
+
+## D — Fix propuesto (NO aplicado)
+
+### D.11 — Comparación de las tres opciones
+
+| Opción | Cierra `/api/docs-json` y `swagger-ui-init.js` | Default seguro | Acoplamiento | Veredicto |
+|---|---|---|---|---|
+| **1. `SWAGGER_ENABLED` dedicada, default off** | Sí | Sí (ausente ⇒ desactivado) | Ninguno | **Recomendada** |
+| **2. Derivar de `NODE_ENV`** | Sí | Sí | Alto | Viable, peor |
+| **3. Dejar `/api/docs`, proteger solo `/api/docs-yaml`** | **No** | — | — | **Descartada** |
+
+**Opción 3 — descartada por ineficaz.** Es la que el enunciado plantea como posible compromiso, y la medición de B.7-bis la invalida: el spec completo viaja incrustado en `/api/docs/swagger-ui-init.js` (75 480 bytes) y además está en `/api/docs-json`. Proteger únicamente `/api/docs-yaml` deja dos rutas abiertas que publican exactamente lo mismo. Cerraría el vector citado en el diagnóstico previo sin reducir la superficie real.
+
+**Opción 2 — técnicamente viable, pero peor.** `NODE_ENV=production` está correctamente fijado en Railway (A.3), así que `if (process.env.NODE_ENV !== 'production')` funcionaría hoy. Se descarta por dos motivos concretos:
+
+- Acopla la visibilidad de la documentación a una variable que gobierna muchas otras cosas (verbosidad de errores de Nest, caché de vistas de Express, comportamiento de librerías de terceros). Para ver la doc en producción habría que poner `NODE_ENV=development` en producción, lo que es inaceptable.
+- Deja de existir cualquier vía de acceso legítima a la doc en el entorno desplegado: la respuesta pasa a ser siempre "no, salvo que degrades el entorno".
+
+**Opción 1 — recomendada.** Una variable dedicada, con la comprobación en positivo (`=== 'true'`), de modo que **ausente, vacía o con cualquier otro valor significa desactivado**. Ventajas: un solo propósito, el default es el seguro, no depende de que `NODE_ENV` esté bien puesto, y permite habilitar la doc puntualmente sin tocar nada más. Cierra las cuatro rutas de golpe, porque envuelve `SwaggerModule.setup()` entero.
+
+### D.11-bis — Qué hacer en Railway para no perder el acceso a la doc
+
+**No hay que hacer nada en Railway al aplicar el fix.** `SWAGGER_ENABLED` no existe hoy en el servicio `novotechflow`; al desplegar el cambio, `process.env.SWAGGER_ENABLED` será `undefined`, la condición dará `false` y las cuatro rutas dejarán de registrarse. Ese es el estado deseado en producción.
+
+Para consultar la documentación cuando haga falta, en orden de preferencia:
+
+1. **En local (recomendado).** Añadir `SWAGGER_ENABLED=true` a `apps/api/.env` y levantar el API. La doc describe la *forma* de la API, que es idéntica en local y en producción — no hace falta el entorno desplegado para leerla. Sin ventana de exposición.
+2. **Generar el spec como artefacto.** Un script que llame a `SwaggerModule.createDocument()` y escriba el YAML a fichero, sin servirlo. Útil si se quiere versionar la doc.
+3. **Activarlo temporalmente en producción**, solo si hay una razón concreta. Poner `SWAGGER_ENABLED=true` en el servicio `novotechflow` y **quitarla al terminar**. Dos advertencias: (a) cambiar una variable en Railway **provoca un redespliegue**, así que son dos reinicios del servicio, uno al activar y otro al desactivar; (b) mientras esté activa, la doc está abierta a internet igual que hoy, porque el fix no añade autenticación — solo un interruptor.
+
+Si en el futuro se quisiera doc permanentemente accesible en producción pero no pública, la vía sería montarla detrás de un guard de Nest o de basic-auth a nivel de middleware; eso es un cambio mayor y no se propone aquí.
+
+Complemento sugerido: documentar la variable en [apps/api/.env.example](apps/api/.env.example), que hoy no la menciona (A.2). Es un segundo fichero, fuera del diff mínimo, y queda a criterio de Luis.
+
+### D.12 — Diff propuesto
+
+**No aplicado.** `apps/api/src/main.ts` permanece intacto en `7033683`.
+
+```diff
+--- a/apps/api/src/main.ts
++++ b/apps/api/src/main.ts
+@@ -63,15 +63,19 @@ async function bootstrap() {
+   // Serve uploaded images as static files
+   app.useStaticAssets(uploadsPath, { prefix: '/uploads/' });
+ 
+-  // Swagger / OpenAPI
+-  const swaggerConfig = new DocumentBuilder()
+-    .setTitle('NovoTechFlow API')
+-    .setDescription('API de cotizaciones comerciales para NOVOTECHNO')
+-    .setVersion('1.0')
+-    .addBearerAuth()
+-    .build();
+-  const document = SwaggerModule.createDocument(app, swaggerConfig);
+-  SwaggerModule.setup('api/docs', app, document);
++  // Swagger / OpenAPI — desactivado salvo opt-in explícito.
++  // setup() registra 4 rutas mediante httpAdapter.get(), fuera del router de
++  // Nest: /api/docs, /api/docs-json, /api/docs-yaml y
++  // /api/docs/swagger-ui-init.js (este último lleva el spec incrustado).
++  if (process.env.SWAGGER_ENABLED === 'true') {
++    const swaggerConfig = new DocumentBuilder()
++      .setTitle('NovoTechFlow API')
++      .setDescription('API de cotizaciones comerciales para NOVOTECHNO')
++      .setVersion('1.0')
++      .addBearerAuth()
++      .build();
++    const document = SwaggerModule.createDocument(app, swaggerConfig);
++    SwaggerModule.setup('api/docs', app, document);
++  }
+ 
+   await app.listen(process.env.PORT ?? 3000);
+ }
+```
+
+Notas sobre el diff:
+
+- Los `import` de [main.ts:2](apps/api/src/main.ts:2) (`SwaggerModule`, `DocumentBuilder`) **se conservan**. Quitarlos no aporta: `@nestjs/swagger` seguiría en el proceso de todos modos, porque los decoradores `ApiTags` / `ApiProperty` de los 18 controladores y DTO lo importan igualmente.
+- La comparación es contra el literal `'true'`, no `Boolean(process.env.SWAGGER_ENABLED)`, para que `SWAGGER_ENABLED=false` desactive en lugar de activar (toda variable de entorno es una cadena, y `Boolean('false')` es `true`).
+- El cambio es puramente aditivo en el arranque: si la variable no está, el proceso se salta el bloque y llama a `listen()` igual que hoy.
+
+### Verificación posterior al despliegue del fix
+
+Cuando Luis apruebe y aplique el cambio, la comprobación es la misma medición de B.5. Esperado: **404** en las cuatro rutas.
+
+```bash
+for p in /api/docs /api/docs-yaml /api/docs-json /api/docs/swagger-ui-init.js; do curl.exe -s -o NUL -w "$p -> %{http_code}\n" "https://novotechflow-production.up.railway.app$p"; done
+```
+
+---
+
+## Preguntas abiertas de este anexo
+
+9. **El `ThrottlerGuard` no limita nada en producción (C.9-bis).** Diagnosticado hasta la causa (`req.ip` variable por falta de `trust proxy`), pero **no verificado desde dentro del contenedor**: no se inspeccionó el valor real de `req.ip` ni la cabecera `X-Forwarded-For` que inyecta Railway, porque eso exige desplegar código instrumentado. La conclusión se apoya en evidencia externa (el `remaining` clavado en 4) y en la ausencia de `trust proxy` en el código. Requiere decisión aparte; es independiente de la exposición de Swagger.
+
+10. **Otras rutas registradas fuera del router de Nest.** Solo se auditó Swagger. `app.useStaticAssets(uploadsPath, { prefix: '/uploads/' })` ([main.ts:64](apps/api/src/main.ts:64)) también monta un servidor de ficheros por debajo del router, y no se midió qué expone ni si el `ThrottlerGuard` lo cubre (previsiblemente no, por el mismo mecanismo).
+
+11. **Ventana de exposición histórica.** No se determinó desde qué fecha `/api/docs*` es accesible públicamente ni si hubo accesos de terceros. Los logs de Railway no se consultaron en esta auditoría.
