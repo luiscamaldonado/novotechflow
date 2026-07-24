@@ -815,3 +815,225 @@ for p in /api/docs /api/docs-yaml /api/docs-json /api/docs/swagger-ui-init.js; d
 10. **Otras rutas registradas fuera del router de Nest.** Solo se auditó Swagger. `app.useStaticAssets(uploadsPath, { prefix: '/uploads/' })` ([main.ts:64](apps/api/src/main.ts:64)) también monta un servidor de ficheros por debajo del router, y no se midió qué expone ni si el `ThrottlerGuard` lo cubre (previsiblemente no, por el mismo mecanismo).
 
 11. **Ventana de exposición histórica.** No se determinó desde qué fecha `/api/docs*` es accesible públicamente ni si hubo accesos de terceros. Los logs de Railway no se consultaron en esta auditoría.
+
+---
+
+# Anexo: throttler inoperante y trust proxy
+
+**Fecha:** 2026-07-24 · **Rama:** `chore/audit-deps-y-bundle` @ `0bdbfb7` · **Alcance:** solo diagnóstico; ningún fichero de código modificado.
+
+Este anexo cierra la pregunta abierta n.º 9 del anexo de Swagger: el `ThrottlerGuard` se ejecuta pero no limita nada en producción (`x-ratelimit-remaining` clavado en 4 en `/auth/login`). Aquí se delimita el alcance real, se aporta la evidencia empírica que faltaba, se decide el valor correcto de `trust proxy` con su análisis de spoofing, y se deja el diff propuesto sin aplicar.
+
+## A — Alcance real del problema
+
+### A.1 — Configuración completa del ThrottlerModule
+
+[app.module.ts:35](apps/api/src/app.module.ts:35):
+
+```ts
+ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }]),
+```
+
+- **ttl:** 60 000 ms. **limit:** 30. Throttler `default` (forma de array sin nombre).
+- **storage:** no se pasa la opción `storage` → almacenamiento **en memoria del proceso** (`ThrottlerStorageService` por defecto). Coherente con `numReplicas = 1`; si algún día se escala a más réplicas, cada una contará por separado.
+- **Guarda global:** [app.module.ts:38](apps/api/src/app.module.ts:38) — `{ provide: APP_GUARD, useClass: ThrottlerGuard }`. Cubre todas las rutas del router de Nest (no las registradas con `httpAdapter.get()`, como se demostró en el anexo de Swagger).
+- Versión instalada: `@nestjs/throttler@6.5.0`.
+
+Mapa completo de qué cree tener límite cada ruta (`apps/api/src`, exhaustivo):
+
+| Ruta / grupo | Límite que cree tener | Origen |
+|---|---|---|
+| `POST /auth/login` | 5 / 60 s | [auth.controller.ts:20](apps/api/src/auth/auth.controller.ts:20) |
+| `POST /auth/verify-code` | 5 / 60 s | [auth.controller.ts:34](apps/api/src/auth/auth.controller.ts:34) |
+| `POST /auth/resend-code` | 3 / 60 s | [auth.controller.ts:41](apps/api/src/auth/auth.controller.ts:41) |
+| `GET /app-settings/maintenance-banner` | exento | `@SkipThrottle()` [app-settings.controller.ts:58](apps/api/src/app-settings/app-settings.controller.ts:58) |
+| `GET /app-settings/price-thresholds` | exento | `@SkipThrottle()` [app-settings.controller.ts:105](apps/api/src/app-settings/app-settings.controller.ts:105) |
+| `POST /presence/heartbeat` | exento | `@SkipThrottle()` [presence.controller.ts:29](apps/api/src/presence/presence.controller.ts:29) |
+| `GET /presence/active` | exento | `@SkipThrottle()` [presence.controller.ts:37](apps/api/src/presence/presence.controller.ts:37) |
+| Ruta de `proposals` marcada | exenta | `@SkipThrottle()` [proposals.controller.ts:81](apps/api/src/proposals/proposals.controller.ts:81) |
+| Todo lo demás en el router de Nest | 30 / 60 s | global de `forRoot` |
+| `/api/docs*`, `/uploads/*` | **sin guarda** | fuera del router (anexo de Swagger) |
+
+En producción, hoy, la columna "límite que cree tener" es ficción para todas las filas: ninguna ruta limita de facto (ver C del anexo previo y B.3 abajo).
+
+### A.2 — Todos los usos de la IP en `apps/api/src`
+
+Barrido de `req.ip`, `.ip`, `.ips`, `x-forwarded-for`, `x-real-ip`, `remoteAddress`, `getTracker`, más `@Ip()`, middleware, gateways WebSocket e interceptores:
+
+**Resultado: cero usos en código propio.** El único consumidor de la IP del cliente en todo el API es el `getTracker()` heredado del paquete (`node_modules`, `@nestjs/throttler@6.5.0`, `throttler.guard.js:141-142`):
+
+```js
+async getTracker(req) {
+    return req.ip;
+}
+```
+
+Comprobado además:
+
+- No hay logs de auditoría ni registro de sesiones por IP. `schema.prisma` no tiene ningún campo de IP (grep de `ip|ipAddress|userAgent|audit`: sin resultados).
+- Los `@Req()` de los controladores (`app-settings`, `presence`, `users`, `templates`, `suppliers`) solo leen `req.user` (los `interface AuthenticatedRequest` locales declaran únicamente `user`).
+- `presence` registra `last_seen_at` por id de usuario, no por IP.
+- No hay `@WebSocketGateway`, ni `NestMiddleware`/`MiddlewareConsumer`, ni `createParamDecorator`, ni `@Ip()` en ninguna parte.
+
+Consecuencia: el daño de la IP basura está hoy **acotado al throttler**. No hay logs de auditoría contaminados que limpiar. Pero también significa que cualquier consumidor futuro de `req.ip` nacería roto si no se arregla la causa.
+
+### A.3 — Confirmación: `trust proxy` no se configura en ningún punto
+
+- [main.ts:15](apps/api/src/main.ts:15): `NestFactory.create<NestExpressApplication>(AppModule)` **sin objeto de opciones**; ninguna llamada a `app.set(...)` en todo el bootstrap.
+- Grep de `trust proxy` / `trustProxy` en todo el repo (excluyendo `node_modules`): las únicas apariciones son las menciones en este mismo documento.
+- Arranque en producción: `Dockerfile` del API, `CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]` — no hay ningún otro punto de configuración de Express.
+- Default de Express 5.2.1 (el que resuelve el runtime, vía `@nestjs/platform-express@11`): `this.set('trust proxy', false)` (`application.js:99`). Con `false`, el getter de `req.ip` (`request.js:327-330`) ignora `X-Forwarded-For` por completo y devuelve la dirección del socket.
+
+## B — La cadena de proxies de Railway
+
+### B.1 — Documentación oficial
+
+De `docs.railway.com/networking/edge-networking` y `docs.railway.com/networking/public-networking/specs-and-limits` (consultadas hoy):
+
+- Topología documentada: `Usuario → Edge POP (anycast, termina TLS) → enrutado interno → región de despliegue → servicio`. El edge proxy "termina TLS, añade cabeceras y reenvía al despliegue". **La documentación no publica un número fijo de saltos** entre el edge y el contenedor.
+- Cabeceras de petición **oficialmente documentadas** que inyecta Railway:
+  - **`X-Real-IP` — "for identifying client's remote IP"** (la cabecera oficial para la IP del cliente).
+  - `X-Forwarded-Proto` — siempre `https`.
+  - `X-Forwarded-Host` — host original.
+  - `X-Railway-Edge` (POP), `X-Request-Start`, `X-Railway-Request-Id`, `X-Railway-Debug`/`X-Railway-Upstream-Zone`.
+- **`X-Forwarded-For` no aparece en la lista oficial.** Su comportamiento en Railway solo está descrito en el foro (Central Station), y con contradicciones entre empleados: uno afirma "we do strip X-Forwarded-For at our edge and ensure clients cannot overwrite it" y que puede verse "another hop as the request is forwarded through our network" (phin, staff); otro, "use X-Forwarded-For and take the first IP […] our edge proxy appends to the chain" (sam-a, staff). *Strip* y *append* son incompatibles; se declara la contradicción y no se resuelve desde aquí — el fix elegido en C no depende de cuál sea cierta.
+- El mismo hilo del foro reporta que `X-Real-IP` tuvo un bug cuando la ruta CDN de Railway está activa (staff: se corregirá para que "always reflect the true client IP regardless of routing path"). Estado actual no verificable desde este entorno.
+
+### B.2 — Evidencia empírica: los logs del despliegue no imprimen IP
+
+`railway logs --deployment -n 200 --service novotechflow` (ejecutado hoy): las 200 líneas son exclusivamente `prisma:query …`. Ni Nest ni ningún middleware loguea la IP de origen — coherente con A.2 (no existe ese código). **Por esta vía el dato no se puede obtener, y no se inventa.**
+
+### B.3 — Evidencia empírica alternativa (sin desplegar código): los logs HTTP del edge
+
+Lo que sí existe es la capa de **logs HTTP** de Railway, que registra `srcIp` — "the client's IP address that made the request" según `docs.railway.com/observability/logs` — visto **desde el edge**, antes de la red interna. Comando:
+
+```bash
+railway logs --http --json -n 500 --service novotechflow --since 7d --filter "@path:/auth/login"
+```
+
+Resultado (hoy, 43 filas): las tres tandas de sondas del anexo anterior están ahí, y **todas las peticiones de cada tanda salen con el mismo `srcIp`**:
+
+| Tanda (UTC) | Peticiones | `srcIp` | `edgeRegion` |
+|---|---|---|---|
+| 19:59:31–19:59:36 (10 × `400`, C.9 primer intento) | 10 | `181.71.137.142` (constante) | `us-west2` |
+| 20:00:05–20:00:09 (10 × `401`, C.9 segundo intento) | 10 | `181.71.137.142` (constante) | `us-west2` |
+| 20:01:42–20:01:43 (3 × `401`, C.9-bis) | 3 | `181.71.137.142` (constante) | `us-west2` |
+
+Esto cierra el razonamiento con evidencia directa, sin depender ya del `x-ratelimit-remaining`:
+
+1. El edge de Railway vio **una sola IP de cliente, constante**, en las 23 peticiones.
+2. La app, sin embargo, abrió **un contador nuevo por petición** (`remaining` clavado en 4 ⇒ `totalHits = 1` cada vez).
+3. Con `trust proxy = false`, `req.ip` = dirección del socket = el extremo interno de Railway que conecta con el contenedor. Ergo **esa dirección interna es lo que varía por petición**; la variación no viene del cliente.
+
+Lo único que sigue sin poderse observar desde este entorno es el **valor literal** de `req.ip` y de `X-Forwarded-For`/`X-Real-IP` dentro del contenedor (exigiría desplegar instrumentación o abrir un shell en el contenedor, que Railway no ofrece). Se declara como no medido. Nota: los logs HTTP también registran `upstreamAddress` — p. ej. `http://[fd12:…]:3000` — pero esa es la dirección **del contenedor** (destino), no la del extremo que origina la conexión interna.
+
+## C — El valor correcto de `trust proxy` y sus riesgos
+
+### C.1 — Mecánica exacta (verificada sobre los paquetes instalados)
+
+`req.ip` en Express 5.2.1 delega en `proxy-addr@2.0.7` + `forwarded@0.2.0`: se construye la lista `[socket, XFF de derecha a izquierda]` y se recorre mientras cada dirección sea de confianza; `req.ip` es el último elemento de la cadena truncada — la primera dirección **no** confiable cuando existe, o el último elemento sin testear si todo resultó confiable (con `1` y sin cabecera XFF: el propio socket). Con `trust proxy = N` (entero), la función de confianza es `(addr, i) => i < N` (`utils.js:202-205`): **posicional, no inspecciona el valor** — confía en la dirección del socket y en las `N - 1` entradas más a la derecha de la cabecera, sean cuales sean.
+
+Los cinco casos relevantes se trazaron a mano sobre el código instalado (verificación adversarial, 3 agentes independientes, veredicto CONFIRMED en los tres): con `1`, una XFF forjada por el cliente queda siempre a la izquierda del punto de truncado y se descarta, tanto si el edge stripea como si appendea; con `true` y edge que appendea, `req.ip` es la entrada más a la izquierda — la del atacante.
+
+### C.2 — Comparación de opciones (análisis de spoofing)
+
+El escenario de ataque: un cliente externo envía `X-Forwarded-For: <valor falso>` (o `X-Real-IP` falso) intentando que cada petición parezca venir de una IP distinta y así evadir el límite — exactamente el comportamiento accidental de hoy, pero deliberado.
+
+| Opción | `req.ip` resultante | ¿Spoofeable desde fuera? | Veredicto |
+|---|---|---|---|
+| `true` | entrada **más a la izquierda** de XFF | **Depende de si el edge hace strip o append.** Si Railway *stripea* la XFF entrante (afirmación de un empleado), no. Si *appendea* (afirmación del otro), la entrada más a la izquierda es la que puso el atacante → **evasión total, igual que hoy pero controlada por el atacante**. | **Rechazada.** Su seguridad descansa por completo en un comportamiento no documentado y sobre el que el propio staff se contradice. |
+| **`1` (entero)** | dirección más a la derecha de XFF (la única entrada que el edge controla) | **No, bajo cualquiera de los dos comportamientos.** Si el edge stripea: XFF = `cliente` → `req.ip` = cliente. Si el edge appendea: XFF = `falso…, cliente` → el recorrido se detiene en la entrada más a la derecha (índice 1, ya no confiable) → `req.ip` = cliente; lo falso queda a la izquierda, ignorado. | **Elegida.** Ver análisis de fallo abajo. |
+| Función / lista de IPs de confianza | como `1`, pero confiando solo en rangos concretos | No (mismo mecanismo que `1`) | **Rechazada por inviable hoy:** Railway no documenta los rangos internos de su edge (el foro menciona `100.0.0.0/8`, sin respaldo oficial). Un rango adivinado se rompe en silencio cuando Railway cambie su infraestructura, y el modo de fallo es volver al estado actual (socket = basura). Reconsiderar solo si algún día Railway publica los rangos. |
+| `getTracker()` custom sin `trust proxy` | n/a (el throttler dejaría de usar `req.ip`) | Con `X-Real-IP`: no spoofeable **si** el edge sobreescribe la cabecera entrante (implícito en que la documenten como "the client's remote IP", pero no verificable desde aquí; además el foro reporta un bug con la ruta CDN). Con "XFF más a la derecha": idéntico a `trust proxy = 1`. | **Alternativa válida pero peor como primera opción:** más código (subclase de guarda + provider), y arregla solo el throttler dejando `req.ip` roto para cualquier consumidor futuro. Queda como plan B (ver C.4). |
+
+### C.3 — Modos de fallo de `trust proxy = 1` (el caso decidido)
+
+- **Si hay exactamente 1 salto proxy** (la topología documentada: el edge): correcto en todos los casos.
+- **Si Railway interpone un segundo salto interno** (el "you may see another hop" del staff): con `1`, `req.ip` sería la IP del salto intermedio — pocas IPs internas para todos los clientes → **sobre-limitación** (429 a usuarios legítimos). Es un fallo *cerrado*: visible de inmediato en las cabeceras `x-ratelimit-*` y en 429 inesperados, y corregible subiendo a `2`. Nunca reabre la evasión.
+- **Si Railway no enviara `X-Forwarded-For` en absoluto** (no está en la lista oficial de cabeceras): `req.ip` vuelve a ser la dirección del socket — exactamente el statu quo, ni mejor ni peor. También fallo visible con la misma prueba.
+- **Si alguien alcanza el socket de la app sin pasar por el edge** (red privada de Railway u otro servicio del mismo proyecto): la confianza es posicional, así que ese peer sería "confiable" y su XFF forjada decidiría `req.ip`. En esta topología solo los propios servicios del proyecto están en esa red; riesgo aceptado y documentado.
+- **Si algún día se pone un CDN delante** (p. ej. Cloudflare): habría 2 saltos y `1` devolvería la IP del CDN → sobre-limitación global. En ese momento habrá que reevaluar (no subir el entero a ciegas: cada salto de más que se confía es una posición de XFF que pasa a poder escribir el cliente).
+
+La asimetría decide: los modos de fallo de `1` son sobre-limitar o quedarse igual; el modo de fallo de `true` es entregarle la evasión al atacante. Por eso `1`, aunque `true` "funcionaría" igual de bien en el camino feliz.
+
+### C.4 — ¿Cabecera propia de Railway más fiable que XFF?
+
+Sí existe: **`X-Real-IP` es la cabecera oficialmente documentada** para la IP del cliente (specs-and-limits), mientras que XFF ni siquiera aparece en la documentación. A su favor: es inmune al número de saltos internos. En contra: el bug reportado con la ruta CDN (B.1) y que consumirla exige el `getTracker()` custom (no pasa por `req.ip`). Decisión: empezar por `trust proxy = 1`; si la verificación en producción (D.2) muestra el problema del segundo salto, migrar el throttler a `X-Real-IP` con un guard custom en vez de subir el entero a ciegas.
+
+### C.5 — Efectos colaterales de `trust proxy = 1` en esta app
+
+`trust proxy` afecta en Express 5 a `req.ip`, `req.ips`, `req.protocol`, `req.secure`, `req.hostname`/`req.host` y `req.subdomains`. Barrido de consumidores en este API:
+
+- **Código propio:** cero usos de `req.protocol`, `req.hostname`, `req.secure`, `res.redirect` o `@Redirect` en `apps/api/src`. No se emite ninguna cookie de servidor (no hay `res.cookie`, ni `cookie-parser`, ni `express-session`; la autenticación es JWT por cabecera `Authorization`). Las únicas menciones a cookies son de *cliente saliente* hacia Lenovo PSREF.
+- **CORS** ([main.ts:34](apps/api/src/main.ts:34)): el paquete `cors@2.8.6` compara exclusivamente `req.headers.origin` contra `CORS_ORIGIN` (`lib/index.js:37,219`); no consulta `req.protocol` ni `req.hostname`. Sin efecto.
+- **helmet 8.1.0** ([main.ts:22](apps/api/src/main.ts:22)): el `index.cjs` compilado no contiene ninguna lectura de propiedades de `req`; todas las cabeceras (CSP, HSTS) son estáticas. Sin efecto.
+- **compression 1.8.1, body parsers (body-parser 2.3.0), ValidationPipe, serve-static 2.2.1 (`/uploads`)**: verificados sobre el código instalado — ninguno consulta esos getters; el único redirect de serve-static (directorio → barra final) construye la `Location` solo con el path, sin protocolo ni host. Sin efecto.
+- **Swagger** (`@nestjs/swagger@11.4.4`): desactivado por defecto tras `0bdbfb7` (`SWAGGER_ENABLED`); además su dist no usa `req.protocol`/`req.hostname` (URLs relativas). Sin efecto.
+- En general, `response.js` de Express 5 nunca consulta `trust proxy`: ningún mecanismo de respuesta (redirects incluidos) cambia por sí solo.
+- **Efecto real n.º 1 y único:** el `getTracker()` del throttler pasa a recibir la IP real del cliente. Colateral cosmético: `req.protocol` pasaría de `http` (mentira actual, la TLS termina en el edge) a `https` vía `X-Forwarded-Proto` — hoy nadie lo lee, pero deja de estar mal para el futuro.
+
+Superficie de efectos colaterales: **en la práctica, cero**. Este es el argumento que inclina la balanza frente al `getTracker()` custom: mismo beneficio, una línea, y sin dejar `req.ip` roto.
+
+## D — Fix propuesto (NO aplicado) y plan de verificación
+
+### D.1 — Diff propuesto
+
+En [main.ts](apps/api/src/main.ts), inmediatamente después de crear la app (la llamada `app.set()` está expuesta por `NestExpressApplication` precisamente para esto — es el ejemplo literal de la documentación del tipo):
+
+```diff
+ async function bootstrap() {
+   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
++  // Railway termina TLS en su edge proxy y reenvia por su red interna;
++  // sin esto req.ip es la direccion interna (variable por peticion) y el
++  // ThrottlerGuard abre un contador nuevo en cada request. Confiar en
++  // exactamente 1 salto: req.ip = entrada mas a la derecha de
++  // X-Forwarded-For, la unica que el edge controla (no spoofeable).
++  app.set('trust proxy', 1);
++
+   app.use(compression());
+```
+
+Sin cambios en `app.module.ts`, sin variables de entorno nuevas, sin cambios en Railway.
+
+### D.2 — Plan de verificación
+
+**Local, antes del push (no regresión):**
+
+1. `pnpm --filter api exec tsc --noEmit` — comparar A/B contra `HEAD`: los ~29 errores preexistentes de `*.spec.ts` no cuentan; el gate es que no aparezca ninguno nuevo.
+2. Build + arranque local (recordatorio: entrypoint `dist/src/main.js` y `NODE_PATH` para `express`, que no es dependencia directa). Gate: el API arranca y responde.
+3. Throttle funcional en local — 6 peticiones directas (sin proxy delante, `req.ip` = `127.0.0.1` constante):
+
+   ```bash
+   for i in 1 2 3 4 5 6; do curl.exe -s -o NUL -w "req $i -> %{http_code} remaining=%{header{x-ratelimit-remaining}}\n" -X POST http://localhost:3000/auth/login -H "Content-Type: application/json" --data-binary "@login.json"; done
+   ```
+
+   (`login.json` con credenciales inválidas, en fichero por la lección del C.9: el escapado inline de PowerShell corrompe el JSON.) Esperado: `401` con `remaining` 4→0 en las 5 primeras y **`429` en la 6.ª**. Esto ya valida la mecánica del throttler y que `trust proxy = 1` no rompe conexiones directas.
+4. Selección de la entrada correcta de XFF, simulando el edge en local: `curl.exe -X POST http://localhost:3000/auth/login -H "X-Forwarded-For: 6.6.6.6, 203.0.113.7" …` 6 veces. Con `trust proxy = 1` el tracker debe ser `203.0.113.7` (la de la derecha): la 6.ª da `429` aunque se varíe `6.6.6.6` en cada petición. Si se varía la de la *derecha*, cada petición estrena contador — correcto, porque en producción esa posición solo la escribe el edge.
+5. Humo del resto: `GET /uploads/...` estático, un preflight CORS (`OPTIONS` con `Origin`), y un endpoint autenticado cualquiera.
+
+**Producción, después del push (acotado — es la producción propia):**
+
+6. La prueba mínima que puede dar el veredicto son **6 peticiones** (limit 5 + 1) dentro de una ventana de 60 s contra `/auth/login` con credenciales inválidas desde una única máquina:
+
+   ```bash
+   for i in 1 2 3 4 5 6; do curl.exe -s -o NUL -w "req $i -> %{http_code} remaining=%{header{x-ratelimit-remaining}}\n" -X POST https://novotechflow-production.up.railway.app/auth/login -H "Content-Type: application/json" --data-binary "@login.json"; done
+   ```
+
+   - **Éxito:** `remaining` desciende 4→0 y la 6.ª responde `429`. (Hoy: clavado en 4, nunca 429.)
+   - **Sobre-limitación (segundo salto interno, C.3):** si aparecieran `429` antes de la 6.ª o con `remaining` compartido con otras fuentes, activar el plan B de C.4.
+   - Acotación: son 6 peticiones una sola vez, y la IP de la máquina de Luis queda bloqueada para `/auth/login` **como máximo 60 s** tras la prueba. Hacerla fuera de una sesión de trabajo activa de los usuarios y no repetirla en bucle.
+7. Contraste con el edge, sin generar carga adicional:
+
+   ```bash
+   railway logs --http --json -n 20 --service novotechflow --filter "@path:/auth/login"
+   ```
+
+   El `srcIp` de las 6 peticiones debe ser la IP pública de la máquina que probó — el mismo valor que ahora debería estar usando el throttler como clave.
+
+## Datos no obtenibles desde este entorno (declarados, no inferidos)
+
+1. El **valor literal** de `req.ip` y de `X-Forwarded-For` / `X-Real-IP` dentro del contenedor en producción (exige instrumentación desplegada; Railway no da shell al contenedor).
+2. Si el edge de Railway **stripea o appendea** una `X-Forwarded-For` enviada por el cliente (docs silentes, staff contradictorio). El fix elegido es seguro bajo ambas hipótesis, que es precisamente por qué se eligió.
+3. El **número exacto de saltos** de la red interna de Railway y sus rangos de IP (no documentados). Cubierto por el modo de fallo cerrado de C.3 y el plan B de C.4.
+4. El estado actual del **bug de `X-Real-IP` con la ruta CDN** reportado en el foro (sin fecha de resolución publicada).
