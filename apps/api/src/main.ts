@@ -8,8 +8,13 @@ import { existsSync, mkdirSync } from 'fs';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const compression = require('compression');
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.use(compression());
 
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
