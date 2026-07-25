@@ -32,7 +32,7 @@ import { APP_GUARD } from '@nestjs/core';
     SpecPrefillModule,
     SuppliersModule,
     PresenceModule,
-    // 100 y no 30: pico legitimo medido 24 req/60s por (IP, handler) en GET /spec-options/suggest, margen 4,2x (reporte de trafico)
+    // 100 y no 30: pico legitimo medido 24 req/60s por (IP, handler), margen 4,2x (anexo medicion de trafico en docs/diagnostico-2026-07-24-deps-bundle.md)
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
   ],
   controllers: [AppController],

@@ -1037,3 +1037,23 @@ Sin cambios en `app.module.ts`, sin variables de entorno nuevas, sin cambios en 
 2. Si el edge de Railway **stripea o appendea** una `X-Forwarded-For` enviada por el cliente (docs silentes, staff contradictorio). El fix elegido es seguro bajo ambas hipótesis, que es precisamente por qué se eligió.
 3. El **número exacto de saltos** de la red interna de Railway y sus rangos de IP (no documentados). Cubierto por el modo de fallo cerrado de C.3 y el plan B de C.4.
 4. El estado actual del **bug de `X-Real-IP` con la ruta CDN** reportado en el foro (sin fecha de resolución publicada).
+
+# Anexo: medición de tráfico y calibración del límite del throttler
+
+Con el throttler ya operativo tras `trust proxy = 1` (`a82b911`), el `limit: 30` global dejó de ser letra muerta (C.9-bis del anexo de Swagger) y pasó a aplicarse sobre tráfico real, así que había que responder con datos si ese valor aguanta el uso legítimo o fabrica 429. Este anexo documenta la medición detrás del `limit: 100` de `135321c` en [app.module.ts:36](apps/api/src/app.module.ts:36); es la referencia a la que remite el comentario de esa línea.
+
+## A — Fuente y cobertura
+
+La fuente es la misma que ya sirvió en B.3 del anexo de trust proxy: los logs HTTP del edge de Railway. El corpus son 9.615 filas únicas deduplicadas por `requestId`, del 14-jul 19:56 al 25-jul 14:19 UTC — 10,8 días que abarcan 11 despliegues. Para calibrar el límite solo importa el subconjunto que de verdad atraviesa el throttler: descontando los `OPTIONS` de preflight y las rutas marcadas `@SkipThrottle`, quedan 4.330 filas, con cobertura completa del periodo.
+
+## B — Hallazgos
+
+Ninguna IP legítima superó las 30 req/60s por (IP, handler) en todo el periodo: un límite de 30 operativo no habría bloqueado a ningún usuario real en estos 10,8 días, pero por poco. El pico legítimo observado fue de 24 req/60s en `GET /spec-options/suggest`, y su origen es mecánico, no anómalo: el autocompletado de especificaciones dispara una petición por pausa de tecleo con un debounce de 300 ms. La única ventana que de verdad rozó el límite no fue tráfico de usuario sino la propia sesión de diagnóstico de Swagger con `curl` del 24-jul (23 logins/min). En el periodo aparecen 19 IPs distintas, y el peor caso de NAT compartido observado fue de 2 usuarios simultáneos detrás de una misma IP — el escenario en el que un contador por IP se comparte entre personas.
+
+## C — Decisión: `limit` 30 → 100
+
+Con un pico legítimo de 24, el 30 dejaba un margen de solo 1,25x: una sesión de tecleo apenas más intensa en el autocompletado, o los 2 usuarios del NAT compartido coincidiendo sobre el mismo endpoint, bastaban para rozar el 429. Subir a 100 lleva el margen a 4,2x sobre el pico observado sin dejar de cortar el abuso. Los `@Throttle` de auth se mantienen intactos (5 en `/auth/login`, 5 en `/auth/verify-code`, 3 en `/auth/resend-code`, por 60 s): la defensa fina de credenciales la dan ellos, no el límite global, así que la subida no relaja el login.
+
+## D — Nota estructural: qué mide realmente el límite global
+
+Dos hechos de la implementación acotan lo que significa el 100. El contador de `@nestjs/throttler` 6.5.0 es por (endpoint, IP), no un contador único por IP: cada handler lleva su cuenta aparte, de modo que el límite se compara contra el endpoint más caliente de cada cliente y no contra la suma de toda su sesión. Y todo el polling periódico del frontend está `@SkipThrottle`, así que ese tráfico de fondo ni consume contadores ni compite con el límite. El 100 acota, por tanto, el martilleo de un único endpoint desde una única IP — exactamente la forma de abuso que el límite global existe para cortar.
