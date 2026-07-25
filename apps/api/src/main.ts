@@ -17,42 +17,6 @@ async function bootstrap() {
   // 1 y no true: con true, una XFF forjada decide req.ip si el edge appendea (anexo trust proxy en docs/diagnostico-2026-07-24-deps-bundle.md)
   app.set('trust proxy', 1);
 
-  // --- TEMPORAL [PROXY-PROBE] ---------------------------------------------
-  // Instrumento de medicion de un solo uso: loguea las 3 primeras peticiones
-  // del proceso para ver que cabeceras manda de verdad el edge de Railway
-  // (X-Forwarded-For / X-Real-IP) y en que queda req.ip con trust proxy = 1.
-  // Sin variables de entorno y sin dependencias; contador en memoria.
-  // Se retira en un commit dedicado tras leer las 3 lineas (hash pendiente).
-  let proxyProbeCount = 0;
-  app.use(
-    (
-      req: {
-        headers: Record<string, string | string[] | undefined>;
-        ip?: string;
-        ips?: string[];
-        socket: { remoteAddress?: string };
-      },
-      _res: unknown,
-      next: () => void,
-    ) => {
-      if (proxyProbeCount < 3) {
-        proxyProbeCount++;
-        const h = (name: string) =>
-          name in req.headers ? JSON.stringify(req.headers[name]) : '<ausente>';
-        console.log(
-          `[PROXY-PROBE] ${proxyProbeCount}/3 ` +
-            `xff=${h('x-forwarded-for')} ` +
-            `x-real-ip=${h('x-real-ip')} ` +
-            `req.ip=${JSON.stringify(req.ip)} ` +
-            `req.ips=${JSON.stringify(req.ips)} ` +
-            `socket=${JSON.stringify(req.socket.remoteAddress)}`,
-        );
-      }
-      next();
-    },
-  );
-  // --- FIN TEMPORAL [PROXY-PROBE] -----------------------------------------
-
   app.use(compression());
 
   app.use(json({ limit: '50mb' }));
