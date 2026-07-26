@@ -298,7 +298,7 @@ quantity: formValue,
 - [ ] **DTOs validados** — ¿El backend usa DTOs con `class-validator`?
 - [ ] **Coerción numérica** — ¿Los inputs se convierten a `Number()` antes de enviar al API?
 - [ ] **Componente < 200 líneas** — Si no, ¿se puede descomponer?
-- [ ] **`tsc --noEmit` pasa** — ¿Cero errores de TypeScript? En la api el gate es `apps/api/tsconfig.json`, NO `tsconfig.build.json` (excluye los `*.spec.ts` y no ve romperse los tests — ADR-071).
+- [ ] **`tsc --noEmit` pasa** — ¿Cero errores en `apps/web/tsconfig.app.json` y en `apps/api/tsconfig.json`? El gate de la api es `tsconfig.json`, no `tsconfig.build.json`, que excluye los specs por construcción (ADR-071).
 - [ ] **Funcionalidad verificada** — ¿Se probó que no se rompió nada?
 
 ---
@@ -448,7 +448,7 @@ Medidas de seguridad ya activas (auditoría abril 2026):
 - Ownership check (IDOR) en TODOS los endpoints de propuestas, escenarios, páginas y bloques
 - `forbidNonWhitelisted: true` — rechaza campos extra en requests
 - Helmet con CSP, HSTS, X-Frame-Options
-- Rate limiting global (100/60s) + estricto en login (5/min, 5/min en verify-code, 3/min en resend-code). El contador se trackea por `X-Real-IP` vía `RealIpThrottlerGuard`, no por `req.ip`: detrás del edge de Railway `req.ip` rota entre peticiones y el límite nunca se alcanzaba (ADR-071)
+- Rate limiting global (100/min por IP real vía `X-Real-IP`, `RealIpThrottlerGuard`) + estricto en login (5/min). El límite de 30/min que figuraba antes nunca fue efectivo en producción: `req.ip` variaba por petición y cada una estrenaba contador (ADR-071).
 - Swagger/OpenAPI en `/api/docs` solo si `SWAGGER_ENABLED=true`; ausente por defecto en producción (ADR-071)
 - Upload: validación de magic bytes + sanitización de originalname
 - XSS: sanitización con sanitize-html en campos de texto

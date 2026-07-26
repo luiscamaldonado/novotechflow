@@ -191,6 +191,7 @@ Reglas operativas asociadas:
 
 - **Atómicos por capa/concern.** No mezclar refactor con feature. Backend y frontend en commits distintos.
 - **Conventional commits:** `feat(scope):`, `fix(scope):`, `refactor:`, `docs:`. Mensajes en ASCII.
+- **Sin trailer `Co-Authored-By`.** Los mensajes de commit no llevan atribución de coautoría de la herramienta. Ni `Co-Authored-By:` ni ninguna variante, ni en el asunto ni en el cuerpo.
 - **ADR en commit aparte** (ver 4.5).
 - **`git status` antes de `git add`.** Adds con **rutas explícitas**, nunca `git add .`.
 - **El `push` a `master` lo hace Luis, no Claude Code.** Solo después de que Luis **verificó la funcionalidad en local**, y Claude debe **preguntarle si es el momento** (puede haber usuarios trabajando en producción). El push dispara `migrate deploy` automático en Railway (api y web son **servicios separados**); se revisa el log de ambos.
@@ -214,7 +215,7 @@ pnpm exec tsc --noEmit --project apps/web/tsconfig.app.json
 pnpm exec tsc --noEmit --project apps/api/tsconfig.json
 ```
 
-> `tsconfig.json` y NO `tsconfig.build.json` (ADR-071): `build.json` excluye `test` y `**/*spec.ts` por construcción, así que no ve romperse los tests. Es la config de build, no el gate de tipos. Regla general: la verificación se elige contra la clase de rotura que se está introduciendo; un gate que por construcción no puede verla no es un gate, aunque salga verde.
+> El gate de tipos de la api es `apps/api/tsconfig.json`, nunca `tsconfig.build.json`: esa última excluye `test` y `**/*spec.ts` por construcción, así que no puede ver una rotura en los specs aunque salga verde (ADR-071). Regla general: la verificación se elige contra la clase de rotura que se está introduciendo.
 
 **Migración de Prisma (desde `apps/api`, nunca desde la raíz):**
 ```powershell
