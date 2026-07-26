@@ -3073,7 +3073,7 @@ Ninguno del repo. El cambio vive en la variable `DATABASE_URL` del servicio `nov
 - **`api-external` no fue auditado.** Es un servicio separado con su propio Postgres (`postgres-external`) y presumiblemente el mismo default de pool. Aplicar la misma revisión.
 - **`@Global()` no auto-registra un módulo**: durante esta sesión se propuso quitar `PrismaModule` del array `imports` de `app.module.ts` junto con los 8 re-imports redundantes. Habría dejado el módulo fuera del grafo, sin instanciar, y `PrismaService` fuera del contenedor DI — error de runtime que ni `tsc` ni los specs actuales detectan, porque ninguno levanta el `AppModule` real. La registración raíz se queda. Anotado como invariante para una futura pasada de auditoría (INSTRUCTIVO §10.6).
 
-## ADR-073 — El .dockerignore solo existe en la raiz del contexto: los de apps/* eran letra muerta
+## ADR-073 — El .dockerignore solo existe en la raíz del contexto: los de apps/* eran letra muerta
 
 **Fecha:** 2026-07-26
 **Estado:** Aceptada
