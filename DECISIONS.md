@@ -3014,3 +3014,61 @@ Auditoría de dependencias del API y composición del bundle de web (rama `chore
 - **Preguntas abiertas del diagnóstico, sin cerrar**: severidad efectiva de los 28 advisories de `axios`; `express` importado en `main.ts` sin estar declarado en `apps/api/package.json`; si el `COPY` de `node_modules` del Dockerfile preserva el layout de `.pnpm` en la imagen (condiciona el inventario real de vulnerabilidades); `react-router` resuelto a la build `development`; `@tiptap/extension-underline` y `@tiptap/pm` declarados sin sitio de import.
 - **Peso del bundle de web**: `FileSaver.min` (939 kB, 99,6 % `exceljs`) y `RichTextEditor` (1 021 kB) son imports estáticos de sus chunks de ruta, así que se descargan al entrar a la ruta y no al pulsar exportar. Candidatos a `import()` dinámico.
 - **Propagación de la regla del gate** a `INSTRUCTIVO_CLAUDE.md` §9 y `CONVENTIONS.md` §F, y actualización de §K (rate limiting): commit aparte de este ADR.
+
+## ADR-072 — El pool de Prisma dimensionado por CPUs del host, no por la carga real
+
+**Fecha:** 2026-07-26
+**Estado:** Aceptada
+
+### Contexto
+
+El `DATABASE_URL` del servicio `novotechflow` no llevaba query string, así que el tamaño del pool de Prisma era el default calculado: `num_physical_cpus * 2 + 1`. El contenedor de Railway reporta las CPUs del host, no una cuota asignada, de modo que el cálculo daba 48 CPUs y un pool de 97 conexiones contra un Postgres de `max_connections = 100`.
+
+El hallazgo salió de la sesión de higiene del 26-jul, y la evidencia apareció por un efecto colateral: al quitar `query` del array de log de `PrismaService` (`2c1c613`) quedó `info`, y el arranque del deploy imprimió `prisma:info Starting a postgresql pool with 97 connections.` — el número medido en producción, no inferido.
+
+Medición de solo lectura contra el Postgres de producción, tomada un domingo sin carga:
+
+- `max_connections = 100`, `superuser_reserved_connections = 3`, `reserved_connections = 0`.
+- Conexiones de cliente reales (`backend_type = 'client backend'`): **2** — una de la API (idle, `client_addr` de red privada de Railway) y la propia sesión de medición.
+- Las otras 8 filas de `pg_stat_activity` son procesos auxiliares del servidor (`io worker`, `walwriter`, `checkpointer`, `background writer`, `autovacuum launcher`, `logical replication launcher`), que **no consumen slot** de `max_connections`: ese techo aplica solo a `client backend`. Leer el `count(*)` crudo de la vista sobreestima el consumo.
+- El rol que conecta es `postgres` con `usesuper = t`, así que la reserva de 3 no lo gatea: el techo efectivo para la aplicación es 100, no 97.
+
+En estado estacionario no había problema — el `connection_limit` es un máximo del pool, no una preasignación, y la API sostenía una sola conexión. El riesgo era de pico y de solapamiento: con 97 de techo 100, el margen para `prisma migrate deploy`, un dump, un `psql` manual o una segunda instancia durante un redeploy era de 3 conexiones. El modo de falla es `FATAL: sorry, too many clients already` a mitad de un deploy.
+
+### Decisión
+
+`DATABASE_URL` del servicio `novotechflow` pasa a `${{Postgres.DATABASE_URL}}?connection_limit=15&pool_timeout=20`.
+
+**La referencia se conserva intacta y el sufijo se compone sobre ella.** No se hardcodea la URL: esa regla ya costó una caída cuando rotó la contraseña del Postgres y la API quedó con credenciales viejas en memoria sin redeploy automático. Railway resuelve la referencia y concatena el sufijo. Se verificó antes de escribir que la URL interna no traía query string propio, porque de haberlo el separador tendría que ser `&` y no `?`.
+
+**El 15 se dimensiona desde la carga, no desde el hardware.** Seis usuarios comerciales, un endpoint de autocompletado con debounce de 300 ms y exportaciones ocasionales. El pico legítimo medido en el ADR-071 fue 24 req/60 s por (IP, handler); con latencias de decenas de milisegundos eso no sostiene cinco conexiones simultáneas. 15 deja ~3x sobre cualquier escenario plausible y libera 85 slots del techo.
+
+**`pool_timeout=20` convierte la saturación en un error de aplicación explícito** (`Timed out fetching a new connection from the connection pool`) en vez de una espera indefinida.
+
+Alternativas descartadas: dejar el default (el problema es que no describe nada de esta aplicación); fijar el pool por variable de entorno de Prisma en vez de en la URL (la URL es el mecanismo documentado y viaja con la referencia); pgBouncer (infraestructura nueva para un problema que un query string resuelve).
+
+### Consecuencias
+
+- El pool pasa de 97 a 15. Verificado en el log del deploy `b4b1ec87`: `prisma:info Starting a postgresql pool with 15 connections.` y `Nest application successfully started`.
+- El margen contra el techo de Postgres pasa de 3 a 85 conexiones.
+- **El pico concurrente real sigue sin medirse.** La medición fue un instante único sin carga; acota el uso actual y no dice nada del pico. Si 15 quedara corto, el síntoma es el `pool_timeout` explícito y subirlo es un cambio de variable — modo de falla preferible al anterior, que aparecía durante un deploy.
+- Principio general, hermano del que fijó el ADR-071 sobre los gates: **un default calculado sobre recursos del host no describe la carga de la aplicación, y en un contenedor compartido ese cálculo yerra sistemáticamente hacia arriba.** El número que un runtime elige por ti merece la misma verificación que el que eliges tú.
+- El `prisma:info` que reveló el 97 sobrevivió porque `2c1c613` quitó solo `query` del array de log. Bajar más el nivel habría ocultado el dato.
+- Sin ADR aparte para el resto de la sesión de higiene (log de Prisma, imports redundantes de `PrismaModule`, reglas de documentación): son limpieza y propagación, no decisiones de arquitectura.
+
+### Archivos
+
+Ninguno del repo. El cambio vive en la variable `DATABASE_URL` del servicio `novotechflow` en Railway.
+
+### Commits
+
+- `2c1c613` chore(api): drop prisma query logging from production log level
+- `fb0fff4` refactor(api): drop redundant PrismaModule imports, module is global
+- `6e4e0c9` docs: no Co-Authored-By trailer, api type gate is tsconfig.json, real throttler limit
+- `273ac73` docs: restore verified auth throttle limits and gate principle wording
+
+### Pendientes
+
+- **Medir el pico concurrente bajo carga real** para validar el 15. Muestreo de `pg_stat_activity` a lo largo de una ventana de tráfico de día hábil, no un instante.
+- **`api-external` no fue auditado.** Es un servicio separado con su propio Postgres (`postgres-external`) y presumiblemente el mismo default de pool. Aplicar la misma revisión.
+- **`@Global()` no auto-registra un módulo**: durante esta sesión se propuso quitar `PrismaModule` del array `imports` de `app.module.ts` junto con los 8 re-imports redundantes. Habría dejado el módulo fuera del grafo, sin instanciar, y `PrismaService` fuera del contenedor DI — error de runtime que ni `tsc` ni los specs actuales detectan, porque ninguno levanta el `AppModule` real. La registración raíz se queda. Anotado como invariante para una futura pasada de auditoría (INSTRUCTIVO §10.6).
