@@ -211,8 +211,10 @@ Get-ChildItem -Recurse -Include *.ts,*.tsx,*.prisma | Select-String "<termino>"
 **TypeScript check (antes de cada commit):**
 ```powershell
 pnpm exec tsc --noEmit --project apps/web/tsconfig.app.json
-pnpm exec tsc --noEmit --project apps/api/tsconfig.build.json
+pnpm exec tsc --noEmit --project apps/api/tsconfig.json
 ```
+
+> `tsconfig.json` y NO `tsconfig.build.json` (ADR-071): `build.json` excluye `test` y `**/*spec.ts` por construccion, asi que no ve romperse los tests. Es la config de build, no el gate de tipos. Regla general: la verificacion se elige contra la clase de rotura que se esta introduciendo; un gate que por construccion no puede verla no es un gate, aunque salga verde.
 
 **Migración de Prisma (desde `apps/api`, nunca desde la raíz):**
 ```powershell
@@ -284,7 +286,7 @@ Sin esto, nada se declara resuelto:
 
 - [ ] Diff de los archivos cambiados mostrado.
 - [ ] Tests dirigidos del flujo tocado (si existen) antes que la suite completa.
-- [ ] `tsc --noEmit` en web y api.
+- [ ] `tsc --noEmit` en web y api — en la api contra `apps/api/tsconfig.json`, NO `tsconfig.build.json` (excluye los `*.spec.ts` y no ve romperse los tests — ADR-071).
 - [ ] Si algo falla: parar y reportar con la salida real. No continuar.
 - [ ] Nada se declara resuelto sin evidencia de esta sesión.
 - [ ] Flujos con estado (login, timers, polling, exportaciones): verificación del flujo completo en navegador — la hace Luis (CONVENTIONS §H).
