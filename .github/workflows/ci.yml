@@ -45,6 +45,9 @@ jobs:
       - name: Typecheck API (NestJS)
         run: pnpm exec tsc --noEmit --project apps/api/tsconfig.json
 
+      - name: Unit tests API (Jest)
+        run: pnpm --filter api test
+
   # ── 2. Build (Turborepo) ──────────────────────────────────────────────
   build:
     name: Build
