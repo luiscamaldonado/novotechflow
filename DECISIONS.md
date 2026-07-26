@@ -3128,3 +3128,40 @@ Alternativas descartadas: **renombrar a `apps/web/Dockerfile.dockerignore`**, la
 - **`.gitattributes` con `*.dockerignore text eol=lf`.** Git avisó `LF will be replaced by CRLF the next time Git touches it` al commitear (`core.autocrlf` en la máquina). El blob quedó en LF y el parser de `.dockerignore` tolera el `\r`, así que no bloquea; queda como blindaje del drift, pendiente de aprobación.
 - **`api-external` no fue auditado.** Servicio separado en Railway, con su Dockerfile en la rama `feature/external-api`; no se verificó si repite el patrón. Aplicar la misma revisión antes de mergear esa rama.
 - **El tamaño real del contexto no se midió.** Los logs de build de Railway no emiten el `transferring context: <tamaño>` de la etapa `load build context`, así que la reducción se infiere del contenido excluido, no de una medición.
+
+## ADR-074 — Imagen del API: árbol de producción desde el lockfile (etapa prod-deps hoisted)
+
+**Fecha:** 2026-07-26
+**Estado:** Aceptada
+
+### Contexto
+
+Medición sobre la imagen de producción del API (master, imagen `novotechflow-api-diag`): el runner copiaba `/app/apps/api/node_modules` del builder — bajo pnpm, solo symlinks hacia el store `/app/node_modules/.pnpm`, que nunca se copiaba — y el `RUN npm install prisma@5.10.2` encontraba el árbol roto y reinstalaba todo el `package.json` desde el registry ("added 842 packages"). Consecuencias medidas: la imagen corría lo que npm resolvía en build-time, no `pnpm-lock.yaml` (rangos caret sin reproducibilidad: el reporte de npm pasó de 4 a 35 vulnerabilidades sin tocar `package.json`); devDependencies en producción (`typescript` 6.0.2 resolvía dentro del contenedor; el install del builder va sin `--prod` y el `npm install` sin `--omit=dev`); el Prisma Client de runtime lo generaba el postinstall de npm en el runner, desperdiciando el `generate` del builder; imagen de 1.85 GB con un `package-lock.json` ajeno en `/app`. El paso de npm era además load-bearing: sin él la imagen no arrancaba, así que no podía eliminarse sin reemplazar el mecanismo completo.
+
+### Decisión
+
+Dockerfile en tres etapas. El builder queda igual, con `apk add openssl` y `pnpm exec prisma generate` en vez de `npx`. Etapa nueva `prod-deps`: `pnpm install --frozen-lockfile --filter api... --prod --config.node-linker=hoisted` — árbol real y plano, solo producción, versiones exactas del lockfile — más `pnpm exec prisma generate` explícito (pnpm 10 ignora los build scripts por default). El runner copia `/app/node_modules` desde `prod-deps`, elimina el `npm install` y el pnpm global, y el CMD corre `node_modules/.bin/prisma migrate deploy` en vez de `npx`. `prisma` pasa de devDependencies a dependencies (pinneada 5.10.2): el arranque ejecuta `migrate deploy` y el CLI debe viajar en el árbol de producción. Alternativa descartada: `pnpm deploy --prod` (el mecanismo canónico) — cambió de comportamiento con workspaces en pnpm 10 y agrega fricción que la etapa hoisted evita, con el mismo layout plano que producción ya corría.
+
+### Consecuencias
+
+- Imagen 1.85 GB → 811 MB; `node_modules` 482.6 M → 453.3 M. La reducción grande no viene del árbol sino de eliminar el apilamiento de capas (symlinks colgantes + reinstalación npm encima).
+- `typescript` → MODULE_NOT_FOUND dentro del contenedor; sin `package-lock.json`; sin bloques de npm audit/deprecated en el log; build en 1 m 22 s.
+- Reproducibilidad: la imagen corre exactamente el árbol de `pnpm-lock.yaml`; npm queda solo para bootstrapear pnpm en etapas de build.
+- El client de Prisma de runtime es el del `generate` de `prod-deps`, con openssl presente (engines para libssl 3.x; desaparece el `prisma:warn` de libssl).
+- Boot verificado contra la DB local: `migrate deploy` corre desde el binario de la imagen y Nest arranca; caída esperada por `GEMINI_API_KEY` ausente en el run de prueba, con resolución física de módulos confirmada en el stack.
+- Nota de comportamiento: con node-linker hoisted, pnpm deja `node_modules/.pnpm/lock.yaml` (solo metadatos, sin store virtual); el árbol es plano.
+
+### Archivos
+
+- `apps/api/Dockerfile` — reestructura a tres etapas.
+- `apps/api/package.json` — `prisma` a dependencies.
+- `pnpm-lock.yaml` — importer de `apps/api`.
+
+### Commits
+
+- `68f966a` fix(docker): api image installs prod-only tree from pnpm lockfile
+
+### Pendientes
+
+- Verificación en Railway tras el push: logs de build y deploy del servicio `novotechflow` (primer build sin cache, más largo).
+- `api-external` (rama `feature/external-api`) repite el patrón viejo en su Dockerfile; aplicar la misma revisión antes del merge (ya registrado en ADR-073).
