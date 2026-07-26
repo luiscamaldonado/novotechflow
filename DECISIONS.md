@@ -3072,3 +3072,59 @@ Ninguno del repo. El cambio vive en la variable `DATABASE_URL` del servicio `nov
 - **Medir el pico concurrente bajo carga real** para validar el 15. Muestreo de `pg_stat_activity` a lo largo de una ventana de tráfico de día hábil, no un instante.
 - **`api-external` no fue auditado.** Es un servicio separado con su propio Postgres (`postgres-external`) y presumiblemente el mismo default de pool. Aplicar la misma revisión.
 - **`@Global()` no auto-registra un módulo**: durante esta sesión se propuso quitar `PrismaModule` del array `imports` de `app.module.ts` junto con los 8 re-imports redundantes. Habría dejado el módulo fuera del grafo, sin instanciar, y `PrismaService` fuera del contenedor DI — error de runtime que ni `tsc` ni los specs actuales detectan, porque ninguno levanta el `AppModule` real. La registración raíz se queda. Anotado como invariante para una futura pasada de auditoría (INSTRUCTIVO §10.6).
+
+## ADR-073 — El .dockerignore solo existe en la raiz del contexto: los de apps/* eran letra muerta
+
+**Fecha:** 2026-07-26
+**Estado:** Aceptada
+
+### Contexto
+
+El `docker compose build` de `web` fallaba en local: `COPY apps/web/ apps/web/` copiaba `apps/web/node_modules` —con las junctions que pnpm crea en Windows— encima del install de la etapa builder. El repo tenía dos `.dockerignore`, uno en `apps/web/` y otro en `apps/api/`, con `node_modules`, `dist` y `.env`. Ninguno de los dos se leía nunca.
+
+La causa es la ubicación. Ambos servicios se construyen con el contexto en la raíz del monorepo (`docker-compose.yml`: `context: .`, `dockerfile: apps/<app>/Dockerfile`), y ahí BuildKit solo consulta dos rutas: `<contexto>/.dockerignore` o, con precedencia, el hermano del Dockerfile (`apps/<app>/Dockerfile.dockerignore`). No existía ninguna de las dos. Un `.dockerignore` en un subdirectorio del contexto no lo lee nadie.
+
+El contexto de la raíz no es una elección revisable: los dos Dockerfiles copian `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` y `packages/` desde el contexto.
+
+Verificado en el diagnóstico, el alcance era mayor al reportado:
+
+- **`apps/api` compartía el problema íntegro**, con un agravante: `COPY apps/api/ apps/api/` metía `apps/api/.env` en la imagen builder — secretos locales horneados en una capa.
+- `COPY packages/ packages/` arrastraba los `node_modules` anidados de los cuatro packages del workspace.
+- **En Railway tampoco gobernaba ningún ignore.** El contexto también es la raíz (el log imprime `load build definition from apps/api/Dockerfile`, ruta relativa a la raíz), y no hay `railway.json`, `railway.toml`, `.railwayignore` ni `RAILWAY_DOCKERFILE_PATH` en ninguno de los dos servicios. Producción construye limpio por otra razón: su contexto sale del archive de git, y `git ls-files` confirma que ningún `node_modules/`, `dist/` ni `.env` está trackeado. Estaba protegido por el `.gitignore`, no por configuración de Docker.
+
+### Decisión
+
+Un único `.dockerignore` en la raíz del contexto, con los patrones anclados con `**/`, y se eliminan los dos de `apps/*`. Contenido: `.git`, `**/node_modules`, `**/dist`, `**/.env`, más un comentario que preserva la nota heredada de `apps/api` (no excluir `uploads/`: los defaults se necesitan en build).
+
+**La raíz es la única ubicación que los cuatro caminos consultan** (web y api, local y Railway) sin depender de comportamiento no documentado.
+
+**El `**/` no es cosmético.** Los patrones de `.dockerignore` se evalúan contra la raíz del contexto y no tienen la semántica de `.gitignore`: `node_modules` a secas solo matchea el nivel superior, no `apps/web/node_modules` ni `packages/*/node_modules` — que es justo lo que rompía el build.
+
+Alternativas descartadas: **renombrar a `apps/web/Dockerfile.dockerignore`**, la hipótesis con la que entró el diagnóstico — el builder de Railway no documenta que honre el hermano del Dockerfile, y aun honrándolo el archivo habría excluido solo el nivel superior, dejando el modo de falla intacto; en Railway además sería un no-op, porque lo que esos patrones matchean ya no viaja en el archive de git. **Mover el contexto a `apps/<app>`**: rompe los COPY del lockfile, el workspace y `packages/`. **No hacer nada**: producción sobrevive, pero el build local queda roto y el `.env` sigue entrando a las capas.
+
+`.git` se excluye de paso: ningún COPY lo consume y es peso muerto del contexto.
+
+### Consecuencias
+
+- `docker compose build api web` completa en local (exit 0, ~3,5 min). El log confirma que el archivo actúa: `load .dockerignore — transferring context: 163B done`.
+- El `.env` de `apps/api` deja de entrar al contexto y de quedar en una capa del builder.
+- **Railway construye igual.** Lo que el archivo excluye ya no viajaba en el archive de git; el único cambio observable será que `load .dockerignore` pase a cargar contenido. No es un cambio de comportamiento en producción: es cerrar la brecha entre los dos entornos.
+- Principio: **un ignore-file mal ubicado no falla, desaparece.** No hay error, ni warning, ni etapa que se salte — el build procede sin él y el archivo queda como documentación de una intención que nadie ejecuta. Hermano del principio del ADR-071: un gate que no cubre lo que cree cubrir es peor que no tenerlo, porque además tranquiliza.
+- Falso positivo registrado: el problema entró como "hay que renombrar el archivo" y el rename resultó **insuficiente** (solo top-level) e **innecesario** (no-op en Railway). Lo que faltaba no era mover el archivo, era anclar los patrones y ponerlos donde el builder mira.
+- La limpieza del build de producción dependía por completo de que el `.gitignore` siguiera cubriendo `node_modules`, `dist` y `.env`. Deja de ser la única línea de defensa.
+
+### Archivos
+
+- `.dockerignore` — nuevo, raíz del repo.
+- `apps/web/.dockerignore` — eliminado.
+- `apps/api/.dockerignore` — eliminado.
+
+### Commits
+
+- `d0780bf` chore(docker): root dockerignore for monorepo build context
+
+### Pendientes
+
+- **`.gitattributes` con `*.dockerignore text eol=lf`.** Git avisó `LF will be replaced by CRLF the next time Git touches it` al commitear (`core.autocrlf` en la máquina). El blob quedó en LF y el parser de `.dockerignore` tolera el `\r`, así que no bloquea; queda como blindaje del drift, pendiente de aprobación.
+- **`api-external` no fue auditado.** Servicio separado en Railway, con su Dockerfile en la rama `feature/external-api`; no se verificó si repite el patrón. Aplicar la misma revisión antes de mergear esa rama.
+- **El tamaño real del contexto no se midió.** Los logs de build de Railway no emiten el `transferring context: <tamaño>` de la etapa `load build context`, así que la reducción se infiere del contenido excluido, no de una medición.
