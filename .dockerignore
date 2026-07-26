@@ -1,0 +1,5 @@
+.git
+**/node_modules
+**/dist
+**/.env
+# no excluir uploads/: los defaults se necesitan en build (nota heredada de apps/api)
