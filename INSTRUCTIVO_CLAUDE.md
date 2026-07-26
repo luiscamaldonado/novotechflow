@@ -215,7 +215,7 @@ pnpm exec tsc --noEmit --project apps/web/tsconfig.app.json
 pnpm exec tsc --noEmit --project apps/api/tsconfig.json
 ```
 
-> El gate de tipos de la api es `apps/api/tsconfig.json`, nunca `tsconfig.build.json`: esa última excluye `test` y `**/*spec.ts` por construcción, así que no puede ver una rotura en los specs aunque salga verde (ADR-071). Regla general: la verificación se elige contra la clase de rotura que se está introduciendo.
+> El gate de tipos de la api es `apps/api/tsconfig.json`, nunca `tsconfig.build.json`: esa última excluye `test` y `**/*spec.ts` por construcción, así que no puede ver una rotura en los specs. Es la config de build, no el gate de tipos. Regla general (ADR-071): la verificación se elige contra la clase de rotura que se está introduciendo; un gate que por construcción no puede verla no es un gate, aunque salga verde.
 
 **Migración de Prisma (desde `apps/api`, nunca desde la raíz):**
 ```powershell

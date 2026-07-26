@@ -448,7 +448,7 @@ Medidas de seguridad ya activas (auditoría abril 2026):
 - Ownership check (IDOR) en TODOS los endpoints de propuestas, escenarios, páginas y bloques
 - `forbidNonWhitelisted: true` — rechaza campos extra en requests
 - Helmet con CSP, HSTS, X-Frame-Options
-- Rate limiting global (100/min por IP real vía `X-Real-IP`, `RealIpThrottlerGuard`) + estricto en login (5/min). El límite de 30/min que figuraba antes nunca fue efectivo en producción: `req.ip` variaba por petición y cada una estrenaba contador (ADR-071).
+- Rate limiting global (100/60s por IP real vía `X-Real-IP`, `RealIpThrottlerGuard`, no `req.ip`: detrás del edge de Railway `req.ip` rota entre peticiones y el límite nunca se alcanzaba — ADR-071) + estricto en auth: 5/min en login, 5/min en verify-code, 3/min en resend-code
 - Swagger/OpenAPI en `/api/docs` solo si `SWAGGER_ENABLED=true`; ausente por defecto en producción (ADR-071)
 - Upload: validación de magic bytes + sanitización de originalname
 - XSS: sanitización con sanitize-html en campos de texto
