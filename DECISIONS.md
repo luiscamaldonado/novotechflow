@@ -2937,3 +2937,80 @@ Cohorte 2 (estructural, feature propia con ADR propio, tras llegar `feature/wysi
 - Limpieza de `findOneById` sin callers.
 - Errores prettier preexistentes en `app-settings.service.ts` (heredados de master).
 - Escape Unicode literal en text node JSX de `BlockEditor.tsx` (cosmético, registrado aparte).
+
+## ADR-071 — Swagger expuesto, throttler inoperante y gate de tipos ciego: el chequeo no cubría lo que rompía
+
+**Fecha:** 2026-07-25
+**Estado:** Aceptada
+
+### Contexto
+
+Auditoría de dependencias del API y composición del bundle de web (rama `chore/audit-deps-y-bundle`, 24-jul), documentada en `docs/diagnostico-2026-07-24-deps-bundle.md` con tres anexos. Destapó tres hallazgos de naturaleza distinta, ninguno reportado por un usuario:
+
+- **Swagger público en producción.** `SwaggerModule.setup()` corría sin ninguna guarda de entorno. Las cuatro rutas que registra —`/api/docs`, `/api/docs-json`, `/api/docs-yaml` y `/api/docs/swagger-ui-init.js`— respondían 200 a un cliente anónimo desde internet, publicando el mapa completo de la superficie HTTP: 65 rutas, 93 operaciones, 43 esquemas, incluidas las 11 bajo `/admin` y las descripciones en lenguaje natural de cada endpoint. Dato que descartó el compromiso intermedio: el spec viaja incrustado en `swagger-ui-init.js` (75 480 bytes), así que proteger solo `/api/docs-yaml` no ocultaba nada.
+- **Throttler inoperante desde su instalación.** Apareció como efecto colateral del control de la medición anterior. `x-ratelimit-remaining` clavado en 4 en `/auth/login` a lo largo de peticiones consecutivas ⇒ `totalHits = 1` cada vez: cada petición estrenaba su propio contador. Los logs HTTP del edge confirmaron que las 23 peticiones de sondeo salieron con un único `srcIp` constante, de modo que la variación no venía del cliente. El rate limiting existía desde abril (ADR-006) y no limitó nada en producción en ningún momento. Hallazgo adjunto: las rutas de Swagger se registran con `httpAdapter.get()`, por debajo del router de Nest, así que el `APP_GUARD` ni siquiera las cubría.
+- **Gate de tipos ciego, con cinco semanas de tests muertos.** `apps/api/tsconfig.build.json` excluye `test` y `**/*spec.ts` por construcción, y el CI tipaba la api únicamente contra esa configuración. El bump a TypeScript 6.0 del ADR-048 (junio) dejó rojo el typecheck de los 7 archivos de test del programa —`types` vacío por defecto y semántica de `esModuleInterop`— y nadie lo vio, porque el chequeo que declaró el bump verificado no compilaba esos archivos.
+
+### Decisión
+
+**1. Swagger tras `SWAGGER_ENABLED`, con default apagado** (`0bdbfb7`). La condición envuelve el bloque completo de `setup()`, de modo que cierra las cuatro rutas de golpe, y compara contra el literal `'true'` y no `Boolean(...)`, para que `SWAGGER_ENABLED=false` desactive en vez de activar. La variable no existe en el servicio de Railway, así que el estado deseado en producción es el default y no hubo nada que tocar allí. Alternativas descartadas: derivar de `NODE_ENV` (acopla la visibilidad de la documentación a una variable que gobierna verbosidad de errores y comportamiento de terceros; ver la doc exigiría degradar el entorno) y proteger solo `/api/docs-yaml` (ineficaz por lo dicho en el contexto). El fix es un interruptor, no autenticación: mientras esté encendido, la doc está abierta.
+
+**2. Throttler con la IP real del cliente, en tres pasos.** El primer diagnóstico acertó la causa —`req.ip` variable— pero no el mecanismo completo, y por eso hubo tres intentos encadenados en vez de uno:
+
+- `a82b911` — `app.set('trust proxy', 1)`. Se eligió el entero `1` y no `true` por análisis de spoofing: con `true` y un edge que appendea, `req.ip` es la entrada más a la izquierda de `X-Forwarded-For`, es decir, la que puso el atacante. Con `1` la confianza es posicional y una XFF forjada queda siempre a la izquierda del truncado, stripee o appendee el edge. Los modos de fallo de `1` son sobre-limitar o quedar como estaba; el de `true` es entregar la evasión.
+- `135321c` — límite global de 30 a 100 req/60 s, calibrado sobre 4 330 peticiones reales de 10,8 días de logs del edge. Pico legítimo medido: 24 req/60 s por (IP, handler) en `GET /spec-options/suggest`, producto mecánico del debounce de 300 ms del autocompletado de especificaciones. El 30 dejaba 1,25x de margen, que dos usuarios tras un mismo NAT —escenario ya observado— cruzan trabajando normal. El 100 deja 4,2x. Los `@Throttle` de auth no se tocan: la defensa fina de credenciales la dan ellos.
+- `b7e6bbc` — `RealIpThrottlerGuard`, subclase de `ThrottlerGuard` con `getTracker()` sobre `X-Real-IP` y fallback a `req.ip` en local. Una sonda temporal desplegada a propósito (`292a126`, revertida en `bb3563c`) midió dentro del contenedor lo que no era observable desde fuera y demostró que con `trust proxy 1` `req.ip` resuelve el salto interno del edge, que rota entre peticiones: el paso anterior no bastaba. `X-Real-IP` es la cabecera que Railway documenta para la IP del cliente y que su edge reemplaza si el cliente la forja.
+
+**3. El gate de tipos de la api pasa a `tsconfig.json` y el CI corre los tests.** `af44683` apunta el typecheck de `ci.yml` y `pr-check.yml` a `apps/api/tsconfig.json`, el mismo programa que el `tsc --noEmit` local, con los 7 archivos de test dentro. `cc6c572` añade el paso de jest (`pnpm --filter api test`) justo después; el `test:e2e` queda fuera de CI por usar configuración aparte y poder exigir Postgres. Para que ambos pasaran en verde: `1664b08` restaura `"types": ["jest", "node"]` en `tsconfig.json` y cambia el import de supertest a default; `24d83c5` provee dependencias mockeadas (`provide`/`useValue`) en los cuatro specs por defecto de Nest, que fallaban al compilar el `TestingModule` por DI sin resolver.
+
+**4. Regla de verificación.** `tsconfig.build.json` es la configuración de build y **no cuenta como gate de tipos de la api**: excluye `test` y `**/*spec.ts` por construcción. El typecheck de la api es `apps/api/tsconfig.json`. Principio general del que esto es un caso particular: **la verificación se elige contra la clase de rotura que se está introduciendo; un gate que por construcción no puede ver esa clase de rotura no es un gate, aunque salga verde.** La regla se propaga a `INSTRUCTIVO_CLAUDE.md` §9 y `CONVENTIONS.md` §F en commit aparte de este ADR.
+
+### Consecuencias
+
+- La API deja de publicar su propio mapa a internet. Para consultar la documentación: `SWAGGER_ENABLED=true` en `apps/api/.env` y leerla en local, que describe la misma forma de API. Activarla en producción cuesta dos redespliegues (encender y apagar) y no añade autenticación.
+- El rate limiting empieza a existir de verdad por primera vez desde abril de 2026. Consecuencia real y nueva: endpoints que nunca fueron limitados ahora pueden devolver 429. El 100 se calibró para que eso no le ocurra al tráfico legítimo medido, pero el margen es empírico, no teórico.
+- Corrección de registro sobre el ADR-006 y sobre `CONVENTIONS.md` §K, que declaraban el rate limiting global de 30/min como medida activa: no lo era en producción, y el número ahora es 100. Ninguno de los dos se reescribe — §K se actualiza en el commit de documentación; el ADR-006 queda corregido por referencia desde aquí, porque `DECISIONS.md` es append-only.
+- Corrección de registro sobre el ADR-048, que declaró el bump a TypeScript 6.0 verificado con evidencia que no cubría lo que el bump rompía. Tampoco se edita: queda corregido desde aquí.
+- El gate se vuelve más lento y, al principio, más ruidoso: los 7 archivos de test entran al programa de tipos y jest corre en cada push y cada PR. Es el costo de que vea lo que antes no veía.
+- `apps/api/.env.example` documenta `SWAGGER_ENABLED`.
+- Patrón validado: instrumentación desplegada a propósito y revertida en el commit siguiente (`292a126` → `bb3563c`), cuando el dato solo es observable desde dentro del contenedor y Railway no da shell. La sonda entra y sale en el mismo par de commits, nunca queda.
+- El `gzip on` de nginx (`7033683`) salió del Bloque C de este mismo diagnóstico, pero pertenece a la decisión de compresión del ADR-070 y se registra allí como cola, no aquí.
+
+### Archivos
+
+- `apps/api/src/main.ts` — guarda `SWAGGER_ENABLED` sobre el bloque de Swagger; `app.set('trust proxy', 1)`
+- `apps/api/.env.example` — `SWAGGER_ENABLED`
+- `apps/api/src/app.module.ts` — `limit: 100`; `APP_GUARD` pasa a `RealIpThrottlerGuard`
+- `apps/api/src/common/guards/real-ip-throttler.guard.ts` — nuevo, `getTracker()` sobre `X-Real-IP`
+- `apps/api/tsconfig.json` — `"types": ["jest", "node"]`
+- `apps/api/test/app.e2e-spec.ts` — import default de supertest
+- `apps/api/src/auth/auth.controller.spec.ts`, `apps/api/src/auth/auth.service.spec.ts`, `apps/api/src/users/users.controller.spec.ts`, `apps/api/src/users/users.service.spec.ts` — mocks de DI
+- `.github/workflows/ci.yml`, `.github/workflows/pr-check.yml` — typecheck contra `tsconfig.json` y paso de jest
+- `docs/diagnostico-2026-07-24-deps-bundle.md` — diagnóstico y sus tres anexos
+
+### Commits
+
+- `17b4979` docs: diagnostico de dependencias del API y bundle de web
+- `2dc6f77` docs: anexo de exposicion de Swagger en el diagnostico
+- `0bdbfb7` fix(api): gate Swagger behind SWAGGER_ENABLED, default off
+- `b3da89b` docs: anexo throttler inoperante y trust proxy en el diagnostico
+- `a82b911` fix(api): trust exactly one proxy hop so req.ip sees the real client
+- `292a126` chore(api): TEMPORARY [PROXY-PROBE] logging of edge proxy headers
+- `135321c` fix(api): raise global throttler limit from 30 to 100 req/60s
+- `3266dee` docs: anexo de medicion de trafico que calibra el limit 100 del throttler
+- `b7e6bbc` fix(api): throttler tracks X-Real-IP so rate limiting counts real clients
+- `bb3563c` Revert "chore(api): TEMPORARY [PROXY-PROBE] logging of edge proxy headers"
+- `1664b08` fix(api): restore jest/node types in tsconfig and supertest default import
+- `af44683` ci: typecheck api against tsconfig.json so spec files gate the build
+- `24d83c5` test(api): provide mocked dependencies so DI resolves in unit spec files
+- `cc6c572` ci: run api unit tests after the typecheck step
+
+### Pendientes
+
+- **Verificar el throttler en producción**: 6 peticiones a `/auth/login` con credenciales inválidas dentro de una ventana de 60 s desde una sola máquina. Esperado: 401 con `remaining` bajando de 4 a 0 y **429 en la sexta**. Es la única prueba que cierra `b7e6bbc`; el guard de `X-Real-IP` no se verificó contra producción. Hacerla fuera de horario de usuarios y no repetirla en bucle (la IP queda bloqueada para esa ruta hasta 60 s). Si aparecieran 429 antes de la sexta, hay un salto intermedio y toca reevaluar.
+- **Verificar el cierre de Swagger en producción**: 404 en las cuatro rutas.
+- **`SWAGGER_ENABLED` no debe crearse en Railway.** Si se activa puntualmente, quitarla al terminar; son dos redespliegues.
+- **`/uploads/*` sin auditar**: `app.useStaticAssets()` monta ficheros por debajo del router, igual que Swagger, así que tampoco lo cubre el throttler. No se midió qué expone.
+- **Preguntas abiertas del diagnóstico, sin cerrar**: severidad efectiva de los 28 advisories de `axios`; `express` importado en `main.ts` sin estar declarado en `apps/api/package.json`; si el `COPY` de `node_modules` del Dockerfile preserva el layout de `.pnpm` en la imagen (condiciona el inventario real de vulnerabilidades); `react-router` resuelto a la build `development`; `@tiptap/extension-underline` y `@tiptap/pm` declarados sin sitio de import.
+- **Peso del bundle de web**: `FileSaver.min` (939 kB, 99,6 % `exceljs`) y `RichTextEditor` (1 021 kB) son imports estáticos de sus chunks de ruta, así que se descargan al entrar a la ruta y no al pulsar exportar. Candidatos a `import()` dinámico.
+- **Propagación de la regla del gate** a `INSTRUCTIVO_CLAUDE.md` §9 y `CONVENTIONS.md` §F, y actualización de §K (rate limiting): commit aparte de este ADR.
