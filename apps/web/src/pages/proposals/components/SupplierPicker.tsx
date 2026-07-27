@@ -34,8 +34,9 @@ function SupplierPicker({
         [value, companies],
     );
 
-    const [query, setQuery] = useState(selectedCompany?.name ?? '');
+    const [draft, setDraft] = useState<string | null>(null);
     const [open, setOpen] = useState(false);
+    const query = draft ?? selectedCompany?.name ?? '';
     const wrapperRef = useRef<HTMLDivElement>(null);
 
     const effectiveDisabled = disabled || isLoading;
@@ -61,26 +62,21 @@ function SupplierPicker({
         return companies.some(c => normalizeSupplierName(c.name) === normalizedQuery);
     }, [trimmedQuery, companies]);
 
-    // Sync query with the resolved selected company when value/companies change
-    useEffect(() => {
-        setQuery(selectedCompany ? selectedCompany.name : '');
-    }, [selectedCompany]);
-
     // Close on outside click
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
                 setOpen(false);
-                setQuery(selectedCompany ? selectedCompany.name : '');
+                setDraft(null);
             }
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [selectedCompany]);
+    }, []);
 
     const handleSelect = (company: SupplierCompany) => {
         onChange(company.id);
-        setQuery(company.name);
+        setDraft(null);
         setOpen(false);
     };
 
@@ -101,12 +97,12 @@ function SupplierPicker({
                     type="text"
                     value={query}
                     disabled={effectiveDisabled}
-                    onChange={(e) => { setQuery(e.target.value); if (!effectiveDisabled) setOpen(true); }}
+                    onChange={(e) => { setDraft(e.target.value); if (!effectiveDisabled) setOpen(true); }}
                     onFocus={() => { if (!effectiveDisabled) setOpen(true); }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') {
                             setOpen(false);
-                            setQuery(selectedCompany ? selectedCompany.name : '');
+                            setDraft(null);
                         }
                     }}
                     placeholder={isLoading ? 'Cargando proveedores...' : 'Buscar proveedor...'}
