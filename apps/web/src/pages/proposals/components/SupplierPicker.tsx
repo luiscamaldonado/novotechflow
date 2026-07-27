@@ -83,6 +83,7 @@ function SupplierPicker({
     const handleCreateRequest = () => {
         if (!onCreateRequest) return;
         onCreateRequest(trimmedQuery);
+        setDraft(null);
         setOpen(false);
     };
 
