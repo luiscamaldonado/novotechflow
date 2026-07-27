@@ -36,6 +36,14 @@ jobs:
       - name: Build item-display package
         run: pnpm --filter @repo/item-display build
 
+      - name: Lint Web (ESLint)
+        run: pnpm run lint
+        working-directory: apps/web
+
+      - name: Lint API (ESLint)
+        run: pnpm run lint
+        working-directory: apps/api
+
       - name: Typecheck Web (Vite)
         run: pnpm exec tsc --noEmit --project apps/web/tsconfig.app.json
 
