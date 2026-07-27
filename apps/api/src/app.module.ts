@@ -37,6 +37,9 @@ import { RealIpThrottlerGuard } from './common/guards/real-ip-throttler.guard';
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: RealIpThrottlerGuard }],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: RealIpThrottlerGuard },
+  ],
 })
 export class AppModule {}

@@ -188,17 +188,23 @@ export class ProposalsController {
     @Request() req: { user: AuthenticatedUser },
     @Body() data: CloneProposalDto,
   ) {
-    return this.proposalsService.cloneProposal(id, req.user.id, data.cloneType, req.user, {
-      status: data.status,
-      acquisitionType: data.acquisitionType,
-      closeDate: data.closeDate,
-      clientId: data.clientId,
-      clientName: data.clientName,
-      subject: data.subject,
-      issueDate: data.issueDate,
-      validityDays: data.validityDays,
-      validityDate: data.validityDate,
-    });
+    return this.proposalsService.cloneProposal(
+      id,
+      req.user.id,
+      data.cloneType,
+      req.user,
+      {
+        status: data.status,
+        acquisitionType: data.acquisitionType,
+        closeDate: data.closeDate,
+        clientId: data.clientId,
+        clientName: data.clientName,
+        subject: data.subject,
+        issueDate: data.issueDate,
+        validityDays: data.validityDays,
+        validityDate: data.validityDate,
+      },
+    );
   }
 
   // --- ENDPOINTS DE ESCENARIOS ---

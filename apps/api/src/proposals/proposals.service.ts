@@ -6,7 +6,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProposalStatus, ConsecutiveSource, AcquisitionType } from '@prisma/client';
+import {
+  ProposalStatus,
+  ConsecutiveSource,
+  AcquisitionType,
+} from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
 import {
@@ -356,7 +360,9 @@ export class ProposalsService {
       where: { id },
       include: {
         proposalItems: { orderBy: { sortOrder: 'asc' } },
-        user: { select: { name: true, nomenclature: true, signatureUrl: true } },
+        user: {
+          select: { name: true, nomenclature: true, signatureUrl: true },
+        },
       },
     });
   }
@@ -544,7 +550,9 @@ export class ProposalsService {
    */
   async findAll(user: AuthenticatedUser) {
     const accessFilter =
-      user.role === 'ADMIN' || user.role === 'REPORTER' ? {} : { userId: user.id };
+      user.role === 'ADMIN' || user.role === 'REPORTER'
+        ? {}
+        : { userId: user.id };
 
     return this.prisma.proposal.findMany({
       where: { ...accessFilter, deletedAt: null },
@@ -571,18 +579,32 @@ export class ProposalsService {
    * NEW_VERSION: incrementa la version (COT-LM0001-1 -> COT-LM0001-2), conserva consecutiveSource.
    * NEW_PROPOSAL: genera nuevo codigo secuencial (COT-LM0002-1), siempre AUTO.
    */
-  async cloneProposal(id: string, userId: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL', user: AuthenticatedUser, overrides?: {
-    status?: ProposalStatus; acquisitionType?: AcquisitionType; closeDate?: string;
-    clientId?: string; clientName?: string; subject?: string;
-    issueDate?: string; validityDays?: number; validityDate?: string;
-  }) {
+  async cloneProposal(
+    id: string,
+    userId: string,
+    cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL',
+    user: AuthenticatedUser,
+    overrides?: {
+      status?: ProposalStatus;
+      acquisitionType?: AcquisitionType;
+      closeDate?: string;
+      clientId?: string;
+      clientName?: string;
+      subject?: string;
+      issueDate?: string;
+      validityDays?: number;
+      validityDate?: string;
+    },
+  ) {
     await this.verifyProposalOwnership(id, user);
     const original = await this.prisma.proposal.findUnique({
       where: { id },
       include: {
         proposalItems: true,
         pages: { include: { blocks: true } },
-        scenarios: { include: { scenarioItems: { include: { children: true } } } },
+        scenarios: {
+          include: { scenarioItems: { include: { children: true } } },
+        },
       },
     });
     if (!original) throw new NotFoundException('Propuesta no encontrada.');
@@ -590,7 +612,9 @@ export class ProposalsService {
     return this.prisma.$transaction(async (tx) => {
       let newCode: string;
       if (cloneType === 'NEW_VERSION') {
-        const groupPrefix = this.extractVersionGroupPrefix(original.proposalCode);
+        const groupPrefix = this.extractVersionGroupPrefix(
+          original.proposalCode,
+        );
         if (groupPrefix) {
           const groupCodes = await tx.proposal.findMany({
             where: { proposalCode: { startsWith: groupPrefix } },
@@ -607,28 +631,55 @@ export class ProposalsService {
         }
       } else {
         const cloneUser = await this.validateUserAccess(userId);
-        newCode = await this.generateProposalCode(cloneUser.nomenclature, userId);
+        newCode = await this.generateProposalCode(
+          cloneUser.nomenclature,
+          userId,
+        );
       }
 
       const clonedConsecutiveSource =
-        cloneType === 'NEW_VERSION' ? original.consecutiveSource : ConsecutiveSource.AUTO;
-      const ownerUserId = cloneType === 'NEW_VERSION' ? original.userId : userId;
+        cloneType === 'NEW_VERSION'
+          ? original.consecutiveSource
+          : ConsecutiveSource.AUTO;
+      const ownerUserId =
+        cloneType === 'NEW_VERSION' ? original.userId : userId;
 
       const cloned = await tx.proposal.create({
         data: {
           proposalCode: newCode,
           consecutiveSource: clonedConsecutiveSource,
           userId: ownerUserId,
-          clientId: cloneType === 'NEW_PROPOSAL' && overrides?.clientId !== undefined ? overrides.clientId : original.clientId,
-          clientName: cloneType === 'NEW_PROPOSAL' && overrides?.clientName !== undefined ? overrides.clientName : original.clientName,
-          subject: cloneType === 'NEW_PROPOSAL' && overrides?.subject !== undefined ? overrides.subject : original.subject,
-          issueDate: cloneType === 'NEW_PROPOSAL' && overrides?.issueDate ? new Date(overrides.issueDate) : new Date(),
+          clientId:
+            cloneType === 'NEW_PROPOSAL' && overrides?.clientId !== undefined
+              ? overrides.clientId
+              : original.clientId,
+          clientName:
+            cloneType === 'NEW_PROPOSAL' && overrides?.clientName !== undefined
+              ? overrides.clientName
+              : original.clientName,
+          subject:
+            cloneType === 'NEW_PROPOSAL' && overrides?.subject !== undefined
+              ? overrides.subject
+              : original.subject,
+          issueDate:
+            cloneType === 'NEW_PROPOSAL' && overrides?.issueDate
+              ? new Date(overrides.issueDate)
+              : new Date(),
           issueCity: original.issueCity,
-          validityDays: cloneType === 'NEW_PROPOSAL' && overrides?.validityDays !== undefined ? overrides.validityDays : original.validityDays,
-          validityDate: cloneType === 'NEW_PROPOSAL' && overrides?.validityDate ? new Date(overrides.validityDate) : original.validityDate,
+          validityDays:
+            cloneType === 'NEW_PROPOSAL' &&
+            overrides?.validityDays !== undefined
+              ? overrides.validityDays
+              : original.validityDays,
+          validityDate:
+            cloneType === 'NEW_PROPOSAL' && overrides?.validityDate
+              ? new Date(overrides.validityDate)
+              : original.validityDate,
           status: overrides?.status ?? ProposalStatus.ELABORACION,
           acquisitionType: overrides?.acquisitionType ?? null,
-          closeDate: overrides?.closeDate ? new Date(overrides.closeDate) : null,
+          closeDate: overrides?.closeDate
+            ? new Date(overrides.closeDate)
+            : null,
           isLocked: false,
         },
       });
@@ -665,7 +716,7 @@ export class ProposalsService {
         const newItem = await tx.proposalItem.create({
           data: {
             proposalId: cloned.id,
-            pageId: item.pageId ? pageIdMap.get(item.pageId) ?? null : null,
+            pageId: item.pageId ? (pageIdMap.get(item.pageId) ?? null) : null,
             itemType: item.itemType,
             name: item.name,
             description: item.description,
@@ -722,7 +773,8 @@ export class ProposalsService {
 
         const childItems = scenario.scenarioItems.filter((si) => si.parentId);
         for (const child of childItems) {
-          const newParentId = scenarioItemIdMap.get(child.parentId!) || child.parentId;
+          const newParentId =
+            scenarioItemIdMap.get(child.parentId!) || child.parentId;
           const newItemId = itemIdMap.get(child.itemId) || child.itemId;
           await tx.scenarioItem.create({
             data: {

@@ -18,13 +18,16 @@ export const COP_MIN_UNIT_PRICE_KEY = 'cop_min_unit_price';
 export const USD_MAX_UNIT_PRICE_KEY = 'usd_max_unit_price';
 
 /** Key del flag de obligatoriedad del nombre de contacto del proveedor. */
-export const SUPPLIER_CONTACT_NAME_REQUIRED_KEY = 'supplier_contact_name_required';
+export const SUPPLIER_CONTACT_NAME_REQUIRED_KEY =
+  'supplier_contact_name_required';
 
 /** Key del flag de obligatoriedad del telefono de contacto del proveedor. */
-export const SUPPLIER_CONTACT_PHONE_REQUIRED_KEY = 'supplier_contact_phone_required';
+export const SUPPLIER_CONTACT_PHONE_REQUIRED_KEY =
+  'supplier_contact_phone_required';
 
 /** Key del flag de obligatoriedad del correo de contacto del proveedor. */
-export const SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY = 'supplier_contact_email_required';
+export const SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY =
+  'supplier_contact_email_required';
 
 /** Default timeout in minutes when no setting exists yet */
 const DEFAULT_INACTIVITY_MINUTES = 5;
@@ -110,12 +113,18 @@ export class AppSettingsService {
   async getMaintenanceBanner(): Promise<MaintenanceBanner> {
     const settings = await this.prisma.appSetting.findMany({
       where: {
-        key: { in: [MAINTENANCE_BANNER_MESSAGE_KEY, MAINTENANCE_BANNER_ACTIVE_KEY] },
+        key: {
+          in: [MAINTENANCE_BANNER_MESSAGE_KEY, MAINTENANCE_BANNER_ACTIVE_KEY],
+        },
       },
     });
 
-    const messageSetting = settings.find((s) => s.key === MAINTENANCE_BANNER_MESSAGE_KEY);
-    const activeSetting = settings.find((s) => s.key === MAINTENANCE_BANNER_ACTIVE_KEY);
+    const messageSetting = settings.find(
+      (s) => s.key === MAINTENANCE_BANNER_MESSAGE_KEY,
+    );
+    const activeSetting = settings.find(
+      (s) => s.key === MAINTENANCE_BANNER_ACTIVE_KEY,
+    );
 
     return {
       message: messageSetting?.value ?? '',
