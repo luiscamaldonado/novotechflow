@@ -3262,3 +3262,58 @@ Añadir un `location` con regex para estáticos sin hash (`png|jpg|jpeg|gif|ico|
 - `novotechflow.png` en la raíz del repo y dos copias en `backups/2026-03-26-PDF_DOC_BUILDER/` siguen en 4,5 MB cada una: no llegan al build, pero son ~13,6 MB de peso muerto en git. Borrar `backups/` merece su propia decisión.
 - `apps/web/public/defaults/portada.png` (503.746 B, 815×1074) es default del builder de documentos y puede terminar embebido en PDFs; no se tocó. Evaluar aparte con ese uso a la vista.
 - Ningún `<img>` del logo declara `width`/`height` ni `loading`/`decoding`. Con el asset liviano el impacto es menor, pero la ausencia de dimensiones explícitas provoca layout shift.
+
+## ADR-077 — Cierre de los pendientes de ADR-075: la cadena muerta era de dos eslabones y "Cliente Libre" era el estado por defecto
+
+**Fecha:** 2026-07-31
+**Estado:** Aceptada
+
+### Contexto
+
+ADR-075 dejó tres pendientes. Al abordarlos, dos resultaron ser distintos de como estaban registrados.
+
+El primero afirmaba que `packages/eslint-config` no tenía consumidores. Es falso: `packages/ui/eslint.config.mjs` lo importa y su `package.json` lo declara como `workspace:*`. El error fue acotar la búsqueda a `apps/` y no a `packages/`. Eliminarlo en aislamiento habría roto `pnpm install --frozen-lockfile` en ambos Dockerfiles y en CI. La verificación posterior mostró que `@repo/ui` tampoco tiene consumidores: era una cadena muerta de dos eslabones, no un paquete huérfano.
+
+El segundo pedía una bandera `isSearching` para la ventana en que el panel de cruce de cuentas muestra "Cliente Libre" durante el debounce. La lectura del código destapó dos fallos peores: por debajo de `MIN_CONFLICT_SEARCH_LENGTH` el efecto retorna sin buscar, así que con 1-2 letras "Cliente Libre" no es transitorio sino permanente y falso; y si el fetch falla, el `catch` solo loguea y el panel afirma en verde que nadie cotizó al cliente. En un panel cuyo propósito es evitar que dos comerciales coticen al mismo cliente, un fallo silencioso en verde es peor que no tener panel.
+
+El tercero era el encabezado desactualizado de ADR-050.
+
+### Decisión
+
+Eliminar `packages/ui` y `packages/eslint-config` juntos y regenerar el lockfile. Es scaffold de Turborepo que nunca se usó: el `README` del paquete aún titula `@turbo/eslint-config`, sus dependencias divergen de las de las apps, y el patrón real del proyecto para código compartido ya es otro (`@repo/item-display`, creado con propósito concreto). Un design system futuro se haría de nuevo, no resucitando este esqueleto.
+
+Sustituir la bandera suelta por una unión discriminada `ConflictSearchState` (`idle | searching | ready | failed`), derivada en render y anclada al nombre que originó cada resultado — sin estado nuevo sincronizado por efecto, para no reintroducir lo que ADR-075 acababa de sacar. `ready` solo se alcanza cuando el servidor respondió para el nombre vigente; deja de ser el estado por defecto de todo lo que no sea una lista con datos.
+
+Corregir ADR-050 con `str_replace` aditivo en título y `**Estado:**` (INSTRUCTIVO §4.6), sin tocar Consecuencias ni Archivos: son narrativa del momento y la entrada ya se autocorrige en sus Pendientes.
+
+### Consecuencias
+
+- El monorepo pasa de 6 a 5 workspace projects; el lockfile pierde 1.189 líneas y 101 paquetes resueltos por install.
+- El panel gana dos estados visibles: "Buscando propuestas previas..." y un estado ámbar de fallo. `hasNoConflicts` e `isClientEmpty` desaparecen del API del hook y de sus dos consumidores.
+- La premisa falsa de ADR-075 queda corregida aquí, no allá: `DECISIONS.md` es append-only y la entrada anterior conserva lo que se creía cuando se escribió.
+- Confirmado que un pendiente de un ADR no es una tarea validada: dos de los tres cambiaron de forma al mirarlos de cerca. Vale releer el código antes de ejecutar un pendiente heredado.
+
+### Archivos
+
+- `packages/ui/`, `packages/eslint-config/` — eliminados completos.
+- `pnpm-lock.yaml` — regenerado sin los dos importers.
+- `CONVENTIONS.md`, `AGENTS.md` — árbol de §I actualizado; `item-display/` agregado, que no estaba listado. Byte-idénticos verificados por SHA256 antes y después.
+- `DECISIONS.md` — ADR-050: título y `**Estado:**` marcan los diferidos como resueltos en `a80302e`.
+- `apps/web/src/lib/types.ts` — tipo `ConflictSearchState`.
+- `apps/web/src/hooks/useAccountConflicts.ts` — retorna `{ state }`; JSDoc corregido.
+- `apps/web/src/components/proposals/ConflictPanel.tsx` — prop única `state`, cuerpo en `switch` de 4 ramas.
+- `apps/web/src/pages/tools/AccountCrossCheck.tsx`, `apps/web/src/pages/proposals/NewProposal.tsx` — consumidores actualizados.
+
+### Commits
+
+- `024a43c` chore: remove dead ui and eslint-config packages
+- `56f0e08` docs: drop removed packages from project tree in conventions
+- `5ebe88c` docs: ADR-050 mark deferred findings as resolved
+- `53dd812` feat(web): model conflict panel state as discriminated union
+- `cfc3b21` docs(web): fix stale jsdoc in useAccountConflicts
+
+### Pendientes
+
+- Lint type-aware en `apps/web` (último pendiente vivo de ADR-075): `apps/api` ya lo tiene vía `parserOptions.project`. Evaluar si conviene igualarlo y qué hallazgos nuevos saldrían.
+- Railway no tiene `watchPatterns` configurado: todo push a `master` reconstruye API y web aunque solo cambie uno. Cuesta ~1 min de build ocioso; el riesgo de un patrón mal armado (un servicio que deja de redesplegar en silencio, sobre todo con los paquetes compartidos del workspace) es mayor que el beneficio. Se difiere conscientemente.
+- `docs/audits/walkthrough8.md` y `README.md` aún describen `@repo/ui` y el scaffold original de Turborepo.
