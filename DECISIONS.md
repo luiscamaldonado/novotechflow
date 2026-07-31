@@ -3165,3 +3165,55 @@ Dockerfile en tres etapas. El builder queda igual, con `apk add openssl` y `pnpm
 
 - Verificación en Railway tras el push: logs de build y deploy del servicio `novotechflow` (primer build sin cache, más largo).
 - `api-external` (rama `feature/external-api`) repite el patrón viejo en su Dockerfile; aplicar la misma revisión antes del merge (ya registrado en ADR-073).
+
+## ADR-075 — El gate de lint que no linteaba: ESLint entra al job que ya prometía su nombre
+
+**Fecha:** 2026-07-27
+**Estado:** Aceptada
+
+### Contexto
+
+El job `lint-and-typecheck` (nombre visible "Lint & Type-check") de `ci.yml` y `pr-check.yml` no ejecutaba ESLint en ningún step: solo `tsc` en web y api más los tests de Jest. Un check en verde afirmaba que el lint pasaba cuando nunca corrió. Es el mismo patrón que ADR-071: un gate que no cubre lo que su nombre promete.
+
+La medición previa a decidir dio: `apps/web` 2 errores `react-hooks/set-state-in-effect` (`useAccountConflicts.ts`, `SupplierPicker.tsx`), `apps/api` 41 errores `prettier/prettier`, todos de formato y auto-corregibles. El hallazgo #4 diferido en ADR-050 (`react-hooks/purity` en `useInactivityTimeout.ts`) ya no existe: se resolvió en `a80302e` y el encabezado de ADR-050 quedó desactualizado. Los 2 errores de web son deuda nueva, posterior a ese inventario — evidencia directa de que el check ciego dejó entrar regresiones.
+
+El script `lint` de `apps/api` incluía `--fix`, incompatible con CI: corrige el workspace efímero y sale verde aunque el repositorio esté sin formatear.
+
+### Decisión
+
+Añadir el ESLint que el nombre del job ya prometía, en vez de renombrar el job. Poner el repositorio en verde primero, en commits atómicos y en orden tal que ningún commit deje CI rojo: formato de api, fixes de web, split del script, y por último los steps de CI.
+
+Los 2 errores de web se corrigen derivando estado, no silenciando la regla. `useAccountConflicts` guarda el resultado atado al nombre que lo originó (`{ name, records }`) y deriva `conflicts` solo cuando coincide con el nombre actual; `SupplierPicker` elimina el efecto de sincronización y deriva `query` de `draft ?? selectedCompany?.name ?? ''`. Ambos cierran además bugs latentes: el panel mostraba cruces del cliente anterior durante el debounce, y un refetch de `companies` pisaba lo que el usuario estaba tecleando.
+
+Los steps van después de "Generate Prisma Client" porque el ESLint de api es type-aware, y se declaran con `working-directory` + `pnpm run lint` en vez de `pnpm --filter`, para no depender del campo `name` de cada paquete.
+
+### Consecuencias
+
+- Un `react-hooks/set-state-in-effect` o un `prettier/prettier` nuevo bloquea el PR. Es el efecto buscado.
+- `pnpm run lint` en `apps/api` ya no reescribe archivos; el auto-fix local pasa a `pnpm run lint:fix`.
+- La deriva de formato en api se acumulaba invisible porque nadie corría el lint sin `--fix`. Ahora falla en CI en el PR que la introduce.
+- Coste de entrada bajo: 41 de los 43 hallazgos se corrigieron con un `--fix`.
+
+### Archivos
+
+- `.github/workflows/ci.yml` — steps "Lint Web (ESLint)" y "Lint API (ESLint)".
+- `.github/workflows/pr-check.yml` — mismos dos steps, en paridad.
+- `apps/api/package.json` — `lint` sin `--fix`; `lint:fix` nuevo.
+- `apps/web/src/hooks/useAccountConflicts.ts` — resultado atado al nombre de búsqueda, `conflicts` derivado.
+- `apps/web/src/pages/proposals/components/SupplierPicker.tsx` — `query` derivado de `draft`, efecto de sync eliminado.
+- 5 archivos de `apps/api/src` — formato Prettier aplicado.
+
+### Commits
+
+- `51bad4e` chore(api): apply pending prettier formatting via eslint --fix
+- `6ffddc5` fix(web): derive state instead of syncing via effects (react-hooks lint)
+- `e7ba92d` fix(web): reset supplier draft after create request
+- `b85e202` chore(api): split lint script into check and fix variants
+- `21c74d7` ci: run eslint in lint-and-typecheck job
+
+### Pendientes
+
+- El encabezado de ADR-050 dice "2 diferidos" (#4 y #12), pero ambos se resolvieron en `a80302e`. No se corrige aquí porque `DECISIONS.md` es append-only; queda registrado en esta entrada.
+- `useAccountConflicts` no expone estado de búsqueda en curso: al editar un nombre con cruces en pantalla, el panel muestra "Cliente Libre" durante el debounce y el fetch. Requiere una bandera `isSearching` en el hook y en el panel.
+- `packages/eslint-config` (`@repo/eslint-config`) no tiene consumidores: ninguna app lo declara en devDependencies ni lo extiende. Decidir entre cablearlo o eliminarlo.
+- Ninguna de las dos apps usa linting type-aware en web; `apps/api` sí. Evaluar si conviene igualarlo.
