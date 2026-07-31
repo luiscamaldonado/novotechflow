@@ -10,7 +10,7 @@ import ConflictPanel from '../../components/proposals/ConflictPanel';
  */
 export default function AccountCrossCheck() {
     const [clientName, setClientName] = useState('');
-    const { conflicts, isClientEmpty, hasNoConflicts } = useAccountConflicts(clientName);
+    const { state } = useAccountConflicts(clientName);
 
     return (
         <div className="max-w-6xl mx-auto space-y-8">
@@ -40,11 +40,7 @@ export default function AccountCrossCheck() {
             </div>
 
             {/* Panel de resultados */}
-            <ConflictPanel
-                isClientEmpty={isClientEmpty}
-                hasNoConflicts={hasNoConflicts}
-                conflicts={conflicts}
-            />
+            <ConflictPanel state={state} />
         </div>
     );
 }

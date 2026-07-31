@@ -299,3 +299,10 @@ export interface ConflictRecord {
     user?: { name: string };
 }
 
+/** Estado derivado del panel de cruce de cuentas. */
+export type ConflictSearchState =
+    | { status: 'idle' }
+    | { status: 'searching' }
+    | { status: 'ready'; conflicts: ConflictRecord[] }
+    | { status: 'failed' };
+

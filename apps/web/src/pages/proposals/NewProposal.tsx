@@ -104,7 +104,7 @@ export default function NewProposal() {
     const [isValidatingManual, setIsValidatingManual] = useState(false);
 
     // ── Cruce de cuentas dinámico (debounced) ────────────
-    const { conflicts, isClientEmpty, hasNoConflicts } = useAccountConflicts(formData.clientName);
+    const { state } = useAccountConflicts(formData.clientName);
 
     // ── Validación debounced del consecutivo manual ──────
     useEffect(() => {
@@ -633,11 +633,7 @@ export default function NewProposal() {
                 </motion.div>
 
                 {/* Panel de Cruce de Cuentas */}
-                <ConflictPanel
-                    isClientEmpty={isClientEmpty}
-                    hasNoConflicts={hasNoConflicts}
-                    conflicts={conflicts}
-                />
+                <ConflictPanel state={state} />
             </div>
         </div>
     );

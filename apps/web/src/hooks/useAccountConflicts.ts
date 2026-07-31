@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import type { ConflictRecord } from '../lib/types';
+import type { ConflictRecord, ConflictSearchState } from '../lib/types';
 import { CONFLICT_SEARCH_DEBOUNCE_MS, MIN_CONFLICT_SEARCH_LENGTH } from '../lib/constants';
 
 /** Resultado de la ultima busqueda, atado al nombre que la origino. */
@@ -16,6 +16,7 @@ interface ConflictSearchResult {
  */
 export function useAccountConflicts(clientName: string) {
     const [searchResult, setSearchResult] = useState<ConflictSearchResult | null>(null);
+    const [failedName, setFailedName] = useState<string | null>(null);
 
     // ── Cruce de cuentas dinámico (debounced) ────────────
     useEffect(() => {
@@ -33,6 +34,7 @@ export function useAccountConflicts(clientName: string) {
                 setSearchResult({ name: trimmedName, records: response.data });
             } catch (error) {
                 console.error('Error buscando cruce de cuentas:', error);
+                setFailedName(trimmedName);
             }
         }, CONFLICT_SEARCH_DEBOUNCE_MS);
 
@@ -40,11 +42,17 @@ export function useAccountConflicts(clientName: string) {
     }, [clientName]);
 
     const trimmedName = clientName.trim();
-    const conflicts =
-        searchResult && searchResult.name === trimmedName ? searchResult.records : [];
 
-    const isClientEmpty = trimmedName === '';
-    const hasNoConflicts = conflicts.length === 0;
+    let state: ConflictSearchState;
+    if (trimmedName.length < MIN_CONFLICT_SEARCH_LENGTH) {
+        state = { status: 'idle' };
+    } else if (searchResult && searchResult.name === trimmedName) {
+        state = { status: 'ready', conflicts: searchResult.records };
+    } else if (failedName === trimmedName) {
+        state = { status: 'failed' };
+    } else {
+        state = { status: 'searching' };
+    }
 
-    return { conflicts, isClientEmpty, hasNoConflicts };
+    return { state };
 }
