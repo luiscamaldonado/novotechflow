@@ -3217,3 +3217,48 @@ Los steps van después de "Generate Prisma Client" porque el ESLint de api es ty
 - `useAccountConflicts` no expone estado de búsqueda en curso: al editar un nombre con cruces en pantalla, el panel muestra "Cliente Libre" durante el debounce y el fetch. Requiere una bandera `isSearching` en el hook y en el panel.
 - `packages/eslint-config` (`@repo/eslint-config`) no tiene consumidores: ninguna app lo declara en devDependencies ni lo extiende. Decidir entre cablearlo o eliminarlo.
 - Ninguna de las dos apps usa linting type-aware en web; `apps/api` sí. Evaluar si conviene igualarlo.
+
+## ADR-076 — El logo de 4,5 MB para renderizarlo a 32 px: asset redimensionado y cache para estáticos sin hash
+
+**Fecha:** 2026-07-31
+**Estado:** Aceptada
+
+### Contexto
+
+Los logs de nginx en producción mostraban `GET /novotechflow.png` sirviendo 4.544.802 bytes en la carga del dashboard. La medición encontró un PNG de 3062×1376 RGBA renderizado a 32 px de alto en el sidebar (`Sidebar.tsx:73`, presente en toda vista autenticada) y a 48 px en el login: 43× la altura necesaria a 1× DPR.
+
+`apps/web/public/logo.png` era el mismo binario byte-idéntico, sin ninguna referencia en `apps/web/src`, `index.html` ni el manifest, y aun así se copiaba al build.
+
+Por cache, `/novotechflow.png` vive en la raíz del build (viene de `public/`), no bajo `/assets/`, así que caía en el catch-all `location /` con `Cache-Control: no-cache` — revalidación en cada carga. `apps/web/nginx.conf` no tenía ningún `location` para estáticos no hasheados.
+
+### Decisión
+
+Redimensionar el asset a 600 px de ancho (2,5× el mayor uso a 3× DPR), conservando el canal alfa: 4.544.802 → 148.774 bytes, −96,7 %. La conversión se hizo con ImageMagick, ya instalado en la máquina, y no con `sharp`: instalarlo habría metido binarios nativos en el lockfile por un uso de una sola vez.
+
+Eliminar `logo.png` tras verificar que no lo referencia ningún archivo de código ni manifest.
+
+Añadir un `location` con regex para estáticos sin hash (`png|jpg|jpeg|gif|ico|svg|webp|woff2`) con `max-age=604800` — una semana, **no** `immutable` ni un año: el nombre de archivo no lleva hash de contenido, así que un cambio de logo debe propagarse solo. El bloque repite los cuatro headers de seguridad, según la advertencia que el propio `nginx.conf` documenta: un `add_header` a nivel `location` descarta todo el array de nivel `server`.
+
+### Consecuencias
+
+- El peso del logo por visita baja de 4,44 MB a 145 KB, y a cero en las visitas siguientes dentro de la semana.
+- Un cambio de logo tarda hasta 7 días en propagarse a un navegador que ya lo tenga cacheado. Es el trade-off aceptado por no tener hash en el nombre.
+- El `location ~*` (regex) tiene precedencia sobre el prefijo `location /assets/`: si Vite llegara a emitir imágenes o fuentes con hash dentro de `/assets/`, saldrían con una semana en vez de `immutable`. Con el build actual (`dist/assets/` solo emite `.js` y `.css`) no cambia nada.
+- `-strip` eliminó el perfil de color del PNG; el resultado se verificó visualmente en local sobre el fondo oscuro antes de commitear.
+
+### Archivos
+
+- `apps/web/public/novotechflow.png` — 3062×1376 (4.544.802 B) → 600×270 (148.774 B), alfa preservado.
+- `apps/web/public/logo.png` — eliminado (duplicado byte-idéntico sin consumidores).
+- `apps/web/nginx.conf` — `location` nuevo para estáticos sin hash, entre `/assets/` y el catch-all.
+
+### Commits
+
+- `37d3110` perf(web): downscale logo asset and drop duplicate copy
+- `fe5f324` perf(web): cache unhashed static assets for one week
+
+### Pendientes
+
+- `novotechflow.png` en la raíz del repo y dos copias en `backups/2026-03-26-PDF_DOC_BUILDER/` siguen en 4,5 MB cada una: no llegan al build, pero son ~13,6 MB de peso muerto en git. Borrar `backups/` merece su propia decisión.
+- `apps/web/public/defaults/portada.png` (503.746 B, 815×1074) es default del builder de documentos y puede terminar embebido en PDFs; no se tocó. Evaluar aparte con ese uso a la vista.
+- Ningún `<img>` del logo declara `width`/`height` ni `loading`/`decoding`. Con el asset liviano el impacto es menor, pero la ausencia de dimensiones explícitas provoca layout shift.
