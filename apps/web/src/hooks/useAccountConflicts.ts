@@ -11,8 +11,10 @@ interface ConflictSearchResult {
 
 /**
  * Búsqueda dinámica (debounced) de propuestas previas del mismo cliente para
- * detectar cruce de cuentas. Devuelve la lista de coincidencias y dos banderas
- * derivadas para el panel: si el campo de cliente está vacío y si no hay cruces.
+ * detectar cruce de cuentas. Devuelve un único estado derivado en render
+ * (idle | searching | ready | failed), anclado al nombre que originó cada
+ * resultado: "ready" solo aparece cuando el servidor respondió para el nombre
+ * vigente, nunca como estado por defecto.
  */
 export function useAccountConflicts(clientName: string) {
     const [searchResult, setSearchResult] = useState<ConflictSearchResult | null>(null);
