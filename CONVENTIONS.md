@@ -392,8 +392,7 @@ novotechflow/
 │   │       └── store/                # Zustand stores
 │   │           └── authStore.ts
 ├── packages/
-│   ├── ui/                           # Design system (infrautilizado)
-│   ├── eslint-config/
+│   ├── item-display/                 # Componentes de display compartidos (numeroParte/modelo)
 │   └── typescript-config/
 ├── docs/
 │   ├── audits/                       # Reportes de auditoría
