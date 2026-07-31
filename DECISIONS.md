@@ -2068,10 +2068,10 @@ La documentación de proceso estaba fuertemente acoplada a Antigravity y al patr
 - Actualizar la memoria de proyecto de Claude, que aún describe el modelo viejo de tres roles con Antigravity como editor único.
 - Push de la rama a `master` (lo hace Luis tras confirmar que no hay usuarios en producción); a este punto la rama acumula los commits de la sesión: ADR-047, bump TS, ADR-048 y esta migración.
 
-## ADR-050 — Remediación de deuda de lint pre-existente en apps/web: 10 de 12 hallazgos resueltos en 6 commits, 2 diferidos
+## ADR-050 — Remediación de deuda de lint pre-existente en apps/web: 10 de 12 hallazgos resueltos en 6 commits, 2 diferidos (resueltos después en `a80302e`)
 
 **Fecha:** 2026-06-20
-**Estado:** Implementada (parcial: 10 de 12 hallazgos resueltos en 6 commits ya en master, `f9998e7`→`515af1c`; 2 diferidos a un refactor dedicado de `useInactivityTimeout`; este ADR pendiente de push)
+**Estado:** Implementada (parcial: 10 de 12 hallazgos resueltos en 6 commits ya en master, `f9998e7`→`515af1c`; 2 diferidos a un refactor dedicado de `useInactivityTimeout`; este ADR pendiente de push). Actualización 2026-07-31: los 2 diferidos (#4 y #12) quedaron resueltos en `a80302e` — ver Pendientes de esta entrada y ADR-075.
 
 ### Contexto
 
