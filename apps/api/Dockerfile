@@ -36,6 +36,10 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder /app/packages/item-display/package.json ./node_modules/@repo/item-display/package.json
+COPY --from=builder /app/packages/item-display/dist ./node_modules/@repo/item-display/dist
+COPY --from=builder /app/packages/pricing-engine/package.json ./node_modules/@repo/pricing-engine/package.json
+COPY --from=builder /app/packages/pricing-engine/dist ./node_modules/@repo/pricing-engine/dist
 COPY --from=builder /app/apps/api/prisma ./prisma
 COPY --from=builder /app/apps/api/package.json ./
 COPY --from=builder /app/apps/api/tsconfig.json ./
