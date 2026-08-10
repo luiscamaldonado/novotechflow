@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { AuthModule } from '../auth/auth.module';
-import { UsersModule } from '../users/users.module';
+import { AuthCoreModule } from '../auth/auth-core.module';
+import { UsersCoreModule } from '../users/users-core.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ExternalController } from './external.controller';
 import { ExternalAuthService } from './external-auth.service';
@@ -11,8 +11,8 @@ import { ExternalProposalsService } from './external-proposals.service';
 
 @Module({
   imports: [
-    AuthModule,
-    UsersModule,
+    AuthCoreModule,
+    UsersCoreModule,
     PrismaModule,
     PassportModule,
     JwtModule.register({
