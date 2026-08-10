@@ -173,10 +173,12 @@ export const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; 
     PERDIDA:            { label: 'Perdida',         bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200' },
     PENDIENTE_FACTURAR: { label: 'Pend. Facturar', bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200' },
     FACTURADA:          { label: 'Facturada',       bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200' },
+    APLAZADA:           { label: 'Aplazada',       bg: 'bg-purple-50',  text: 'text-purple-700',  border: 'border-purple-200' },
+    CANCELADA:          { label: 'Cancelada',      bg: 'bg-slate-50',   text: 'text-slate-700',   border: 'border-slate-200' },
 };
 
 /** All proposal statuses in display order. */
-export const ALL_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA'];
+export const ALL_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA', 'APLAZADA', 'CANCELADA'];
 
 /** Statuses valid for billing projections. */
 export const PROJECTION_STATUSES: ProposalStatus[] = ['PENDIENTE_FACTURAR', 'FACTURADA'];

@@ -8,8 +8,16 @@ import { existsSync, mkdirSync } from 'fs';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const compression = require('compression');
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // 1 y no true: con true, una XFF forjada decide req.ip si el edge appendea (anexo trust proxy en docs/diagnostico-2026-07-24-deps-bundle.md)
+  app.set('trust proxy', 1);
+
+  app.use(compression());
 
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
@@ -57,15 +65,20 @@ async function bootstrap() {
   // Serve uploaded images as static files
   app.useStaticAssets(uploadsPath, { prefix: '/uploads/' });
 
-  // Swagger / OpenAPI
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('NovoTechFlow API')
-    .setDescription('API de cotizaciones comerciales para NOVOTECHNO')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger / OpenAPI - desactivado salvo opt-in explicito.
+  // setup() registra 4 rutas mediante httpAdapter.get(), fuera del router de
+  // Nest: /api/docs, /api/docs-json, /api/docs-yaml y
+  // /api/docs/swagger-ui-init.js (este ultimo lleva el spec incrustado).
+  if (process.env.SWAGGER_ENABLED === 'true') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('NovoTechFlow API')
+      .setDescription('API de cotizaciones comerciales para NOVOTECHNO')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(process.env.PORT ?? 3000);
 }

@@ -18,13 +18,16 @@ export const COP_MIN_UNIT_PRICE_KEY = 'cop_min_unit_price';
 export const USD_MAX_UNIT_PRICE_KEY = 'usd_max_unit_price';
 
 /** Key del flag de obligatoriedad del nombre de contacto del proveedor. */
-export const SUPPLIER_CONTACT_NAME_REQUIRED_KEY = 'supplier_contact_name_required';
+export const SUPPLIER_CONTACT_NAME_REQUIRED_KEY =
+  'supplier_contact_name_required';
 
 /** Key del flag de obligatoriedad del telefono de contacto del proveedor. */
-export const SUPPLIER_CONTACT_PHONE_REQUIRED_KEY = 'supplier_contact_phone_required';
+export const SUPPLIER_CONTACT_PHONE_REQUIRED_KEY =
+  'supplier_contact_phone_required';
 
 /** Key del flag de obligatoriedad del correo de contacto del proveedor. */
-export const SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY = 'supplier_contact_email_required';
+export const SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY =
+  'supplier_contact_email_required';
 
 /** Default timeout in minutes when no setting exists yet */
 const DEFAULT_INACTIVITY_MINUTES = 5;
@@ -64,22 +67,15 @@ export class AppSettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Obtiene el timeout de inactividad en minutos.
-   * Si el registro no existe, lo crea con el valor por defecto (idempotente).
+   * Obtiene el timeout de inactividad en minutos. Lectura pura: si el registro
+   * no existe aun, devuelve el default en memoria sin escribir en la base de datos.
    */
   async getInactivityTimeoutMinutes(): Promise<number> {
-    const setting = await this.prisma.appSetting.upsert({
+    const setting = await this.prisma.appSetting.findUnique({
       where: { key: INACTIVITY_TIMEOUT_KEY },
-      update: {},
-      create: {
-        key: INACTIVITY_TIMEOUT_KEY,
-        value: String(DEFAULT_INACTIVITY_MINUTES),
-        description:
-          'Minutos de inactividad antes de cerrar sesión automáticamente',
-      },
     });
 
-    return Number(setting.value);
+    return setting ? Number(setting.value) : DEFAULT_INACTIVITY_MINUTES;
   }
 
   /**
@@ -92,10 +88,17 @@ export class AppSettingsService {
     minutes: number,
     userId: string,
   ): Promise<number> {
-    const updated = await this.prisma.appSetting.update({
+    const updated = await this.prisma.appSetting.upsert({
       where: { key: INACTIVITY_TIMEOUT_KEY },
-      data: {
+      update: {
         value: String(minutes),
+        updatedById: userId,
+      },
+      create: {
+        key: INACTIVITY_TIMEOUT_KEY,
+        value: String(minutes),
+        description:
+          'Minutos de inactividad antes de cerrar sesi\u00f3n autom\u00e1ticamente',
         updatedById: userId,
       },
     });
@@ -110,12 +113,18 @@ export class AppSettingsService {
   async getMaintenanceBanner(): Promise<MaintenanceBanner> {
     const settings = await this.prisma.appSetting.findMany({
       where: {
-        key: { in: [MAINTENANCE_BANNER_MESSAGE_KEY, MAINTENANCE_BANNER_ACTIVE_KEY] },
+        key: {
+          in: [MAINTENANCE_BANNER_MESSAGE_KEY, MAINTENANCE_BANNER_ACTIVE_KEY],
+        },
       },
     });
 
-    const messageSetting = settings.find((s) => s.key === MAINTENANCE_BANNER_MESSAGE_KEY);
-    const activeSetting = settings.find((s) => s.key === MAINTENANCE_BANNER_ACTIVE_KEY);
+    const messageSetting = settings.find(
+      (s) => s.key === MAINTENANCE_BANNER_MESSAGE_KEY,
+    );
+    const activeSetting = settings.find(
+      (s) => s.key === MAINTENANCE_BANNER_ACTIVE_KEY,
+    );
 
     return {
       message: messageSetting?.value ?? '',
@@ -160,35 +169,25 @@ export class AppSettingsService {
   }
 
   /**
-   * Obtiene los umbrales de validación de precio unitario.
-   * Crea ambas keys con sus defaults si no existen (idempotente).
+   * Obtiene los umbrales de validación de precio unitario. Lectura pura: si
+   * alguna key no existe aun, devuelve los defaults en memoria sin escribir
+   * en la base de datos.
    */
   async getPriceThresholds(): Promise<PriceThresholds> {
-    const copSetting = await this.prisma.appSetting.upsert({
-      where: { key: COP_MIN_UNIT_PRICE_KEY },
-      update: {},
-      create: {
-        key: COP_MIN_UNIT_PRICE_KEY,
-        value: String(DEFAULT_COP_MIN_UNIT_PRICE),
-        description:
-          'Piso m\u00ednimo de precio unitario en COP para alertar valores sospechosamente bajos',
-      },
+    const settings = await this.prisma.appSetting.findMany({
+      where: { key: { in: [COP_MIN_UNIT_PRICE_KEY, USD_MAX_UNIT_PRICE_KEY] } },
     });
 
-    const usdSetting = await this.prisma.appSetting.upsert({
-      where: { key: USD_MAX_UNIT_PRICE_KEY },
-      update: {},
-      create: {
-        key: USD_MAX_UNIT_PRICE_KEY,
-        value: String(DEFAULT_USD_MAX_UNIT_PRICE),
-        description:
-          'Techo m\u00e1ximo de precio unitario en USD para alertar valores sospechosamente altos',
-      },
-    });
+    const copSetting = settings.find((s) => s.key === COP_MIN_UNIT_PRICE_KEY);
+    const usdSetting = settings.find((s) => s.key === USD_MAX_UNIT_PRICE_KEY);
 
     return {
-      copMinUnitPrice: Number(copSetting.value),
-      usdMaxUnitPrice: Number(usdSetting.value),
+      copMinUnitPrice: copSetting
+        ? Number(copSetting.value)
+        : DEFAULT_COP_MIN_UNIT_PRICE,
+      usdMaxUnitPrice: usdSetting
+        ? Number(usdSetting.value)
+        : DEFAULT_USD_MAX_UNIT_PRICE,
     };
   }
 
@@ -203,14 +202,28 @@ export class AppSettingsService {
     usdMaxUnitPrice: number,
     userId: string,
   ): Promise<PriceThresholds> {
-    await this.prisma.appSetting.update({
+    await this.prisma.appSetting.upsert({
       where: { key: COP_MIN_UNIT_PRICE_KEY },
-      data: { value: String(copMinUnitPrice), updatedById: userId },
+      update: { value: String(copMinUnitPrice), updatedById: userId },
+      create: {
+        key: COP_MIN_UNIT_PRICE_KEY,
+        value: String(copMinUnitPrice),
+        description:
+          'Piso m\u00ednimo de precio unitario en COP para alertar valores sospechosamente bajos',
+        updatedById: userId,
+      },
     });
 
-    await this.prisma.appSetting.update({
+    await this.prisma.appSetting.upsert({
       where: { key: USD_MAX_UNIT_PRICE_KEY },
-      data: { value: String(usdMaxUnitPrice), updatedById: userId },
+      update: { value: String(usdMaxUnitPrice), updatedById: userId },
+      create: {
+        key: USD_MAX_UNIT_PRICE_KEY,
+        value: String(usdMaxUnitPrice),
+        description:
+          'Techo m\u00e1ximo de precio unitario en USD para alertar valores sospechosamente altos',
+        updatedById: userId,
+      },
     });
 
     return { copMinUnitPrice, usdMaxUnitPrice };
@@ -218,46 +231,36 @@ export class AppSettingsService {
 
   /**
    * Obtiene la obligatoriedad de los campos de contacto de proveedor.
-   * Crea las 3 keys con default 'true' si no existen (idempotente).
+   * Lectura pura: si alguna key no existe aun, devuelve el default (true)
+   * en memoria sin escribir en la base de datos.
    */
   async getSupplierFieldRequirements(): Promise<SupplierFieldRequirements> {
-    const nameSetting = await this.prisma.appSetting.upsert({
-      where: { key: SUPPLIER_CONTACT_NAME_REQUIRED_KEY },
-      update: {},
-      create: {
-        key: SUPPLIER_CONTACT_NAME_REQUIRED_KEY,
-        value: 'true',
-        description:
-          'Indica si el nombre de contacto del proveedor es obligatorio',
+    const settings = await this.prisma.appSetting.findMany({
+      where: {
+        key: {
+          in: [
+            SUPPLIER_CONTACT_NAME_REQUIRED_KEY,
+            SUPPLIER_CONTACT_PHONE_REQUIRED_KEY,
+            SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY,
+          ],
+        },
       },
     });
 
-    const phoneSetting = await this.prisma.appSetting.upsert({
-      where: { key: SUPPLIER_CONTACT_PHONE_REQUIRED_KEY },
-      update: {},
-      create: {
-        key: SUPPLIER_CONTACT_PHONE_REQUIRED_KEY,
-        value: 'true',
-        description:
-          'Indica si el telefono de contacto del proveedor es obligatorio',
-      },
-    });
-
-    const emailSetting = await this.prisma.appSetting.upsert({
-      where: { key: SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY },
-      update: {},
-      create: {
-        key: SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY,
-        value: 'true',
-        description:
-          'Indica si el correo de contacto del proveedor es obligatorio',
-      },
-    });
+    const nameSetting = settings.find(
+      (s) => s.key === SUPPLIER_CONTACT_NAME_REQUIRED_KEY,
+    );
+    const phoneSetting = settings.find(
+      (s) => s.key === SUPPLIER_CONTACT_PHONE_REQUIRED_KEY,
+    );
+    const emailSetting = settings.find(
+      (s) => s.key === SUPPLIER_CONTACT_EMAIL_REQUIRED_KEY,
+    );
 
     return {
-      nameRequired: nameSetting.value === 'true',
-      phoneRequired: phoneSetting.value === 'true',
-      emailRequired: emailSetting.value === 'true',
+      nameRequired: (nameSetting?.value ?? 'true') === 'true',
+      phoneRequired: (phoneSetting?.value ?? 'true') === 'true',
+      emailRequired: (emailSetting?.value ?? 'true') === 'true',
     };
   }
 

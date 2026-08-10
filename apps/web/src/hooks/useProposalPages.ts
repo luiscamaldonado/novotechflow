@@ -38,9 +38,8 @@ export function useProposalPages(proposalId: string | undefined) {
         try {
             initializingRef.current = true;
             setLoading(true);
-            // Initialize defaults if none exist, then load
-            await api.post(`/proposals/${proposalId}/pages/initialize`);
-            const res = await api.get(`/proposals/${proposalId}/pages`);
+            // Initialize returns existing pages or freshly created defaults (same payload as the GET)
+            const res = await api.post(`/proposals/${proposalId}/pages/initialize`);
             setPages(res.data || []);
             if (res.data?.length > 0 && !activePageId) {
                 setActivePageId(res.data[0].id);
@@ -50,6 +49,23 @@ export function useProposalPages(proposalId: string | undefined) {
         } finally {
             setLoading(false);
             initializingRef.current = false;
+        }
+    }, [proposalId, activePageId]);
+
+    // Explicit reload from the GET endpoint (no initialization side effects)
+    const fetchPages = useCallback(async () => {
+        if (!proposalId) return;
+        try {
+            setLoading(true);
+            const res = await api.get(`/proposals/${proposalId}/pages`);
+            setPages(res.data || []);
+            if (res.data?.length > 0 && !activePageId) {
+                setActivePageId(res.data[0].id);
+            }
+        } catch (error) {
+            console.error('Error loading pages', error);
+        } finally {
+            setLoading(false);
         }
     }, [proposalId, activePageId]);
 
@@ -80,8 +96,15 @@ export function useProposalPages(proposalId: string | undefined) {
 
     const updatePage = async (pageId: string, data: { title?: string; variables?: Record<string, unknown> }) => {
         try {
-            const res = await api.patch(`/proposals/pages/${pageId}`, data);
-            setPages(prev => prev.map(p => (p.id === pageId ? res.data : p)));
+            await api.patch(`/proposals/pages/${pageId}`, data);
+            setPages(prev => prev.map(p => {
+                if (p.id !== pageId) return p;
+                return {
+                    ...p,
+                    ...(data.title !== undefined ? { title: data.title } : {}),
+                    ...(data.variables !== undefined ? { variables: data.variables } : {}),
+                };
+            }));
         } catch (error) {
             console.error(error);
         }
@@ -103,8 +126,16 @@ export function useProposalPages(proposalId: string | undefined) {
     const reorderPages = async (pageIds: string[]) => {
         if (!proposalId) return;
         try {
-            const res = await api.patch(`/proposals/${proposalId}/pages/reorder`, { pageIds });
-            setPages(res.data);
+            await api.patch(`/proposals/${proposalId}/pages/reorder`, { pageIds });
+            setPages(prev => {
+                const byId = new Map(prev.map(p => [p.id, p]));
+                return pageIds
+                    .map((id, index) => {
+                        const page = byId.get(id);
+                        return page ? { ...page, sortOrder: index + 1 } : null;
+                    })
+                    .filter((p): p is ProposalPage => p !== null);
+            });
         } catch (error) {
             console.error(error);
         }
@@ -129,11 +160,13 @@ export function useProposalPages(proposalId: string | undefined) {
 
     const updateBlock = async (blockId: string, content: Record<string, unknown>) => {
         try {
-            const res = await api.patch(`/proposals/pages/blocks/${blockId}`, { content });
+            await api.patch(`/proposals/pages/blocks/${blockId}`, { content });
+            // The API sanitizes RICH_TEXT html on save; the local copy keeps the
+            // pre-sanitization html until the next full reload.
             setPages(prev =>
                 prev.map(p => ({
                     ...p,
-                    blocks: p.blocks.map(b => (b.id === blockId ? res.data : b)),
+                    blocks: p.blocks.map(b => (b.id === blockId ? { ...b, content } : b)),
                 })),
             );
         } catch (error) {
@@ -178,6 +211,7 @@ export function useProposalPages(proposalId: string | undefined) {
         setActivePageId,
         activePage,
         loadPages,
+        fetchPages,
         createPage,
         updatePage,
         deletePage,

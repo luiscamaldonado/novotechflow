@@ -2068,10 +2068,10 @@ La documentación de proceso estaba fuertemente acoplada a Antigravity y al patr
 - Actualizar la memoria de proyecto de Claude, que aún describe el modelo viejo de tres roles con Antigravity como editor único.
 - Push de la rama a `master` (lo hace Luis tras confirmar que no hay usuarios en producción); a este punto la rama acumula los commits de la sesión: ADR-047, bump TS, ADR-048 y esta migración.
 
-## ADR-050 — Remediación de deuda de lint pre-existente en apps/web: 10 de 12 hallazgos resueltos en 6 commits, 2 diferidos
+## ADR-050 — Remediación de deuda de lint pre-existente en apps/web: 10 de 12 hallazgos resueltos en 6 commits, 2 diferidos (resueltos después en `a80302e`)
 
 **Fecha:** 2026-06-20
-**Estado:** Implementada (parcial: 10 de 12 hallazgos resueltos en 6 commits ya en master, `f9998e7`→`515af1c`; 2 diferidos a un refactor dedicado de `useInactivityTimeout`; este ADR pendiente de push)
+**Estado:** Implementada (parcial: 10 de 12 hallazgos resueltos en 6 commits ya en master, `f9998e7`→`515af1c`; 2 diferidos a un refactor dedicado de `useInactivityTimeout`; este ADR pendiente de push). Actualización 2026-07-31: los 2 diferidos (#4 y #12) quedaron resueltos en `a80302e` — ver Pendientes de esta entrada y ADR-075.
 
 ### Contexto
 
@@ -2155,140 +2155,6 @@ El modelo de dos roles (ADR-049) fija que el chat decide y Claude Code ejecuta, 
 
 - **Push de este ADR a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción). Junto con los commits `b96b822` y `79a861c` de esta sesión.
 - **Luis pega las instrucciones del proyecto actualizadas** en la configuración de Claude.ai (fuera de git) y **re-sube la copia de `INSTRUCTIVO_CLAUDE.md`** al conocimiento del proyecto, reemplazando la versión previa.
-
-## ADR-052 — Extracción del pricing-engine a package compartido `@repo/pricing-engine` para consumo por web y api
-
-**Fecha:** 2026-06-22
-**Estado:** Implementada y verificada en runtime, en la rama `feature/external-api` (sin commitear al redactar este ADR; el commit del refactor y el push los hace Luis). Primer paso (Fase 1) de la feature de API externa de lectura.
-
-### Contexto
-
-La feature de API externa (otra aplicación web que, con login de NovoTechFlow, lee las propuestas ganadas del usuario con el valor de venta de cada item por escenario) exige que `apps/api` (NestJS) calcule el valor de venta del lado del servidor. El diagnóstico confirmó que el precio de venta automático **no se persiste**: se recomputa siempre en el frontend con `pricing-engine.ts` (costo + margen + TRM); en la DB solo viven `unitPriceOverride` y `marginPctOverride`. No hay un precio final guardado que la API pueda devolver directamente.
-
-Como el valor de venta debe entregarse en vivo y calculado (no los insumos crudos), la API tiene que ejecutar la misma lógica financiera. Esa lógica vive en `apps/web/src/lib/pricing-engine.ts`, y CONVENTIONS.md §J la fija como fuente única: ningún archivo puede implementar cálculos financieros por fuera del pricing-engine, y replicarlos es un bug. `apps/api` no puede importar de `apps/web/src`. Las alternativas (replicar el cálculo en el backend, o empujarlo a la otra app) violan §J o arriesgan que la otra app muestre un precio distinto al de NovoTechFlow — el riesgo asimétrico "precio bajo = catastrófico" que el proyecto cuida.
-
-La única vía que respeta §J es extraer el pricing-engine a un package compartido del monorepo que web y api consuman: centralizar, no replicar.
-
-### Decisión
-
-1. **Package nuevo `@repo/pricing-engine`** en `packages/pricing-engine/`, siguiendo el patrón de workspace del monorepo (name `@repo/*`, `workspace:*`, tsconfig que extiende `@repo/typescript-config/base.json`).
-
-2. **Desvío del molde de `@repo/ui`: este package lleva build.** `@repo/ui` se consume como fuente `.tsx` cruda sin build porque solo lo usa web (vía Vite). `@repo/pricing-engine` también lo consumirá `apps/api` (NestJS), que compila con `tsc` a `dist/` y corre en Node sin bundler: necesita JS emitido + `.d.ts`. El package tiene script `build` (`tsc`) con `main`/`types`/`exports` apuntando a `dist/`.
-
-3. **Emit CommonJS** para que NestJS lo consuma vía `require`. Se logra heredando `module/moduleResolution: NodeNext` de `base.json` (sin override) más `package.json` **sin** `"type": "module"`: NodeNext resuelve el archivo como CJS y emite `require`/`exports`. Verificado en el `index.js` emitido (`"use strict"`, `Object.defineProperty(exports, "__esModule")`, `exports.xxx =`). Se descartó fijar `module: CommonJS` + `moduleResolution: Node` explícitos porque `Node` (= `node10`) está deprecado y TypeScript 6 lo eleva a error duro (TS5107); heredar NodeNext da el mismo emit CJS sin la deuda hacia TS 7.0.
-
-4. **Reparto del archivo original.** Las 16 funciones puras (operan solo sobre `PricingItem`/`PricingScenarioItem` y primitivos) van al package. `computeMinSubtotal` y `getDashboardAmount` **se quedan en `apps/web`** porque dependen de `ProposalSummary` (tipo del dominio web) y son consumo exclusivo del dashboard; el backend no las necesita. El archivo `apps/web/src/lib/pricing-engine.ts` queda como residuo que re-exporta todo el package (`export * from '@repo/pricing-engine'`, para no romper a los consumidores que importan tipos/constantes desde la ruta antigua) y conserva esas dos funciones más `CurrencyCode` y `MinSubtotalResult`. De los consumidores, 7 reapuntan a `@repo/pricing-engine`; `useDashboard.ts` sigue importando del residuo (usa `getDashboardAmount`/`MinSubtotalResult`).
-
-5. **Integración con Vite (frontend ESM consumiendo package CJS).** `apps/web` es ESM (`"type": "module"`); el package emite CJS. En dev, Vite servía el `dist` CJS como ESM nativo y fallaba (`does not provide an export named 'calculateScenarioTotals'`). Se resuelve declarando el package en `optimizeDeps.include` (prebundle de esbuild en dev, expone los named exports) y en `build.commonjsOptions.include` con regex del package + `node_modules` (conversión CJS→ESM de Rollup en prod, necesaria porque el package es un symlink del workspace y el plugin commonjs por defecto solo procesa `node_modules`). Se mantiene un solo artefacto CJS — el que NestJS requiere en Fase 2.
-
-### Consecuencias
-
-- El cálculo financiero queda centralizado en `@repo/pricing-engine`, fuente única que web y api consumen. §J se respeta: no se replica en ningún lado. El dashboard de web queda idéntico (las dos funciones que se quedaron no se movieron).
-- `apps/api` puede consumir el package compilado en Fase 2 sin tocar nada más del lado del engine.
-- Web compila (`tsc --noEmit` exit 0) y corre idéntico (login y carga de cálculos verificados en browser tras regenerar el prebundle de Vite).
-- Turborepo encadena el build del package antes que el de web automáticamente vía `dependsOn ["^build"]` (web ya declara el package como dependencia); no se tocó `turbo.json`.
-- Lección de toolchain registrada: `tsc --noEmit` valida tipos contra el `.d.ts` y pasa en verde, pero no captura la incompatibilidad de carga CJS/ESM en runtime de Vite — esta apareció solo al cargar la app en el browser. La verificación funcional en browser es la red de seguridad para extracciones que cruzan la frontera de módulos.
-
-### Archivos
-
-- `packages/pricing-engine/package.json` (nuevo) — name `@repo/pricing-engine`, build con tsc, exports a `dist/`, sin `"type": "module"` (emit CJS)
-- `packages/pricing-engine/tsconfig.json` (nuevo) — extiende `base.json`, hereda NodeNext, `outDir: dist` / `rootDir: src`
-- `packages/pricing-engine/src/index.ts` (nuevo) — las 16 funciones puras (constantes, `convertCost`, interfaces `PricingItem`/`PricingScenarioItem`/`ScenarioTotals`/`ItemDisplayValues`, 13 funciones de cálculo) copiadas verbatim del original
-- `apps/web/package.json` — declara `@repo/pricing-engine: workspace:*`
-- `apps/web/src/lib/pricing-engine.ts` — reescrito como residuo: `export *` del package + `computeMinSubtotal`/`getDashboardAmount`/`CurrencyCode`/`MinSubtotalResult`
-- `apps/web/vite.config.ts` — `optimizeDeps.include` y `build.commonjsOptions.include` para el package CJS
-- 7 consumidores reapuntados a `@repo/pricing-engine`: `lib/exportExcel.ts`, `components/proposals/ScenarioTotalsCards.tsx`, `pages/proposals/components/ScenarioItemRow.tsx`, `pages/proposals/ProposalCalculations.tsx` (2 imports), `hooks/useScenarios.ts`, `pages/proposals/ProposalItemsBuilder.tsx`, `hooks/useProposalScenarios.ts`
-
-### Commits
-
-- Pendiente — `refactor: extract pricing-engine to @repo/pricing-engine package` (extracción + residuo + reapunte de imports + integración Vite, en un commit atómico; lo deja Claude Code, lo pushea Luis)
-
-### Pendientes
-
-- **Commit del refactor** (lo hace Claude Code tras este ADR) y **push a `master`** (lo hace Luis tras verificar que no hay usuarios en producción). El push dispara `migrate deploy` en Railway, aunque esta fase no incluye migración.
-- **Fase 2 — módulo `/external` en `apps/api`:** auth scoped con `EXTERNAL_JWT_SECRET` separado (login 2FA externo + estrategia + guard propios), endpoints solo-GET filtrados por `req.user.sub` (ownership §K), consumo de `@repo/pricing-engine` para calcular el valor de venta, sumar el origen de la otra app a `CORS_ORIGIN`. ADR propio al cerrarse.
-- **Verificación numérica en browser** (dashboard y totales de escenario idénticos al estado pre-refactor): pendiente de confirmación explícita de Luis antes del merge a `master`.
-
-## ADR-053 — Módulo /external en apps/api: API de lectura para app de requisiciones, con auth scoped (EXTERNAL_JWT_SECRET) y reuso del 2FA interno
-
-**Fecha:** 2026-06-22
-**Estado:** Implementada y verificada en runtime, en la rama `feature/external-api` (sin pushear; commits locales del módulo de auth, del endpoint de propuestas y del ADR pendientes de push). Segunda parte (Fase 2) de la feature de API externa, que se apoya en ADR-052 (extracción del pricing-engine como package compartido).
-
-### Contexto
-
-Un desarrollador externo (Felipe) está construyendo otra aplicación web que, autenticada con las mismas credenciales de NovoTechFlow, debe leer las propuestas en estado GANADA del usuario logueado para disparar requisiciones (órdenes de compra) y armar la facturación. La app no la maneja un sistema impersonal: la usa un comercial humano, así que el login tiene que pasar por el mismo flujo 2FA que la app principal, no un esquema de API key.
-
-ADR-052 resolvió la pieza de cálculo: extraer las 16 funciones puras del pricing-engine a `@repo/pricing-engine` (CommonJS) para que web y api consuman la misma lógica. Quedó como pendiente explícito el módulo `/external` en `apps/api` que materialice el contrato de lectura. Este ADR documenta esa segunda parte.
-
-Tres restricciones definieron el diseño. Primera, la app de Felipe vive en otro dominio: hay que evitar que un token comprometido en esa superficie abra los endpoints internos del backend. Segunda, los valores de venta no están persistidos en la DB — se recomputan siempre en el frontend con `pricing-engine`; cualquier API que los entregue tiene que ejecutar el mismo cálculo, sin replicar la lógica (CONVENTIONS §J). Tercera, la otra app necesita el dato crudo de requisición (qué item, qué proveedor, qué costo) más el valor de venta calculado: no totales, no precios "de catálogo", sino los efectivos para esa propuesta en ese escenario.
-
-### Decisión
-
-1. **Módulo `/external` separado en `apps/api/src/external/`**, sin tocar el `AuthModule` interno en su comportamiento (el único cambio al interno fue sumar `EmailVerificationService` al array `exports` de `AuthModule`, para que el módulo externo pueda inyectarlo y reusar la verificación del código 2FA; no se modificó ninguna lógica del auth existente).
-
-2. **Auth scoped con secreto separado.** El módulo registra su propio `JwtModule.register({ secret: EXTERNAL_JWT_SECRET })` y su propia estrategia Passport `'jwt-external'` con guard `ExternalJwtAuthGuard`. El secreto externo se valida en boot con IIFE sin fallback, igual que `JWT_SECRET`. Razón: si la app externa o el token se comprometen, el secreto interno nunca estuvo expuesto a esa superficie; el token externo no abre la API interna por construcción (la estrategia interna lo rechaza al verificar la firma con `JWT_SECRET`). Se descartó la variante de un único secreto con claim de `scope` porque obliga a tocar la validación interna y deja una sola superficie de compromiso. El payload del token externo es reducido: `{ sub, email }` — sin `role`, sin `nomenclature`. El TTL se igualó al interno (12h).
-
-3. **Reuso del 2FA interno, no atajo.** `ExternalAuthService` inyecta `AuthService` y `EmailVerificationService` y reusa `validateUser` (credenciales + bcrypt), `login` (dispara el código por email) y `emailVerificationService.verifyCode`. Lo que **no** reusa es `verifyAndLogin` interno, porque ese firma con el `jwtService` interno (secreto `JWT_SECRET`); en su lugar implementa su propio `verifyAndLogin` que firma con el `jwtService` del `JwtModule` externo (secreto `EXTERNAL_JWT_SECRET`) sobre el payload reducido. Endpoints: `POST /external/login`, `POST /external/verify-code`, `POST /external/resend-code`, con los mismos rate limits que el auth interno (5/min en login y verify, 3/min en resend). Se descartó explícitamente el atajo de "API key sin 2FA" sugerido en una iteración: la app la usa un humano y debe loguearse como en NovoTechFlow.
-
-4. **Ownership absoluto por `userId` del token, sin excepción de admin.** El `findAll` interno aplica `accessFilter = user.role === 'ADMIN' ? {} : { userId: user.id }`, lo que abre el alcance a admins. En `/external` el filtro es **siempre** `where: { userId, status: GANADA, deletedAt: null }`, sin distinción de rol: la app externa es del usuario para sus datos, el rol no abre el alcance. Esto refuerza la garantía IDOR (CONVENTIONS §K) sobre la nueva superficie.
-
-5. **Endpoint único `GET /external/proposals`** protegido por `ExternalJwtAuthGuard`. Read-only. No reusa el `findAll` interno (que carece de filtro por status, ordering en `scenarioItems`, y aplica la excepción de admin que acá no aplica); el service externo arma su consulta propia con el include modelado sobre `getScenariosByProposalId` (que sí ordena por `sortOrder`), agregando `orderBy` también a `children`. El tipo del payload de la consulta vive en `external-proposals.types.ts` con `Prisma.ProposalGetPayload` derivado del mismo objeto `include` usado en el `findMany` (mediante `satisfies Prisma.ProposalInclude`), garantizando que include y tipo nunca se desincronicen.
-
-6. **Cálculo server-side vía `@repo/pricing-engine`.** El service mapea cada `ScenarioItem` raíz al shape `PricingScenarioItem` que el package espera (con casteo explícito de `Prisma.Decimal` a `number`), llama `calculateItemDisplayValues(si, allItems, currency, conversionTrm)` y toma su `unitPrice` como `unitSalePrice` del DTO de salida. Los hijos no se calculan (el package no produce `unitPrice` para hijos: su costo alimenta el costo del padre vía `calculateChildrenCostPerUnit`). Para satisfacer el tipo `PricingScenarioItem` recursivo a partir del include finito de Prisma se introdujo una función hoja `childToPricingScenarioItem` con `children: []`, fiel al dominio: los hijos son hojas. Los items diluidos (`isDiluted: true`) reciben del package `unitPrice = 0` por diseño y se entregan así en el DTO; su costo real sí va para la requisición.
-
-7. **DTO de salida con whitelist explícita, exponiendo base + overrides sin aplanar.** Una iteración temprana exponía solo los campos base del `ProposalItem` (margen, costo), lo que generaba una inconsistencia visible al consumidor: el `unitSalePrice` reflejaba el override del `ScenarioItem` (calculado correctamente por el package) pero el `marginPct` reportado era el base del item. La prueba contra una propuesta real lo destapó (`marginPct: 20` reportado vs precio implícito de margen efectivo 10, por un `marginPctOverride: 10` en el `ScenarioItem`). Se decidió exponer ambos: los campos base del item (`unitCost`, `marginPct`) y los tres overrides del escenario (`marginPctOverride`, `unitCostOverride`, `unitPriceOverride`), todos como `number | null`. La app consumidora ve la foto completa y decide qué usar; el `unitSalePrice` ya refleja la resolución correcta. Los hijos exponen su `unitCostOverride` por la misma razón (su costo va a la OC). Se descartó "aplanar" a valores efectivos: pierde información que la app puede necesitar.
-
-8. **Sin totales en el payload.** Ni totales de línea (`unitPrice × quantity`) ni de escenario (gravado, IVA, total). La app puede calcularlos a partir de los unitarios y las cantidades efectivamente ordenadas, que pueden no coincidir con las de la propuesta. Entregar totales masticados confunde (qué incluye, qué no) y no aporta a requisición/facturación.
-
-9. **Sin `manualAmount` ni imágenes ni páginas/bloques del documento.** El `manualAmount` solo aplica a propuestas sin escenarios reales con cálculo; para una ganada que va a requisición es ruido. Imágenes y páginas/bloques no aportan a la requisición y engordarían el payload.
-
-10. **CORS local sumando el origen de la app externa.** Se agregó `http://localhost:8080` (origen local de la app de Felipe) a `CORS_ORIGIN` del `.env` de `apps/api`, junto a `http://localhost:5173` (web). Cambio de `.env` local, no versionado. Para producción quedará pendiente sumar el origen público de la app externa a `CORS_ORIGIN` de Railway cuando se despliegue.
-
-11. **`EXTERNAL_JWT_SECRET` en `.env` local y documentado en `.env.example`.** Hex de 64 chars distinto de `JWT_SECRET`, generado localmente. El `.env.example` documenta la variable como requerida.
-
-12. **`apps/api` consume `@repo/pricing-engine` como dependencia de workspace.** Se sumó `"@repo/pricing-engine": "workspace:*"` a `apps/api/package.json`. El consumo es directo (el package emite CommonJS, NestJS lo `require` sin interop). El smoke test con `tsc --noEmit` confirmó la resolución de tipos sin tocar tsconfig.
-
-### Consecuencias
-
-- La feature queda funcionalmente completa en `feature/external-api`: auth scoped con 2FA, endpoint de propuestas ganadas con valor de venta calculado server-side, DTO completo y coherente, CORS local listo para que Felipe pruebe desde su `http://localhost:8080`. La app externa puede integrarse sin que tocar nada del flujo interno de NovoTechFlow.
-- §J se respeta: el cálculo financiero sigue siendo único — vive en `@repo/pricing-engine` y lo consumen web (vía residuo) y api (directo). No hay replicación.
-- §K se refuerza: la nueva superficie de lectura aplica ownership absoluto por `userId` del token, sin excepción de admin, más estricta que el endpoint interno equivalente.
-- Lección de toolchain registrada (segunda en esta feature, complementa la de ADR-052): la prueba funcional contra datos reales destapa contratos engañosos que `tsc` no ve. Reportar campos base del item sin sus overrides del escenario compilaba en verde y devolvía un `unitSalePrice` correcto, pero con un `marginPct` que no coincidía con el precio. La verificación numérica contra una propuesta concreta es la red que cierra el ciclo.
-- Lección de modelo de trabajo: en una iteración intermedia, Claude Code propuso "saltarse el 2FA externo y usar una API key", contradiciendo un requisito explícito. El flujo decisión-primero (ADR-051) lo atajó: la sugerencia se descartó en el chat antes de tocar código. La regla quedó reforzada — Claude Code ejecuta, no decide alcance.
-- Para producción quedará pendiente: sumar el origen público de la app externa a `CORS_ORIGIN` de Railway, generar y configurar `EXTERNAL_JWT_SECRET` en Railway, y desplegar el branch tras el merge. Ninguno aplica ahora.
-
-### Archivos
-
-- `apps/api/package.json` — declara `"@repo/pricing-engine": "workspace:*"`
-- `apps/api/.env.example` — documenta `EXTERNAL_JWT_SECRET` requerido
-- `apps/api/.env` (local, no versionado) — `EXTERNAL_JWT_SECRET` generado + `http://localhost:8080` agregado a `CORS_ORIGIN`
-- `apps/api/src/auth/auth.module.ts` — `EmailVerificationService` agregado al array `exports` (única modificación al auth interno)
-- `apps/api/src/app.module.ts` — `ExternalModule` agregado al array `imports`
-- `apps/api/src/external/external.module.ts` (nuevo) — registra `JwtModule.register` con `EXTERNAL_JWT_SECRET`, `PassportModule`, `AuthModule`, `UsersModule`, `PrismaModule`, la estrategia `ExternalJwtStrategy`, los services `ExternalAuthService` y `ExternalProposalsService`, y el `ExternalController`
-- `apps/api/src/external/external-jwt.strategy.ts` (nuevo) — estrategia Passport `'jwt-external'`, lee `EXTERNAL_JWT_SECRET`, `validate()` confirma usuario activo contra DB y devuelve `ExternalAuthUser { id, email }`
-- `apps/api/src/external/external-jwt-auth.guard.ts` (nuevo) — `AuthGuard('jwt-external')`
-- `apps/api/src/external/external-auth.service.ts` (nuevo) — reusa `AuthService.validateUser`, `AuthService.login`, `AuthService.resendCode`, `EmailVerificationService.verifyCode`; firma el token externo con el `JwtService` del módulo y payload reducido
-- `apps/api/src/external/external.controller.ts` (nuevo) — `POST /external/login`, `POST /external/verify-code`, `POST /external/resend-code`, `GET /external/proposals` (este último protegido por `ExternalJwtAuthGuard`)
-- `apps/api/src/external/dto/external-auth.dto.ts` (nuevo) — DTOs `ExternalLoginDto`, `ExternalVerifyCodeDto`, `ExternalResendCodeDto` con `class-validator`; tipos `ExternalJwtPayload`, `ExternalAuthUser`, `ExternalVerificationPendingResponse`, `ExternalLoginResponse`
-- `apps/api/src/external/external-proposals.types.ts` (nuevo) — `externalProposalInclude` (Prisma include con `satisfies Prisma.ProposalInclude`) y `ExternalProposalWithRelations` derivado con `Prisma.ProposalGetPayload`
-- `apps/api/src/external/dto/external-proposals.dto.ts` (nuevo) — interfaces `ExternalProposalOut`, `ExternalScenarioOut`, `ExternalItemOut`, `ExternalChildItemOut` (DTO de salida con base + overrides + `unitSalePrice` para raíz; sin `unitSalePrice` en hijos)
-- `apps/api/src/external/external-proposals.service.ts` (nuevo) — `getWonProposals(userId)`: findMany con filtro `userId + GANADA + deletedAt: null`, mapeo Prisma→pricing-engine con cast de `Decimal`, cálculo de `unitSalePrice` por item raíz, armado del DTO de salida
-- `pnpm-lock.yaml` — link de workspace de `@repo/pricing-engine` para `apps/api`
-
-### Commits
-
-- `78e470d` — `feat(api): add external read-only API auth module with scoped JWT` (módulo `/external` completo del auth: dto, estrategia, guard, service, controller, module; declara `@repo/pricing-engine` en api; documenta `EXTERNAL_JWT_SECRET` en `.env.example`; suma `EmailVerificationService` a exports de `AuthModule`)
-- `71536ab` — `feat(api): add GET /external/proposals returning won proposals with sale prices` (tipos del include, DTO de salida, service con consulta + mapeo + cálculo, cableado del service en el módulo y del endpoint en el controller)
-- Pendiente — commit de este ADR-053 (`docs: ADR-053 external read-only API module with scoped JWT`)
-
-### Pendientes
-
-- **Push a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción) — incluye los cuatro commits del branch (`0254690`, `d58ef48`, `78e470d`, `71536ab`) más el commit de este ADR.
-- **Verificación numérica adicional en browser** comparando el `unitSalePrice` devuelto por `GET /external/proposals` contra la app principal para una muestra más amplia de propuestas (la verificación inicial cubrió una propuesta con `marginPctOverride`; conviene cubrir también casos con `unitPriceOverride`, items diluidos y items con hijos antes del merge a `master`).
-- **Túnel ngrok** para exponer `apps/api` local con una URL pública temporal y entregársela a Felipe junto al documento de contrato de la API. No es código del repo: queda como tarea operativa.
-- **Documento de contrato de la API** para Felipe (endpoints, flujo 2FA, formato del token, payload completo de `GET /external/proposals`, header `ngrok-skip-browser-warning`). Documentación operativa, fuera del repo.
-- **Configuración de producción para `/external`** al desplegar: agregar `EXTERNAL_JWT_SECRET` (hex 64 chars distinto del de local) a Railway, sumar el origen público de la app de Felipe a `CORS_ORIGIN` de Railway, y validar el flujo extremo a extremo en producción tras el push.
-- **Limpieza de duplicado de `RESEND_API_KEY` y `RESEND_FROM`** en el `.env` local detectada durante el paso 4 (no afecta funcionalidad: Node usa la última definición). Tarea menor de higiene, no bloquea nada.
 
 ## ADR-054 — Rol REPORTER de solo lectura: acceso global a propuestas y proyecciones, blindaje deny-by-default en backend y dashboard de solo lectura
 **Fecha:** 2026-06-24
@@ -2720,11 +2586,13 @@ Segundo, los dos botones eran la misma llamada cambiando solo `cloneType`: ningu
 - `c03ac2d` — feat(dashboard): clone version modal captures close date, acquisition and status
 - `bf7ac39` — feat(proposals): clone as new proposal accepts client and form field overrides
 - `9368104` — feat(proposals): new proposal form clone mode prefills from base and clones on submit
+- `fa4b3d6` — fix(proposals): controller forwards clone header overrides, normalize empty clientId
 
 ### Pendientes
 
 - `scenarios.service.ts` (botón "Clonar escenario", endpoint aparte) no copia `sortOrder` en hijos ni `unitCostOverride` en ningún nivel — deuda preexistente registrada, fuera del alcance de este ADR.
 - `currentVersion` en `Proposal` no se escribe en ningún flujo del backend; sin impacto hoy, pendiente de decidir si se usa o se elimina.
+- Carrera en la precarga del modo clon de `NewProposal`: si el usuario edita el cliente antes de que el GET de la base resuelva, el `setFormData` de la precarga pisa la elección y el remount por `key` la revierte visualmente. Bug latente registrado; fix en tarea aparte.
 
 ## ADR-064 — Frontend del catálogo de proveedores: sección en el constructor, dedup difuso y obligatoriedad solo en ítems nuevos
 
@@ -2925,128 +2793,527 @@ El contrato de la API externa debe entregar, por categoría de ítem, número de
 
 - **Verificación en navegador** (Luis): campos nuevos en las 5 categorías, descripción rápida nueva en pantalla/PDF, Excel con ` · ` y `modelo`.
 - **`.dockerignore` raíz** para habilitar docker build local en Windows (afecta también al Dockerfile de api).
-- **Merge a `feature/external-api`**: renumerar los ADR de la rama en colisión (057 y 059) y reemplazar `external-spec-fields.ts` por el paquete. — **Ejecutado**: merge f11f074; renumeración 057→068 y 059→069; `external-spec-fields.ts` reemplazado por el paquete.
+- **Merge a `feature/external-api`**: renumerar los ADR de la rama en colisión (057 y 059) y reemplazar `external-spec-fields.ts` por el paquete.
 
-## ADR-068 — Adopción del Railway CLI en el flujo de trabajo para lectura de variables y logs de producción, con manejo estricto de secretos
-
-**Fecha:** 2026-07-05
-**Estado:** Aceptado
-
-### Contexto
-
-El diagnóstico de incidentes de producción y la inspección de configuración en Railway (variables de entorno, logs de build y deploy) se venían haciendo a mano por Luis en el dashboard, copiando y pegando salidas al chat. Eso es lento y, en el caso de las variables, arriesgado: la salida cruda expone secretos reales (`JWT_SECRET`, `DATABASE_URL`, `RESEND_API_KEY`, etc.).
-
-Railway publica un MCP server oficial que envuelve su CLI, lo que abre la posibilidad de que Claude Code lea variables y logs por sí mismo. Antes de montar el MCP se decidió establecer y verificar la capa base —el Railway CLI— en modo estrictamente de lectura, y fijar por escrito las reglas de manejo de secretos que el MCP deberá respetar después.
-
-Restricción de entorno: el CLI no está en winget, y la regla del proyecto (§8, §6 de las instrucciones) prohíbe `npx`/`npm` global para herramientas del proyecto. El one-liner oficial (`curl ... | sh`) es solo macOS/Linux o Windows por WSL, y aquí se usa PowerShell nativo.
-
-### Decisión
-
-1. **Instalación del Railway CLI por binario pre-compilado, no por npm ni Scoop.** Se descargó el asset oficial `railway-v5.23.3-x86_64-pc-windows-msvc.zip` del release de GitHub y se dejó `railway.exe` en `C:\Users\admin\.local\bin` (ya en PATH, donde vive `claude.exe`). Cero `npm`/`npx`, cero cambio de execution policy, cero tooling nuevo. Contrapartida aceptada: los updates futuros son manuales (re-descargar).
-
-2. **Autenticación y link.** `railway login` (OAuth por navegador, lo aprueba Luis; scope `workspace:admin project:admin` — el CLI no ofrece scope de solo-lectura) y `railway link` al servicio `novotechflow` en el entorno `production` (la API NestJS; los otros servicios del proyecto son `web`, `Postgres`, `api-external`, `postgres-external`).
-
-3. **Etapa base = solo lectura.** Se habilitan tres lecturas, todas verificadas: nombres de variables, logs de deploy y logs de build. Ningún comando de escritura (`up`, `variable set`, `redeploy`) se corre en esta etapa. La barrera es disciplina; el gate técnico (deny-rules) se monta con el MCP (ver Pendientes).
-
-4. **Regla de manejo de secretos en variables (no negociable).** Nunca se usa `--kv` ni se pega el JSON crudo de `railway variable list` (el help advierte que ambos imprimen valores crudos). Para listar, se parsea el `--json` en PowerShell extrayendo solo los nombres de las propiedades (`$obj.PSObject.Properties.Name`), envuelto en try/catch para que ni un fallo de parseo vuelque el JSON crudo. Al chat llegan solo keys, nunca valores.
-
-5. **Regla de manejo de secretos en logs (no negociable).** Un log es texto libre y no se puede "filtrar a nombres". Se traen acotados en modo no-streaming (`-n <N>`, que desactiva el seguimiento en vivo; `railway logs` por defecto hace streaming y cuelga la sesión de agente) y se pasan por un wrapper de redacción que tapa connection strings, Bearer tokens, pares `key|token|secret|password=valor` y JWT antes de imprimir, con timeout por si `-n` no frena el streaming. `-d` para deploy/runtime, `-b` para build.
-
-### Consecuencias
-
-- Claude Code puede leer variables (solo keys), logs de deploy y logs de build de producción sin que Luis toque el dashboard y sin filtrar secretos al chat. Es capacidad de Claude Code corriendo el CLI, no de Claude (chat).
-- El límite absoluto "solo Luis despliega" queda intacto: crear o cambiar una variable en Railway dispara un redeploy automático del servicio (confirmado en doc de Railway: no hay forma de que un deploy vivo tome variables nuevas sin un deploy nuevo), por lo que toda escritura de variables sobre un servicio de producción es, de hecho, un despliegue — reservado a Luis.
-- Detalle operativo registrado: `-n` cuenta entradas de log lógicas, no renglones de texto; una corrida de `-n 100` de build devolvió 153 líneas por los bloques multilínea (Prisma Client, warnings de npm). No es un fallo del filtro.
-- Observación al pasar durante la lectura de logs de deploy (no diagnosticada aquí): se ven transacciones `BEGIN`/`COMMIT` sobre `app_settings`, consistente con el doble-upsert de `getMaintenanceBanner` ya marcado como deuda.
-- Las reglas 4 y 5 quedan como contrato que el MCP de Railway deberá respetar cuando se monte.
-
-### Archivos
-
-- Ninguno del repo. La instalación (binario en `.local\bin`), el login y el link son estado local de la máquina de Luis, fuera de versión. Este ADR es el único artefacto versionado del cambio.
-
-### Commits
-
-- Pendiente — commit de este ADR (`docs: ADR-057 adopt railway cli for read-only variables and logs`)
-
-### Pendientes
-
-- **Montar el MCP de Railway en Claude Code**, decidiendo el modo de cableado que respete la regla `npx`/`npm` (evaluar `railway mcp install` vía CLI vs. apuntar a un binario), y agregando deny-rules explícitas en `.claude/settings.local.json` para las tools de escritura (`variable set`, `up`, `redeploy`, `accept-deploy`), igual que el deny ya existente de `git push`. Verificar que Claude Code no pueda disparar un redeploy antes de darlo por cerrado.
-- **Reglas de manejo de secretos aplicadas al MCP:** trasladar las reglas 4 y 5 de este ADR al uso del MCP (variables solo por nombre, logs redactados y acotados).
-- **Habilitación de escrituras seguras (etapa futura, si se decide):** crear variables solo en entornos no-prod, o en prod con confirmación explícita de Luis (equivalente al gate del push). Fuera de alcance de este ADR.
-
-## ADR-069 — Enriquecimiento del contrato de la API externa: marca, número de parte, formato, modelo y quick specs derivados de technicalSpecs
-
-**Fecha:** 2026-07-08
-**Estado:** Aceptado
-
-### Contexto
-
-La API externa de solo lectura (módulo `/external` en `apps/api`, rama `feature/external-api`) expone las propuestas GANADA para consumo de Felipe. El contrato por ítem (`ExternalItemOut` / `ExternalChildItemOut`) traía `brand` y `partNumber` leídos directamente de las columnas escalares de `ProposalItem`. Al verificar la respuesta real contra la DB local se encontró que esas columnas venían vacías (`""`), mientras el dato real —marca, número de parte, formato, modelo— vivía dentro del JSON `technicalSpecs`, bajo las claves `fabricante`, `numeroParte`, `formato`, `modelo`. El consumidor tenía que entrar al blob `technicalSpecs` (tipado `Record<string, unknown>`, sin contrato) para leer esos valores, y la "descripción rápida" (quick specs) no se exponía en absoluto: se calcula solo en `apps/web` con `buildQuickDescription`.
-
-Regla de fondo acordada con Luis: la fuente de verdad de marca, número de parte, formato y modelo es **lo que el usuario ve en la UI de specs**, es decir `technicalSpecs`, no las columnas del `ProposalItem`. En la UI no existe un campo "Marca"; lo que el usuario captura es **Fabricante** (`technicalSpecs.fabricante`).
-
-### Decisión
-
-Enriquecer el contrato de la API externa tomando el dato desde `technicalSpecs`, sin introducir un paquete compartido (Opción A: cambio contenido en `apps/api/src/external`):
-
-1. **`brand` y `partNumber`** pasan a leerse de `technicalSpecs` (`fabricante` y `numeroParte` respectivamente) vía `pickSpecString`, en lugar de las columnas del `ProposalItem`. Se rellenan los campos que Felipe ya conocía, ahora con el dato real, sin cambiar sus nombres.
-2. **Campos nuevos de primer nivel**: `formato`, `modelo` (desde `technicalSpecs`), `quickSpecs` (derivado con `buildQuickDescription`) e `itemTypeLabel` (etiqueta legible del `itemType` vía `ITEM_TYPE_LABELS`, p. ej. `PCS` → `PCs`).
-3. Mismo tratamiento en `ExternalChildItemOut` (sub-ítems).
-4. La lógica de display (`buildQuickDescription`, `ITEM_TYPE_LABELS`, más el helper `pickSpecString`) se replica en un archivo nuevo `apps/api/src/external/external-spec-fields.ts`, adaptada al tipado `Record<string, unknown>` del backend (coerción `typeof === 'string'`, sin `any`).
-
-Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente de la rama (que ya arrastraba la colisión del hoy ADR-068); no toca estructura de paquetes.
-
-### Consecuencias
-
-- El consumidor externo recibe marca, número de parte, formato, modelo y quick specs como campos planos con contrato explícito, alineados con lo que el usuario ve en la UI, sin tener que parsear el blob `technicalSpecs`.
-- `technicalSpecs` se sigue exponiendo crudo, por compatibilidad.
-- **Deuda registrada**: `buildQuickDescription` e `ITEM_TYPE_LABELS` quedan duplicados entre `apps/web` y `apps/api`. Si el mapa `itemType → campos` o las etiquetas cambian en web, la API externa queda desincronizada en silencio. Como es lógica de display read-only, el impacto de un drift es bajo. **Follow-up**: extraer esta lógica a un paquete compartido (patrón de `@repo/pricing-engine`, ADR-052) que consuman web y api, al estabilizar/mergear la rama.
-
-### Archivos
-
-- `apps/api/src/external/external-spec-fields.ts` (nuevo) — `resolveItemTypeLabel`, `pickSpecString`, `buildQuickDescription`.
-- `apps/api/src/external/dto/external-proposals.dto.ts` — `itemTypeLabel`, `formato`, `modelo`, `quickSpecs` en `ExternalItemOut` y `ExternalChildItemOut`.
-- `apps/api/src/external/external-proposals.service.ts` — `brand`/`partNumber` desde `technicalSpecs`; campos derivados en el ítem top-level y en `mapChildOut`.
-
-### Commits
-
-- `ba476c3` — feat(external): expose brand, part number, format, model and quick specs from technical specs
-- Pendiente — commit de este ADR (`docs: ADR-059 enrich external api contract from technical specs`)
-
-### Pendientes
-
-- **Extracción a paquete compartido** de `buildQuickDescription` / `ITEM_TYPE_LABELS` (elimina el duplicado web/api), al mergear la rama. — **Ejecutado**: el paquete es `@repo/item-display` (ADR-067); la copia local se eliminó tras el merge.
-- **Renumeración del ADR-057 de esta rama** (Railway CLI) al mergear a master, por colisión con el ADR-057 de master (getMaintenanceBanner). — **Ejecutado** en el merge: 057→068, 059→069.
-
-## ADR-070 — Contrato de la API externa por categoría: tipo, responsable y datos de contacto del proveedor
+## ADR-068 — Actualización del protocolo operativo: modelo/esfuerzo por sesión, rama obligatoria en prompts y Railway MCP
 
 **Fecha:** 2026-07-22
-**Estado:** Aceptado
+**Estado:** Implementado
+
+### Contexto
+La guía oficial de Claude Code (jul 2026) separa dos ejes independientes: el modelo (qué tan capaz) y el esfuerzo (qué tan a fondo trabaja: archivos leídos, verificación, autonomía antes de devolver control), con defaults `high` en Fable 5, Sonnet 5 y Opus 4.8 y `xhigh` recomendado para código complejo. El §10.3 del instructivo tenía una condición vencida ("Fable hasta 2026-07-07"); Fable está incluido en el plan de Luis. Luis además fijó dos reglas nuevas: todo prompt de Claude Code debe indicar la rama donde ubicarse, sea sesión nueva o la misma; y el modelo opera Railway vía CLI, con el MCP local como pendiente opcional (se intentó cablear pero no quedó operativo).
+
+### Decisión
+En `INSTRUCTIVO_CLAUDE.md`: (1) §6 — rama obligatoria en TODO prompt como paso 0 (`git branch --show-current` + checkout si no coincide + detenerse si hay cambios sin commitear ajenos); el chat anuncia los cuatro datos encima del bloque (`Modelo · Effort · Sesión · Rama`, effort omitido si es el default); heurística modelo-vs-esfuerzo (falló con contexto e intento → subir modelo; falló por saltarse pasos → subir esfuerzo); fila Fable en la tabla (especialista para causa raíz ambigua, `claude --model fable`); Sonnet 5 añade `xhigh`; advertencia de que `/model` persiste como default de sesiones futuras, por eso la sesión nueva se abre con el flag `--model`. (2) §10.3 — Fable como default de diagnóstico de causa raíz; reruteo del clasificador documentado (puede dispararse en el primer request por CLAUDE.md y git status; mitigación con framing defensivo, `/clear`, `claude --safe-mode`, toggle en `/config`); sin la fecha vencida. (3) §2 — el modelo opera Railway vía CLI (lecturas libres; escritura y creación de variables con aprobación previa de Luis por operación); el MCP local se intentó cablear pero no quedó operativo y queda como pendiente opcional; cambiar una variable redeploya el servicio automáticamente. Se conserva la mecánica ya decidida de que modelo y esfuerzo se fijan al abrir la sesión, nunca dentro del prompt: la actualización injerta sobre esa base, no la revierte.
+
+### Consecuencias
+El enrutamiento de modelo/esfuerzo queda alineado a la guía oficial vigente y Fable entra al repertorio de diagnóstico. Claude Code opera Railway sin fricción en lecturas y con gate humano por operación en escrituras. `railway up`/`redeploy` manuales y el push a `master` siguen siendo exclusivamente de Luis.
+
+### Archivos
+- `INSTRUCTIVO_CLAUDE.md` (§2, §6, §10.3)
+
+### Commits
+- `e453f25` — docs: actualiza protocolo de modelos, effort, rama obligatoria y Railway MCP
+
+### Pendientes
+- Renumerar en `feature/wysiwyg-pages` el ADR-067 (vista previa WYSIWYG) a ADR-069 antes del merge: colisiona con el ADR-067 de master (numeroParte/`@repo/item-display`). El ADR del modelo de secciones tomará el 070.
+- Reemplazar el attachment `INSTRUCTIVO_CLAUDE.md` del proyecto en Claude.ai con la versión de este commit (gana el disco).
+- Actualizar las instrucciones del proyecto en Claude.ai (español neutro, referencia a Railway MCP) — entrega manual a Luis.
+
+## ADR-069 — Estados APLAZADA y CANCELADA: terminales, fuera de proyección y exentos de higiene
+
+**Fecha:** 2026-07-23
+**Estado:** Implementado
 
 ### Contexto
 
-La lista de campos que el consumidor externo necesita por ítem incluye, además de lo ya expuesto (número de parte, formato, fabricante, modelo, descripción rápida, categoría, flete, tiempo de entrega), el tipo del ítem, el responsable (en categorías de servicio) y los datos de la empresa proveedora con su contacto (nombre, teléfono, correo). Tras el merge de master (f11f074), la rama dispone del catálogo global de proveedores (ADR-062/064): `ProposalItem` referencia `SupplierCompany` y `SupplierContact` vía FKs, y teléfono/correo son atributos del contacto del catálogo, no del ítem. `tipo` y `responsable` viven como claves de `technicalSpecs`.
+El enum `ProposalStatus` tenía seis valores y no existía forma de registrar una propuesta que queda sin seguimiento comercial: ni la que el cliente pospone, ni la que se cae. El requerimiento fue que ambas situaciones se vean como estado propio en la tabla de registros del dashboard, para propuestas existentes y nuevas.
+
+El frontend duplica el enum a mano como unión de literales en `apps/web/src/lib/types.ts`, y los subconjuntos de negocio —pipeline, forecast, proyección, exenciones de higiene— están declarados por separado en varios archivos en vez de derivarse de una sola fuente. Cualquier estado nuevo obliga a revisarlos todos.
+
+Restricción de ejecución: la base local tenía aplicada la migración `20260718193601_add_section_model_to_proposal_page`, que solo existe en el directorio de `feature/wysiwyg-pages`. `prisma migrate status` (5.10.2) no reporta ese desfase —solo verifica que las migraciones locales estén aplicadas, no lo inverso—, pero `migrate dev --create-only` sí lo detecta contra la shadow database y ofrece resetear la base.
 
 ### Decisión
 
-Seis campos planos nuevos en `ExternalItemOut` y `ExternalChildItemOut`: `tipo` y `responsable` (vía `pickSpecString` sobre `technicalSpecs`; `null` donde la categoría no los captura) y `supplierCompanyName`, `supplierContactName`, `supplierContactPhone`, `supplierContactEmail` (vía include de las relaciones `supplierCompany`/`supplierContact` en la query; `null` cuando el ítem no tiene proveedor asignado). Convención de nombres: inglés para lo que proviene del modelo relacional, español para claves de specs. El campo existente `proveedor` (categoría de origen en `internal_costs`) se conserva sin cambios. Mismo tratamiento en sub-ítems.
+- **Dos estados, no uno combinado**: `APLAZADA` y `CANCELADA` como valores separados del enum. Un solo estado fusionado impediría después medir cuántas propuestas se retoman y cuántas mueren, y obligaría a reclasificar a mano lo ya marcado.
+- **Terminales y no facturables**: quedan fuera de Proyección Venta y Proyección DaaS sin tocar código, porque `computeBillingCards` solo suma filas en `FACTURADA` y `PENDIENTE_FACTURAR`. `FORECAST_STATUSES` no se modifica, así que tampoco inflan el forecast.
+- **Visibles en el pipeline**: entran a `PIPELINE_STATUSES` como dos tarjetas nuevas. La grilla pasa de `lg:grid-cols-4` fijo a `lg:grid-cols-3 xl:grid-cols-6` para alojar seis tarjetas.
+- **Exentos de las reglas de higiene**: nueva constante `TERMINAL_STATUSES` en `dashboardValidation.ts`; los dos estados se agregan a `R5_EXEMPT_STATUSES` y la regla R2 (`ACQUISITION_REQUIRED`) los excluye. Sin esta exención, cada propuesta aplazada o cancelada quedaría como aviso permanente y bloquearía crear, editar y clonar a los usuarios no ADMIN vía `runWithCleanBoard`.
+- **No disponibles al crear**: `CreateProposalDto` mantiene `@IsIn([ELABORACION, PROPUESTA])`. `NewProposal.tsx` ya tenía los dos estados iniciales hardcodeados como botones, no derivados de `ALL_STATUSES`, por lo que no requirió cambio y no se creó una constante `CREATION_STATUSES`.
+- **Migración generada desde `feature/wysiwyg-pages`**: allí el directorio de migraciones y la base local coinciden y no hay desfase. El `migration.sql` resultante se movió por `$env:TEMP` a una rama corta desde `master` y se aplicó con `migrate deploy`, que no usa shadow database ni puede resetear. Se evitó el reset sin perder datos locales.
 
 ### Consecuencias
 
-- El contrato cubre la lista completa de campos por categoría definida por Luis; el consumidor no necesita parsear `technicalSpecs` ni conocer el modelo de proveedores.
-- Los campos de proveedor llegan `null` en ítems sin proveedor asignado — en particular, los de `COT-LU00002-1` (copiados antes de que existiera el catálogo en esa base).
+- `ALTER TYPE ... ADD VALUE` es de una sola vía: quitar un valor exige recrear el tipo, reescribir la columna `status` y su `@@index([status])`. Los nombres quedan fijos una vez desplegados.
+- La base local quedó con una migración registrada que `feature/wysiwyg-pages` no tiene en su directorio: el espejo exacto del desfase anterior. Se resuelve al rebasar esa rama sobre `master` después del push. Mientras tanto, correr `migrate dev` en esa rama volvería a ofrecer reset.
+- `STATUS_CONFIG` es `Record<ProposalStatus, ...>` estricto y forzó la exhaustividad en compilación. `STATUS_FILL` en `exportDashboard.ts` es `Record<string, ...>` suelto: un valor nuevo sin entrada no habría fallado el `tsc`, solo habría salido sin color en el Excel. La cobertura se agregó a mano.
+- `BillingProjection` reutiliza el mismo enum y sus DTO son interfaces planas con `status?: string`, sin `class-validator`. Con dos valores más, el endpoint de proyecciones acepta ahora `APLAZADA` y `CANCELADA` sin validación en la capa API.
+- El cambio de estado desde el dashboard sigue sin máquina de estados: cualquiera de los ocho valores es elegible para una propuesta existente, en ambos sentidos. Aplazar o cancelar es reversible.
 
 ### Archivos
 
-- `apps/api/src/external/external-proposals.types.ts` — include de `supplierCompany`/`supplierContact` en ambos niveles.
-- `apps/api/src/external/dto/external-proposals.dto.ts` — seis campos nuevos en ambas interfaces.
-- `apps/api/src/external/external-proposals.service.ts` — mapeo en ítem top-level y `mapChildOut`.
+- `apps/api/prisma/schema.prisma` — enum `ProposalStatus`
+- `apps/api/prisma/migrations/20260723192442_add_proposal_status_aplazada_cancelada/migration.sql`
+- `apps/web/src/lib/types.ts` — unión `ProposalStatus`
+- `apps/web/src/lib/constants.ts` — `STATUS_CONFIG`, `ALL_STATUSES`
+- `apps/web/src/hooks/useDashboard.ts` — `PIPELINE_STATUSES`
+- `apps/web/src/pages/dashboard/PipelineCards.tsx` — grilla de tarjetas
+- `apps/web/src/lib/exportDashboard.ts` — `STATUS_FILL`
+- `apps/web/src/lib/dashboardValidation.ts` — `TERMINAL_STATUSES`, `R5_EXEMPT_STATUSES`, regla R2
 
 ### Commits
 
-- `bf8976f` — feat(external): expose spec type, responsable and supplier contact data per item
-- Pendiente — commit de este ADR (`docs: ADR-070 external contract supplier and spec type fields`)
+- `5fe1ca1` — feat(proposals): add APLAZADA and CANCELADA to ProposalStatus enum
+- `2e1e57d` — feat(dashboard): support APLAZADA and CANCELADA proposal statuses
 
 ### Pendientes
 
-- **Prueba end-to-end** con data de proveedor poblada: asignar proveedor a los ítems de `COT-LU00002-1` en `postgres-external` o copiar una propuesta reciente con catálogo asignado. — **Ejecutado**: `COT-LU00003-1` clonada desde la local `COT-LMA00008-1` (6 categorías, 6/6 ítems con proveedor, catálogo de 5 empresas + 5 contactos clonado); los 4 criterios del contrato verificados contra el endpoint real.
+- **Renumeración en `feature/wysiwyg-pages`**: esa rama tiene un ADR numerado 069 que ahora colisiona. Se renumera con `str_replace` puntual al rebasar sobre `master`. La numeración la manda `master`.
+- **`BillingProjection` sin validación de estado**: sus DTO son interfaces con `status?: string` y un cast en runtime. Falta un DTO con `class-validator` que restrinja el conjunto permitido.
+- **Subconjuntos de estado dispersos**: `PIPELINE_STATUSES`, `FORECAST_STATUSES`, `PROJECTION_STATUSES`, `R5_EXEMPT_STATUSES` y `TERMINAL_STATUSES` viven en tres archivos distintos. Evaluar derivarlos de una sola declaración para que un estado nuevo no obligue a auditar todo.
+- **`STATUS_FILL` con tipado suelto**: pasarlo a `Record<ProposalStatus, ...>` para que el compilador exija exhaustividad, como ya hace `STATUS_CONFIG`.
+- **Verificación en producción**: confirmar tras el despliegue que los dos estados aparecen en el selector y que las proyecciones no los suman.
+
+## ADR-070 — Cierre del incidente de crecimiento de DB y payloads calientes (cohorte 1)
+
+**Fecha:** 2026-07-24
+**Estado:** Aceptada
+
+### Contexto
+
+Incidente abierto desde junio 2026: lentitud intermitente en producción con ERR_HTTP2_PROTOCOL_ERROR y 502 esporádicos en `/presence/active` y `/app-settings/maintenance-banner`. En julio se sumó el hallazgo de que la base de producción pesaba 918 MB frente a un dump de junio de 71 MB.
+
+Diagnóstico (restauración local del dump del 23-jul, rescate del dump truncado de junio como testigo, lecturas de metadata en producción y experimento A/B de colisión poll↔payload contra producción):
+
+- El 97% de la base es `proposal_page_blocks` (886 MB vivos, casi todo TOAST); el 94% es la columna `content` (jsonb). El 98% del peso de esa columna son bytes duplicados: la plantilla "PROPUESTA DE VALOR" contiene una imagen base64 de ~2,5 MB que `initializeDefaultPages` materializa como bloque propio en cada propuesta (286 copias = 709 MB) y `cloneProposal` re-duplica en cada clon o versión.
+- El crecimiento es lineal (~9–10 MB/día) desde el 5 de mayo (lanzamiento del builder de páginas), sin salto. El aparente salto 71→637 MB era un artefacto: el dump del 12-jun estaba truncado — el `pg_dump` fue interrumpido por el reinicio de Postgres del deploy `pre184`, 14 minutos después de iniciado, y quedó archivado seis semanas como backup válido.
+- Postgres está sano (bloat ~2%, autovacuum coherente): el tamaño de la base no es la causa directa de la lentitud.
+- Las rutas calientes movían bytes desproporcionados: el guard JWT seleccionaba `signatureUrl` (hasta 763 kB de base64) en cada request autenticado y lo descartaba; abrir el doc builder descargaba el payload completo dos veces (5,6 MB p50 ×2, sin compresión); guardar una imagen movía ~10 MB entre subida y ecos; editar un título echoaba ~2,6 MB.
+- Falsos positivos descartados con evidencia: el fan-out del dashboard (payload real 0,3–1,3 MB), los upserts en el GET del maintenance-banner (ya era lectura pura; el patrón sí existía en `price-thresholds`, `supplier-field-requirements` e `inactivity-timeout`) y el tamaño de la base como causa de la lentitud.
+- El mecanismo exacto de los 502 no se reprodujo con tráfico GET (una descarga de 4,4 MB no degradó los polls ni en conexiones aisladas ni multiplexados en h2); queda como hipótesis el path de escritura bajo concurrencia (parse y validación de bodies de MBs, base64 síncrono del upload, transacción del clone).
+
+### Decisión
+
+Atacar el incidente en dos cohortes. Cohorte 1 (esta, táctica, sin migración de schema) en la rama `fix/incident-payloads`:
+
+1. El guard JWT valida con select mínimo: nuevo `findOneByIdForAuth` (`id`, `isActive`); `signatureUrl` deja de viajar Postgres→Node en cada request.
+2. Los GET de app-settings pasan a lectura pura con defaults en memoria (patrón `getMaintenanceBanner`); los write paths que hacían `update` seco pasan a `upsert` (cierra un bug latente P2025 con fila ausente).
+3. `compression()` (gzip) en el API.
+4. El builder monta con la respuesta del POST `initialize` (payload idéntico al GET): una sola descarga; las mutaciones actualizan estado local sin consumir ecos.
+5. Respuestas de mutación adelgazadas: `updatePage` sin `blocks`, `updateBlock` sin `content`, reorders retornan `[{id, sortOrder}]`.
+
+Cohorte 2 (estructural, feature propia con ADR propio, tras llegar `feature/wysiwyg-pages` a master): extraer las imágenes del JSONB a una tabla de assets deduplicada por hash dentro de Postgres (se mantiene "sin storage externo"), bloques y plantillas por referencia, endpoint de assets cacheable, con migración de datos sobre `pg_dump` previo.
+
+### Consecuencias
+
+- Payloads calientes reducidos: montaje del builder a la mitad, mutaciones de MBs a kBs, requests autenticados sin arrastre de firmas, JSON de texto comprimido (el base64 solo comprime ~25–30%).
+- El crecimiento de la base sigue activo (~2,5 MB por propuesta nueva) hasta la cohorte 2.
+- Divergencia aceptada en RICH_TEXT: el html local queda pre-sanitización hasta la próxima recarga (se autocorrige).
+- Ventana de deploy: una pestaña con bundle viejo contra el API nuevo crashea el builder al renombrar o reordenar (sin pérdida de datos; se recupera con refresh). Push sin usuarios activos o avisando refrescar.
+- `findOneById` queda sin callers (limpieza futura).
+- Verificación causal invertida: si la lentitud persiste tras el deploy, el incidente se reabre con waterfall de navegador en uso real como primer paso.
+- El protocolo de backups queda señalado: sin verificación post-dump archivó un backup corrupto seis semanas; todo dump nuevo se verifica al crearlo (`pg_restore -l` completo + tamaño plausible).
+
+### Archivos
+
+- `apps/api/src/auth/jwt.strategy.ts`, `apps/api/src/users/users.service.ts`
+- `apps/api/src/app-settings/app-settings.service.ts`
+- `apps/api/src/main.ts`, `apps/api/package.json`, `pnpm-lock.yaml`
+- `apps/web/src/hooks/useProposalPages.ts`
+- `apps/api/src/proposals/pages.service.ts`
+
+### Commits
+
+- `7901d12` fix(auth): use minimal select in jwt validation
+- `dce0be6` fix(app-settings): convert config GETs to pure reads
+- `ade7594` feat(api): enable gzip response compression
+- `54dd1b4` fix(web): use initialize response and local updates in doc builder
+- `f25dced` fix(api): slim mutation responses in pages endpoints
+
+### Pendientes
+
+- Cohorte 2: assets deduplicados por hash (ADR propio al implementarla).
+- Verificación post-dump en el protocolo de backups.
+- Limpieza de `findOneById` sin callers.
+- Errores prettier preexistentes en `app-settings.service.ts` (heredados de master).
+- Escape Unicode literal en text node JSX de `BlockEditor.tsx` (cosmético, registrado aparte).
+
+## ADR-071 — Swagger expuesto, throttler inoperante y gate de tipos ciego: el chequeo no cubría lo que rompía
+
+**Fecha:** 2026-07-25
+**Estado:** Aceptada
+
+### Contexto
+
+Auditoría de dependencias del API y composición del bundle de web (rama `chore/audit-deps-y-bundle`, 24-jul), documentada en `docs/diagnostico-2026-07-24-deps-bundle.md` con tres anexos. Destapó tres hallazgos de naturaleza distinta, ninguno reportado por un usuario:
+
+- **Swagger público en producción.** `SwaggerModule.setup()` corría sin ninguna guarda de entorno. Las cuatro rutas que registra —`/api/docs`, `/api/docs-json`, `/api/docs-yaml` y `/api/docs/swagger-ui-init.js`— respondían 200 a un cliente anónimo desde internet, publicando el mapa completo de la superficie HTTP: 65 rutas, 93 operaciones, 43 esquemas, incluidas las 11 bajo `/admin` y las descripciones en lenguaje natural de cada endpoint. Dato que descartó el compromiso intermedio: el spec viaja incrustado en `swagger-ui-init.js` (75 480 bytes), así que proteger solo `/api/docs-yaml` no ocultaba nada.
+- **Throttler inoperante desde su instalación.** Apareció como efecto colateral del control de la medición anterior. `x-ratelimit-remaining` clavado en 4 en `/auth/login` a lo largo de peticiones consecutivas ⇒ `totalHits = 1` cada vez: cada petición estrenaba su propio contador. Los logs HTTP del edge confirmaron que las 23 peticiones de sondeo salieron con un único `srcIp` constante, de modo que la variación no venía del cliente. El rate limiting existía desde abril (ADR-006) y no limitó nada en producción en ningún momento. Hallazgo adjunto: las rutas de Swagger se registran con `httpAdapter.get()`, por debajo del router de Nest, así que el `APP_GUARD` ni siquiera las cubría.
+- **Gate de tipos ciego, con cinco semanas de tests muertos.** `apps/api/tsconfig.build.json` excluye `test` y `**/*spec.ts` por construcción, y el CI tipaba la api únicamente contra esa configuración. El bump a TypeScript 6.0 del ADR-048 (junio) dejó rojo el typecheck de los 7 archivos de test del programa —`types` vacío por defecto y semántica de `esModuleInterop`— y nadie lo vio, porque el chequeo que declaró el bump verificado no compilaba esos archivos.
+
+### Decisión
+
+**1. Swagger tras `SWAGGER_ENABLED`, con default apagado** (`0bdbfb7`). La condición envuelve el bloque completo de `setup()`, de modo que cierra las cuatro rutas de golpe, y compara contra el literal `'true'` y no `Boolean(...)`, para que `SWAGGER_ENABLED=false` desactive en vez de activar. La variable no existe en el servicio de Railway, así que el estado deseado en producción es el default y no hubo nada que tocar allí. Alternativas descartadas: derivar de `NODE_ENV` (acopla la visibilidad de la documentación a una variable que gobierna verbosidad de errores y comportamiento de terceros; ver la doc exigiría degradar el entorno) y proteger solo `/api/docs-yaml` (ineficaz por lo dicho en el contexto). El fix es un interruptor, no autenticación: mientras esté encendido, la doc está abierta.
+
+**2. Throttler con la IP real del cliente, en tres pasos.** El primer diagnóstico acertó la causa —`req.ip` variable— pero no el mecanismo completo, y por eso hubo tres intentos encadenados en vez de uno:
+
+- `a82b911` — `app.set('trust proxy', 1)`. Se eligió el entero `1` y no `true` por análisis de spoofing: con `true` y un edge que appendea, `req.ip` es la entrada más a la izquierda de `X-Forwarded-For`, es decir, la que puso el atacante. Con `1` la confianza es posicional y una XFF forjada queda siempre a la izquierda del truncado, stripee o appendee el edge. Los modos de fallo de `1` son sobre-limitar o quedar como estaba; el de `true` es entregar la evasión.
+- `135321c` — límite global de 30 a 100 req/60 s, calibrado sobre 4 330 peticiones reales de 10,8 días de logs del edge. Pico legítimo medido: 24 req/60 s por (IP, handler) en `GET /spec-options/suggest`, producto mecánico del debounce de 300 ms del autocompletado de especificaciones. El 30 dejaba 1,25x de margen, que dos usuarios tras un mismo NAT —escenario ya observado— cruzan trabajando normal. El 100 deja 4,2x. Los `@Throttle` de auth no se tocan: la defensa fina de credenciales la dan ellos.
+- `b7e6bbc` — `RealIpThrottlerGuard`, subclase de `ThrottlerGuard` con `getTracker()` sobre `X-Real-IP` y fallback a `req.ip` en local. Una sonda temporal desplegada a propósito (`292a126`, revertida en `bb3563c`) midió dentro del contenedor lo que no era observable desde fuera y demostró que con `trust proxy 1` `req.ip` resuelve el salto interno del edge, que rota entre peticiones: el paso anterior no bastaba. `X-Real-IP` es la cabecera que Railway documenta para la IP del cliente y que su edge reemplaza si el cliente la forja.
+
+**3. El gate de tipos de la api pasa a `tsconfig.json` y el CI corre los tests.** `af44683` apunta el typecheck de `ci.yml` y `pr-check.yml` a `apps/api/tsconfig.json`, el mismo programa que el `tsc --noEmit` local, con los 7 archivos de test dentro. `cc6c572` añade el paso de jest (`pnpm --filter api test`) justo después; el `test:e2e` queda fuera de CI por usar configuración aparte y poder exigir Postgres. Para que ambos pasaran en verde: `1664b08` restaura `"types": ["jest", "node"]` en `tsconfig.json` y cambia el import de supertest a default; `24d83c5` provee dependencias mockeadas (`provide`/`useValue`) en los cuatro specs por defecto de Nest, que fallaban al compilar el `TestingModule` por DI sin resolver.
+
+**4. Regla de verificación.** `tsconfig.build.json` es la configuración de build y **no cuenta como gate de tipos de la api**: excluye `test` y `**/*spec.ts` por construcción. El typecheck de la api es `apps/api/tsconfig.json`. Principio general del que esto es un caso particular: **la verificación se elige contra la clase de rotura que se está introduciendo; un gate que por construcción no puede ver esa clase de rotura no es un gate, aunque salga verde.** La regla se propaga a `INSTRUCTIVO_CLAUDE.md` §9 y `CONVENTIONS.md` §F en commit aparte de este ADR.
+
+### Consecuencias
+
+- La API deja de publicar su propio mapa a internet. Para consultar la documentación: `SWAGGER_ENABLED=true` en `apps/api/.env` y leerla en local, que describe la misma forma de API. Activarla en producción cuesta dos redespliegues (encender y apagar) y no añade autenticación.
+- El rate limiting empieza a existir de verdad por primera vez desde abril de 2026. Consecuencia real y nueva: endpoints que nunca fueron limitados ahora pueden devolver 429. El 100 se calibró para que eso no le ocurra al tráfico legítimo medido, pero el margen es empírico, no teórico.
+- Corrección de registro sobre el ADR-006 y sobre `CONVENTIONS.md` §K, que declaraban el rate limiting global de 30/min como medida activa: no lo era en producción, y el número ahora es 100. Ninguno de los dos se reescribe — §K se actualiza en el commit de documentación; el ADR-006 queda corregido por referencia desde aquí, porque `DECISIONS.md` es append-only.
+- Corrección de registro sobre el ADR-048, que declaró el bump a TypeScript 6.0 verificado con evidencia que no cubría lo que el bump rompía. Tampoco se edita: queda corregido desde aquí.
+- El gate se vuelve más lento y, al principio, más ruidoso: los 7 archivos de test entran al programa de tipos y jest corre en cada push y cada PR. Es el costo de que vea lo que antes no veía.
+- `apps/api/.env.example` documenta `SWAGGER_ENABLED`.
+- Patrón validado: instrumentación desplegada a propósito y revertida en el commit siguiente (`292a126` → `bb3563c`), cuando el dato solo es observable desde dentro del contenedor y Railway no da shell. La sonda entra y sale en el mismo par de commits, nunca queda.
+- El `gzip on` de nginx (`7033683`) salió del Bloque C de este mismo diagnóstico, pero pertenece a la decisión de compresión del ADR-070 y se registra allí como cola, no aquí.
+
+### Archivos
+
+- `apps/api/src/main.ts` — guarda `SWAGGER_ENABLED` sobre el bloque de Swagger; `app.set('trust proxy', 1)`
+- `apps/api/.env.example` — `SWAGGER_ENABLED`
+- `apps/api/src/app.module.ts` — `limit: 100`; `APP_GUARD` pasa a `RealIpThrottlerGuard`
+- `apps/api/src/common/guards/real-ip-throttler.guard.ts` — nuevo, `getTracker()` sobre `X-Real-IP`
+- `apps/api/tsconfig.json` — `"types": ["jest", "node"]`
+- `apps/api/test/app.e2e-spec.ts` — import default de supertest
+- `apps/api/src/auth/auth.controller.spec.ts`, `apps/api/src/auth/auth.service.spec.ts`, `apps/api/src/users/users.controller.spec.ts`, `apps/api/src/users/users.service.spec.ts` — mocks de DI
+- `.github/workflows/ci.yml`, `.github/workflows/pr-check.yml` — typecheck contra `tsconfig.json` y paso de jest
+- `docs/diagnostico-2026-07-24-deps-bundle.md` — diagnóstico y sus tres anexos
+
+### Commits
+
+- `17b4979` docs: diagnostico de dependencias del API y bundle de web
+- `2dc6f77` docs: anexo de exposicion de Swagger en el diagnostico
+- `0bdbfb7` fix(api): gate Swagger behind SWAGGER_ENABLED, default off
+- `b3da89b` docs: anexo throttler inoperante y trust proxy en el diagnostico
+- `a82b911` fix(api): trust exactly one proxy hop so req.ip sees the real client
+- `292a126` chore(api): TEMPORARY [PROXY-PROBE] logging of edge proxy headers
+- `135321c` fix(api): raise global throttler limit from 30 to 100 req/60s
+- `3266dee` docs: anexo de medicion de trafico que calibra el limit 100 del throttler
+- `b7e6bbc` fix(api): throttler tracks X-Real-IP so rate limiting counts real clients
+- `bb3563c` Revert "chore(api): TEMPORARY [PROXY-PROBE] logging of edge proxy headers"
+- `1664b08` fix(api): restore jest/node types in tsconfig and supertest default import
+- `af44683` ci: typecheck api against tsconfig.json so spec files gate the build
+- `24d83c5` test(api): provide mocked dependencies so DI resolves in unit spec files
+- `cc6c572` ci: run api unit tests after the typecheck step
+
+### Pendientes
+
+- **Verificar el throttler en producción**: 6 peticiones a `/auth/login` con credenciales inválidas dentro de una ventana de 60 s desde una sola máquina. Esperado: 401 con `remaining` bajando de 4 a 0 y **429 en la sexta**. Es la única prueba que cierra `b7e6bbc`; el guard de `X-Real-IP` no se verificó contra producción. Hacerla fuera de horario de usuarios y no repetirla en bucle (la IP queda bloqueada para esa ruta hasta 60 s). Si aparecieran 429 antes de la sexta, hay un salto intermedio y toca reevaluar.
+- **Verificar el cierre de Swagger en producción**: 404 en las cuatro rutas.
+- **`SWAGGER_ENABLED` no debe crearse en Railway.** Si se activa puntualmente, quitarla al terminar; son dos redespliegues.
+- **`/uploads/*` sin auditar**: `app.useStaticAssets()` monta ficheros por debajo del router, igual que Swagger, así que tampoco lo cubre el throttler. No se midió qué expone.
+- **Preguntas abiertas del diagnóstico, sin cerrar**: severidad efectiva de los 28 advisories de `axios`; `express` importado en `main.ts` sin estar declarado en `apps/api/package.json`; si el `COPY` de `node_modules` del Dockerfile preserva el layout de `.pnpm` en la imagen (condiciona el inventario real de vulnerabilidades); `react-router` resuelto a la build `development`; `@tiptap/extension-underline` y `@tiptap/pm` declarados sin sitio de import.
+- **Peso del bundle de web**: `FileSaver.min` (939 kB, 99,6 % `exceljs`) y `RichTextEditor` (1 021 kB) son imports estáticos de sus chunks de ruta, así que se descargan al entrar a la ruta y no al pulsar exportar. Candidatos a `import()` dinámico.
+- **Propagación de la regla del gate** a `INSTRUCTIVO_CLAUDE.md` §9 y `CONVENTIONS.md` §F, y actualización de §K (rate limiting): commit aparte de este ADR.
+
+## ADR-072 — El pool de Prisma dimensionado por CPUs del host, no por la carga real
+
+**Fecha:** 2026-07-26
+**Estado:** Aceptada
+
+### Contexto
+
+El `DATABASE_URL` del servicio `novotechflow` no llevaba query string, así que el tamaño del pool de Prisma era el default calculado: `num_physical_cpus * 2 + 1`. El contenedor de Railway reporta las CPUs del host, no una cuota asignada, de modo que el cálculo daba 48 CPUs y un pool de 97 conexiones contra un Postgres de `max_connections = 100`.
+
+El hallazgo salió de la sesión de higiene del 26-jul, y la evidencia apareció por un efecto colateral: al quitar `query` del array de log de `PrismaService` (`2c1c613`) quedó `info`, y el arranque del deploy imprimió `prisma:info Starting a postgresql pool with 97 connections.` — el número medido en producción, no inferido.
+
+Medición de solo lectura contra el Postgres de producción, tomada un domingo sin carga:
+
+- `max_connections = 100`, `superuser_reserved_connections = 3`, `reserved_connections = 0`.
+- Conexiones de cliente reales (`backend_type = 'client backend'`): **2** — una de la API (idle, `client_addr` de red privada de Railway) y la propia sesión de medición.
+- Las otras 8 filas de `pg_stat_activity` son procesos auxiliares del servidor (`io worker`, `walwriter`, `checkpointer`, `background writer`, `autovacuum launcher`, `logical replication launcher`), que **no consumen slot** de `max_connections`: ese techo aplica solo a `client backend`. Leer el `count(*)` crudo de la vista sobreestima el consumo.
+- El rol que conecta es `postgres` con `usesuper = t`, así que la reserva de 3 no lo gatea: el techo efectivo para la aplicación es 100, no 97.
+
+En estado estacionario no había problema — el `connection_limit` es un máximo del pool, no una preasignación, y la API sostenía una sola conexión. El riesgo era de pico y de solapamiento: con 97 de techo 100, el margen para `prisma migrate deploy`, un dump, un `psql` manual o una segunda instancia durante un redeploy era de 3 conexiones. El modo de falla es `FATAL: sorry, too many clients already` a mitad de un deploy.
+
+### Decisión
+
+`DATABASE_URL` del servicio `novotechflow` pasa a `${{Postgres.DATABASE_URL}}?connection_limit=15&pool_timeout=20`.
+
+**La referencia se conserva intacta y el sufijo se compone sobre ella.** No se hardcodea la URL: esa regla ya costó una caída cuando rotó la contraseña del Postgres y la API quedó con credenciales viejas en memoria sin redeploy automático. Railway resuelve la referencia y concatena el sufijo. Se verificó antes de escribir que la URL interna no traía query string propio, porque de haberlo el separador tendría que ser `&` y no `?`.
+
+**El 15 se dimensiona desde la carga, no desde el hardware.** Seis usuarios comerciales, un endpoint de autocompletado con debounce de 300 ms y exportaciones ocasionales. El pico legítimo medido en el ADR-071 fue 24 req/60 s por (IP, handler); con latencias de decenas de milisegundos eso no sostiene cinco conexiones simultáneas. 15 deja ~3x sobre cualquier escenario plausible y libera 85 slots del techo.
+
+**`pool_timeout=20` convierte la saturación en un error de aplicación explícito** (`Timed out fetching a new connection from the connection pool`) en vez de una espera indefinida.
+
+Alternativas descartadas: dejar el default (el problema es que no describe nada de esta aplicación); fijar el pool por variable de entorno de Prisma en vez de en la URL (la URL es el mecanismo documentado y viaja con la referencia); pgBouncer (infraestructura nueva para un problema que un query string resuelve).
+
+### Consecuencias
+
+- El pool pasa de 97 a 15. Verificado en el log del deploy `b4b1ec87`: `prisma:info Starting a postgresql pool with 15 connections.` y `Nest application successfully started`.
+- El margen contra el techo de Postgres pasa de 3 a 85 conexiones.
+- **El pico concurrente real sigue sin medirse.** La medición fue un instante único sin carga; acota el uso actual y no dice nada del pico. Si 15 quedara corto, el síntoma es el `pool_timeout` explícito y subirlo es un cambio de variable — modo de falla preferible al anterior, que aparecía durante un deploy.
+- Principio general, hermano del que fijó el ADR-071 sobre los gates: **un default calculado sobre recursos del host no describe la carga de la aplicación, y en un contenedor compartido ese cálculo yerra sistemáticamente hacia arriba.** El número que un runtime elige por ti merece la misma verificación que el que eliges tú.
+- El `prisma:info` que reveló el 97 sobrevivió porque `2c1c613` quitó solo `query` del array de log. Bajar más el nivel habría ocultado el dato.
+- Sin ADR aparte para el resto de la sesión de higiene (log de Prisma, imports redundantes de `PrismaModule`, reglas de documentación): son limpieza y propagación, no decisiones de arquitectura.
+
+### Archivos
+
+Ninguno del repo. El cambio vive en la variable `DATABASE_URL` del servicio `novotechflow` en Railway.
+
+### Commits
+
+- `2c1c613` chore(api): drop prisma query logging from production log level
+- `fb0fff4` refactor(api): drop redundant PrismaModule imports, module is global
+- `6e4e0c9` docs: no Co-Authored-By trailer, api type gate is tsconfig.json, real throttler limit
+- `273ac73` docs: restore verified auth throttle limits and gate principle wording
+
+### Pendientes
+
+- **Medir el pico concurrente bajo carga real** para validar el 15. Muestreo de `pg_stat_activity` a lo largo de una ventana de tráfico de día hábil, no un instante.
+- **`api-external` no fue auditado.** Es un servicio separado con su propio Postgres (`postgres-external`) y presumiblemente el mismo default de pool. Aplicar la misma revisión.
+- **`@Global()` no auto-registra un módulo**: durante esta sesión se propuso quitar `PrismaModule` del array `imports` de `app.module.ts` junto con los 8 re-imports redundantes. Habría dejado el módulo fuera del grafo, sin instanciar, y `PrismaService` fuera del contenedor DI — error de runtime que ni `tsc` ni los specs actuales detectan, porque ninguno levanta el `AppModule` real. La registración raíz se queda. Anotado como invariante para una futura pasada de auditoría (INSTRUCTIVO §10.6).
+
+## ADR-073 — El .dockerignore solo existe en la raíz del contexto: los de apps/* eran letra muerta
+
+**Fecha:** 2026-07-26
+**Estado:** Aceptada
+
+### Contexto
+
+El `docker compose build` de `web` fallaba en local: `COPY apps/web/ apps/web/` copiaba `apps/web/node_modules` —con las junctions que pnpm crea en Windows— encima del install de la etapa builder. El repo tenía dos `.dockerignore`, uno en `apps/web/` y otro en `apps/api/`, con `node_modules`, `dist` y `.env`. Ninguno de los dos se leía nunca.
+
+La causa es la ubicación. Ambos servicios se construyen con el contexto en la raíz del monorepo (`docker-compose.yml`: `context: .`, `dockerfile: apps/<app>/Dockerfile`), y ahí BuildKit solo consulta dos rutas: `<contexto>/.dockerignore` o, con precedencia, el hermano del Dockerfile (`apps/<app>/Dockerfile.dockerignore`). No existía ninguna de las dos. Un `.dockerignore` en un subdirectorio del contexto no lo lee nadie.
+
+El contexto de la raíz no es una elección revisable: los dos Dockerfiles copian `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` y `packages/` desde el contexto.
+
+Verificado en el diagnóstico, el alcance era mayor al reportado:
+
+- **`apps/api` compartía el problema íntegro**, con un agravante: `COPY apps/api/ apps/api/` metía `apps/api/.env` en la imagen builder — secretos locales horneados en una capa.
+- `COPY packages/ packages/` arrastraba los `node_modules` anidados de los cuatro packages del workspace.
+- **En Railway tampoco gobernaba ningún ignore.** El contexto también es la raíz (el log imprime `load build definition from apps/api/Dockerfile`, ruta relativa a la raíz), y no hay `railway.json`, `railway.toml`, `.railwayignore` ni `RAILWAY_DOCKERFILE_PATH` en ninguno de los dos servicios. Producción construye limpio por otra razón: su contexto sale del archive de git, y `git ls-files` confirma que ningún `node_modules/`, `dist/` ni `.env` está trackeado. Estaba protegido por el `.gitignore`, no por configuración de Docker.
+
+### Decisión
+
+Un único `.dockerignore` en la raíz del contexto, con los patrones anclados con `**/`, y se eliminan los dos de `apps/*`. Contenido: `.git`, `**/node_modules`, `**/dist`, `**/.env`, más un comentario que preserva la nota heredada de `apps/api` (no excluir `uploads/`: los defaults se necesitan en build).
+
+**La raíz es la única ubicación que los cuatro caminos consultan** (web y api, local y Railway) sin depender de comportamiento no documentado.
+
+**El `**/` no es cosmético.** Los patrones de `.dockerignore` se evalúan contra la raíz del contexto y no tienen la semántica de `.gitignore`: `node_modules` a secas solo matchea el nivel superior, no `apps/web/node_modules` ni `packages/*/node_modules` — que es justo lo que rompía el build.
+
+Alternativas descartadas: **renombrar a `apps/web/Dockerfile.dockerignore`**, la hipótesis con la que entró el diagnóstico — el builder de Railway no documenta que honre el hermano del Dockerfile, y aun honrándolo el archivo habría excluido solo el nivel superior, dejando el modo de falla intacto; en Railway además sería un no-op, porque lo que esos patrones matchean ya no viaja en el archive de git. **Mover el contexto a `apps/<app>`**: rompe los COPY del lockfile, el workspace y `packages/`. **No hacer nada**: producción sobrevive, pero el build local queda roto y el `.env` sigue entrando a las capas.
+
+`.git` se excluye de paso: ningún COPY lo consume y es peso muerto del contexto.
+
+### Consecuencias
+
+- `docker compose build api web` completa en local (exit 0, ~3,5 min). El log confirma que el archivo actúa: `load .dockerignore — transferring context: 163B done`.
+- El `.env` de `apps/api` deja de entrar al contexto y de quedar en una capa del builder.
+- **Railway construye igual.** Lo que el archivo excluye ya no viajaba en el archive de git; el único cambio observable será que `load .dockerignore` pase a cargar contenido. No es un cambio de comportamiento en producción: es cerrar la brecha entre los dos entornos.
+- Principio: **un ignore-file mal ubicado no falla, desaparece.** No hay error, ni warning, ni etapa que se salte — el build procede sin él y el archivo queda como documentación de una intención que nadie ejecuta. Hermano del principio del ADR-071: un gate que no cubre lo que cree cubrir es peor que no tenerlo, porque además tranquiliza.
+- Falso positivo registrado: el problema entró como "hay que renombrar el archivo" y el rename resultó **insuficiente** (solo top-level) e **innecesario** (no-op en Railway). Lo que faltaba no era mover el archivo, era anclar los patrones y ponerlos donde el builder mira.
+- La limpieza del build de producción dependía por completo de que el `.gitignore` siguiera cubriendo `node_modules`, `dist` y `.env`. Deja de ser la única línea de defensa.
+
+### Archivos
+
+- `.dockerignore` — nuevo, raíz del repo.
+- `apps/web/.dockerignore` — eliminado.
+- `apps/api/.dockerignore` — eliminado.
+
+### Commits
+
+- `d0780bf` chore(docker): root dockerignore for monorepo build context
+
+### Pendientes
+
+- **`.gitattributes` con `*.dockerignore text eol=lf`.** Git avisó `LF will be replaced by CRLF the next time Git touches it` al commitear (`core.autocrlf` en la máquina). El blob quedó en LF y el parser de `.dockerignore` tolera el `\r`, así que no bloquea; queda como blindaje del drift, pendiente de aprobación.
+- **`api-external` no fue auditado.** Servicio separado en Railway, con su Dockerfile en la rama `feature/external-api`; no se verificó si repite el patrón. Aplicar la misma revisión antes de mergear esa rama.
+- **El tamaño real del contexto no se midió.** Los logs de build de Railway no emiten el `transferring context: <tamaño>` de la etapa `load build context`, así que la reducción se infiere del contenido excluido, no de una medición.
+
+## ADR-074 — Imagen del API: árbol de producción desde el lockfile (etapa prod-deps hoisted)
+
+**Fecha:** 2026-07-26
+**Estado:** Aceptada
+
+### Contexto
+
+Medición sobre la imagen de producción del API (master, imagen `novotechflow-api-diag`): el runner copiaba `/app/apps/api/node_modules` del builder — bajo pnpm, solo symlinks hacia el store `/app/node_modules/.pnpm`, que nunca se copiaba — y el `RUN npm install prisma@5.10.2` encontraba el árbol roto y reinstalaba todo el `package.json` desde el registry ("added 842 packages"). Consecuencias medidas: la imagen corría lo que npm resolvía en build-time, no `pnpm-lock.yaml` (rangos caret sin reproducibilidad: el reporte de npm pasó de 4 a 35 vulnerabilidades sin tocar `package.json`); devDependencies en producción (`typescript` 6.0.2 resolvía dentro del contenedor; el install del builder va sin `--prod` y el `npm install` sin `--omit=dev`); el Prisma Client de runtime lo generaba el postinstall de npm en el runner, desperdiciando el `generate` del builder; imagen de 1.85 GB con un `package-lock.json` ajeno en `/app`. El paso de npm era además load-bearing: sin él la imagen no arrancaba, así que no podía eliminarse sin reemplazar el mecanismo completo.
+
+### Decisión
+
+Dockerfile en tres etapas. El builder queda igual, con `apk add openssl` y `pnpm exec prisma generate` en vez de `npx`. Etapa nueva `prod-deps`: `pnpm install --frozen-lockfile --filter api... --prod --config.node-linker=hoisted` — árbol real y plano, solo producción, versiones exactas del lockfile — más `pnpm exec prisma generate` explícito (pnpm 10 ignora los build scripts por default). El runner copia `/app/node_modules` desde `prod-deps`, elimina el `npm install` y el pnpm global, y el CMD corre `node_modules/.bin/prisma migrate deploy` en vez de `npx`. `prisma` pasa de devDependencies a dependencies (pinneada 5.10.2): el arranque ejecuta `migrate deploy` y el CLI debe viajar en el árbol de producción. Alternativa descartada: `pnpm deploy --prod` (el mecanismo canónico) — cambió de comportamiento con workspaces en pnpm 10 y agrega fricción que la etapa hoisted evita, con el mismo layout plano que producción ya corría.
+
+### Consecuencias
+
+- Imagen 1.85 GB → 811 MB; `node_modules` 482.6 M → 453.3 M. La reducción grande no viene del árbol sino de eliminar el apilamiento de capas (symlinks colgantes + reinstalación npm encima).
+- `typescript` → MODULE_NOT_FOUND dentro del contenedor; sin `package-lock.json`; sin bloques de npm audit/deprecated en el log; build en 1 m 22 s.
+- Reproducibilidad: la imagen corre exactamente el árbol de `pnpm-lock.yaml`; npm queda solo para bootstrapear pnpm en etapas de build.
+- El client de Prisma de runtime es el del `generate` de `prod-deps`, con openssl presente (engines para libssl 3.x; desaparece el `prisma:warn` de libssl).
+- Boot verificado contra la DB local: `migrate deploy` corre desde el binario de la imagen y Nest arranca; caída esperada por `GEMINI_API_KEY` ausente en el run de prueba, con resolución física de módulos confirmada en el stack.
+- Nota de comportamiento: con node-linker hoisted, pnpm deja `node_modules/.pnpm/lock.yaml` (solo metadatos, sin store virtual); el árbol es plano.
+
+### Archivos
+
+- `apps/api/Dockerfile` — reestructura a tres etapas.
+- `apps/api/package.json` — `prisma` a dependencies.
+- `pnpm-lock.yaml` — importer de `apps/api`.
+
+### Commits
+
+- `68f966a` fix(docker): api image installs prod-only tree from pnpm lockfile
+
+### Pendientes
+
+- Verificación en Railway tras el push: logs de build y deploy del servicio `novotechflow` (primer build sin cache, más largo).
+- `api-external` (rama `feature/external-api`) repite el patrón viejo en su Dockerfile; aplicar la misma revisión antes del merge (ya registrado en ADR-073).
+
+## ADR-075 — El gate de lint que no linteaba: ESLint entra al job que ya prometía su nombre
+
+**Fecha:** 2026-07-27
+**Estado:** Aceptada
+
+### Contexto
+
+El job `lint-and-typecheck` (nombre visible "Lint & Type-check") de `ci.yml` y `pr-check.yml` no ejecutaba ESLint en ningún step: solo `tsc` en web y api más los tests de Jest. Un check en verde afirmaba que el lint pasaba cuando nunca corrió. Es el mismo patrón que ADR-071: un gate que no cubre lo que su nombre promete.
+
+La medición previa a decidir dio: `apps/web` 2 errores `react-hooks/set-state-in-effect` (`useAccountConflicts.ts`, `SupplierPicker.tsx`), `apps/api` 41 errores `prettier/prettier`, todos de formato y auto-corregibles. El hallazgo #4 diferido en ADR-050 (`react-hooks/purity` en `useInactivityTimeout.ts`) ya no existe: se resolvió en `a80302e` y el encabezado de ADR-050 quedó desactualizado. Los 2 errores de web son deuda nueva, posterior a ese inventario — evidencia directa de que el check ciego dejó entrar regresiones.
+
+El script `lint` de `apps/api` incluía `--fix`, incompatible con CI: corrige el workspace efímero y sale verde aunque el repositorio esté sin formatear.
+
+### Decisión
+
+Añadir el ESLint que el nombre del job ya prometía, en vez de renombrar el job. Poner el repositorio en verde primero, en commits atómicos y en orden tal que ningún commit deje CI rojo: formato de api, fixes de web, split del script, y por último los steps de CI.
+
+Los 2 errores de web se corrigen derivando estado, no silenciando la regla. `useAccountConflicts` guarda el resultado atado al nombre que lo originó (`{ name, records }`) y deriva `conflicts` solo cuando coincide con el nombre actual; `SupplierPicker` elimina el efecto de sincronización y deriva `query` de `draft ?? selectedCompany?.name ?? ''`. Ambos cierran además bugs latentes: el panel mostraba cruces del cliente anterior durante el debounce, y un refetch de `companies` pisaba lo que el usuario estaba tecleando.
+
+Los steps van después de "Generate Prisma Client" porque el ESLint de api es type-aware, y se declaran con `working-directory` + `pnpm run lint` en vez de `pnpm --filter`, para no depender del campo `name` de cada paquete.
+
+### Consecuencias
+
+- Un `react-hooks/set-state-in-effect` o un `prettier/prettier` nuevo bloquea el PR. Es el efecto buscado.
+- `pnpm run lint` en `apps/api` ya no reescribe archivos; el auto-fix local pasa a `pnpm run lint:fix`.
+- La deriva de formato en api se acumulaba invisible porque nadie corría el lint sin `--fix`. Ahora falla en CI en el PR que la introduce.
+- Coste de entrada bajo: 41 de los 43 hallazgos se corrigieron con un `--fix`.
+
+### Archivos
+
+- `.github/workflows/ci.yml` — steps "Lint Web (ESLint)" y "Lint API (ESLint)".
+- `.github/workflows/pr-check.yml` — mismos dos steps, en paridad.
+- `apps/api/package.json` — `lint` sin `--fix`; `lint:fix` nuevo.
+- `apps/web/src/hooks/useAccountConflicts.ts` — resultado atado al nombre de búsqueda, `conflicts` derivado.
+- `apps/web/src/pages/proposals/components/SupplierPicker.tsx` — `query` derivado de `draft`, efecto de sync eliminado.
+- 5 archivos de `apps/api/src` — formato Prettier aplicado.
+
+### Commits
+
+- `51bad4e` chore(api): apply pending prettier formatting via eslint --fix
+- `6ffddc5` fix(web): derive state instead of syncing via effects (react-hooks lint)
+- `e7ba92d` fix(web): reset supplier draft after create request
+- `b85e202` chore(api): split lint script into check and fix variants
+- `21c74d7` ci: run eslint in lint-and-typecheck job
+
+### Pendientes
+
+- El encabezado de ADR-050 dice "2 diferidos" (#4 y #12), pero ambos se resolvieron en `a80302e`. No se corrige aquí porque `DECISIONS.md` es append-only; queda registrado en esta entrada.
+- `useAccountConflicts` no expone estado de búsqueda en curso: al editar un nombre con cruces en pantalla, el panel muestra "Cliente Libre" durante el debounce y el fetch. Requiere una bandera `isSearching` en el hook y en el panel.
+- `packages/eslint-config` (`@repo/eslint-config`) no tiene consumidores: ninguna app lo declara en devDependencies ni lo extiende. Decidir entre cablearlo o eliminarlo.
+- Ninguna de las dos apps usa linting type-aware en web; `apps/api` sí. Evaluar si conviene igualarlo.
+
+## ADR-076 — El logo de 4,5 MB para renderizarlo a 32 px: asset redimensionado y cache para estáticos sin hash
+
+**Fecha:** 2026-07-31
+**Estado:** Aceptada
+
+### Contexto
+
+Los logs de nginx en producción mostraban `GET /novotechflow.png` sirviendo 4.544.802 bytes en la carga del dashboard. La medición encontró un PNG de 3062×1376 RGBA renderizado a 32 px de alto en el sidebar (`Sidebar.tsx:73`, presente en toda vista autenticada) y a 48 px en el login: 43× la altura necesaria a 1× DPR.
+
+`apps/web/public/logo.png` era el mismo binario byte-idéntico, sin ninguna referencia en `apps/web/src`, `index.html` ni el manifest, y aun así se copiaba al build.
+
+Por cache, `/novotechflow.png` vive en la raíz del build (viene de `public/`), no bajo `/assets/`, así que caía en el catch-all `location /` con `Cache-Control: no-cache` — revalidación en cada carga. `apps/web/nginx.conf` no tenía ningún `location` para estáticos no hasheados.
+
+### Decisión
+
+Redimensionar el asset a 600 px de ancho (2,5× el mayor uso a 3× DPR), conservando el canal alfa: 4.544.802 → 148.774 bytes, −96,7 %. La conversión se hizo con ImageMagick, ya instalado en la máquina, y no con `sharp`: instalarlo habría metido binarios nativos en el lockfile por un uso de una sola vez.
+
+Eliminar `logo.png` tras verificar que no lo referencia ningún archivo de código ni manifest.
+
+Añadir un `location` con regex para estáticos sin hash (`png|jpg|jpeg|gif|ico|svg|webp|woff2`) con `max-age=604800` — una semana, **no** `immutable` ni un año: el nombre de archivo no lleva hash de contenido, así que un cambio de logo debe propagarse solo. El bloque repite los cuatro headers de seguridad, según la advertencia que el propio `nginx.conf` documenta: un `add_header` a nivel `location` descarta todo el array de nivel `server`.
+
+### Consecuencias
+
+- El peso del logo por visita baja de 4,44 MB a 145 KB, y a cero en las visitas siguientes dentro de la semana.
+- Un cambio de logo tarda hasta 7 días en propagarse a un navegador que ya lo tenga cacheado. Es el trade-off aceptado por no tener hash en el nombre.
+- El `location ~*` (regex) tiene precedencia sobre el prefijo `location /assets/`: si Vite llegara a emitir imágenes o fuentes con hash dentro de `/assets/`, saldrían con una semana en vez de `immutable`. Con el build actual (`dist/assets/` solo emite `.js` y `.css`) no cambia nada.
+- `-strip` eliminó el perfil de color del PNG; el resultado se verificó visualmente en local sobre el fondo oscuro antes de commitear.
+
+### Archivos
+
+- `apps/web/public/novotechflow.png` — 3062×1376 (4.544.802 B) → 600×270 (148.774 B), alfa preservado.
+- `apps/web/public/logo.png` — eliminado (duplicado byte-idéntico sin consumidores).
+- `apps/web/nginx.conf` — `location` nuevo para estáticos sin hash, entre `/assets/` y el catch-all.
+
+### Commits
+
+- `37d3110` perf(web): downscale logo asset and drop duplicate copy
+- `fe5f324` perf(web): cache unhashed static assets for one week
+
+### Pendientes
+
+- `novotechflow.png` en la raíz del repo y dos copias en `backups/2026-03-26-PDF_DOC_BUILDER/` siguen en 4,5 MB cada una: no llegan al build, pero son ~13,6 MB de peso muerto en git. Borrar `backups/` merece su propia decisión.
+- `apps/web/public/defaults/portada.png` (503.746 B, 815×1074) es default del builder de documentos y puede terminar embebido en PDFs; no se tocó. Evaluar aparte con ese uso a la vista.
+- Ningún `<img>` del logo declara `width`/`height` ni `loading`/`decoding`. Con el asset liviano el impacto es menor, pero la ausencia de dimensiones explícitas provoca layout shift.
+
+## ADR-077 — Cierre de los pendientes de ADR-075: la cadena muerta era de dos eslabones y "Cliente Libre" era el estado por defecto
+
+**Fecha:** 2026-07-31
+**Estado:** Aceptada
+
+### Contexto
+
+ADR-075 dejó tres pendientes. Al abordarlos, dos resultaron ser distintos de como estaban registrados.
+
+El primero afirmaba que `packages/eslint-config` no tenía consumidores. Es falso: `packages/ui/eslint.config.mjs` lo importa y su `package.json` lo declara como `workspace:*`. El error fue acotar la búsqueda a `apps/` y no a `packages/`. Eliminarlo en aislamiento habría roto `pnpm install --frozen-lockfile` en ambos Dockerfiles y en CI. La verificación posterior mostró que `@repo/ui` tampoco tiene consumidores: era una cadena muerta de dos eslabones, no un paquete huérfano.
+
+El segundo pedía una bandera `isSearching` para la ventana en que el panel de cruce de cuentas muestra "Cliente Libre" durante el debounce. La lectura del código destapó dos fallos peores: por debajo de `MIN_CONFLICT_SEARCH_LENGTH` el efecto retorna sin buscar, así que con 1-2 letras "Cliente Libre" no es transitorio sino permanente y falso; y si el fetch falla, el `catch` solo loguea y el panel afirma en verde que nadie cotizó al cliente. En un panel cuyo propósito es evitar que dos comerciales coticen al mismo cliente, un fallo silencioso en verde es peor que no tener panel.
+
+El tercero era el encabezado desactualizado de ADR-050.
+
+### Decisión
+
+Eliminar `packages/ui` y `packages/eslint-config` juntos y regenerar el lockfile. Es scaffold de Turborepo que nunca se usó: el `README` del paquete aún titula `@turbo/eslint-config`, sus dependencias divergen de las de las apps, y el patrón real del proyecto para código compartido ya es otro (`@repo/item-display`, creado con propósito concreto). Un design system futuro se haría de nuevo, no resucitando este esqueleto.
+
+Sustituir la bandera suelta por una unión discriminada `ConflictSearchState` (`idle | searching | ready | failed`), derivada en render y anclada al nombre que originó cada resultado — sin estado nuevo sincronizado por efecto, para no reintroducir lo que ADR-075 acababa de sacar. `ready` solo se alcanza cuando el servidor respondió para el nombre vigente; deja de ser el estado por defecto de todo lo que no sea una lista con datos.
+
+Corregir ADR-050 con `str_replace` aditivo en título y `**Estado:**` (INSTRUCTIVO §4.6), sin tocar Consecuencias ni Archivos: son narrativa del momento y la entrada ya se autocorrige en sus Pendientes.
+
+### Consecuencias
+
+- El monorepo pasa de 6 a 5 workspace projects; el lockfile pierde 1.189 líneas y 101 paquetes resueltos por install.
+- El panel gana dos estados visibles: "Buscando propuestas previas..." y un estado ámbar de fallo. `hasNoConflicts` e `isClientEmpty` desaparecen del API del hook y de sus dos consumidores.
+- La premisa falsa de ADR-075 queda corregida aquí, no allá: `DECISIONS.md` es append-only y la entrada anterior conserva lo que se creía cuando se escribió.
+- Confirmado que un pendiente de un ADR no es una tarea validada: dos de los tres cambiaron de forma al mirarlos de cerca. Vale releer el código antes de ejecutar un pendiente heredado.
+
+### Archivos
+
+- `packages/ui/`, `packages/eslint-config/` — eliminados completos.
+- `pnpm-lock.yaml` — regenerado sin los dos importers.
+- `CONVENTIONS.md`, `AGENTS.md` — árbol de §I actualizado; `item-display/` agregado, que no estaba listado. Byte-idénticos verificados por SHA256 antes y después.
+- `DECISIONS.md` — ADR-050: título y `**Estado:**` marcan los diferidos como resueltos en `a80302e`.
+- `apps/web/src/lib/types.ts` — tipo `ConflictSearchState`.
+- `apps/web/src/hooks/useAccountConflicts.ts` — retorna `{ state }`; JSDoc corregido.
+- `apps/web/src/components/proposals/ConflictPanel.tsx` — prop única `state`, cuerpo en `switch` de 4 ramas.
+- `apps/web/src/pages/tools/AccountCrossCheck.tsx`, `apps/web/src/pages/proposals/NewProposal.tsx` — consumidores actualizados.
+
+### Commits
+
+- `024a43c` chore: remove dead ui and eslint-config packages
+- `56f0e08` docs: drop removed packages from project tree in conventions
+- `5ebe88c` docs: ADR-050 mark deferred findings as resolved
+- `53dd812` feat(web): model conflict panel state as discriminated union
+- `cfc3b21` docs(web): fix stale jsdoc in useAccountConflicts
+
+### Pendientes
+
+- Lint type-aware en `apps/web` (último pendiente vivo de ADR-075): `apps/api` ya lo tiene vía `parserOptions.project`. Evaluar si conviene igualarlo y qué hallazgos nuevos saldrían.
+- Railway no tiene `watchPatterns` configurado: todo push a `master` reconstruye API y web aunque solo cambie uno. Cuesta ~1 min de build ocioso; el riesgo de un patrón mal armado (un servicio que deja de redesplegar en silencio, sobre todo con los paquetes compartidos del workspace) es mayor que el beneficio. Se difiere conscientemente.
+- `docs/audits/walkthrough8.md` y `README.md` aún describen `@repo/ui` y el scaffold original de Turborepo.

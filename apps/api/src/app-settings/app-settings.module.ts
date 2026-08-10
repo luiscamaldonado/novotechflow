@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AppSettingsController } from './app-settings.controller';
 import { AppSettingsService } from './app-settings.service';
-import { PrismaModule } from '../prisma/prisma.module';
 
 /**
  * @module AppSettingsModule
@@ -12,11 +11,8 @@ import { PrismaModule } from '../prisma/prisma.module';
  * - Lectura de settings para cualquier usuario autenticado.
  * - Escritura de settings restringida a administradores.
  * - Actualmente gestiona: inactivity_timeout_minutes.
- *
- * @dependencies PrismaModule (acceso a base de datos).
  */
 @Module({
-  imports: [PrismaModule],
   controllers: [AppSettingsController],
   providers: [AppSettingsService],
   exports: [AppSettingsService],

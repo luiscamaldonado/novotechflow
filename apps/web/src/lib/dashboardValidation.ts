@@ -5,8 +5,11 @@ import type { ProposalStatus, AcquisitionType } from './types';
 /** Máximo de días que una propuesta puede permanecer en ELABORACION antes de obligar a cambiar su estado. */
 const MAX_ELABORACION_DAYS = 5;
 
+/** Estados terminales sin seguimiento comercial: la propuesta se aplazó o se canceló. */
+const TERMINAL_STATUSES: ProposalStatus[] = ['APLAZADA', 'CANCELADA'];
+
 /** Estados exentos de la regla de fecha de cierre vencida (R5): terminales o ya en flujo de facturación. */
-const R5_EXEMPT_STATUSES: ProposalStatus[] = ['GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA'];
+const R5_EXEMPT_STATUSES: ProposalStatus[] = ['GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA', 'APLAZADA', 'CANCELADA'];
 
 export type HygieneRuleId =
     | 'CLOSE_DATE_REQUIRED'
@@ -49,7 +52,7 @@ export function getProposalHygieneIssues(input: ProposalHygieneInput): HygieneIs
         issues.push({ ruleId: 'CLOSE_DATE_REQUIRED', message: 'Falta la fecha de cierre.' });
     }
 
-    if (!isElaboracion && !input.acquisitionType) {
+    if (!isElaboracion && !TERMINAL_STATUSES.includes(input.status) && !input.acquisitionType) {
         issues.push({ ruleId: 'ACQUISITION_REQUIRED', message: 'Falta el tipo de adquisici\u00f3n (Venta o DaaS).' });
     }
 

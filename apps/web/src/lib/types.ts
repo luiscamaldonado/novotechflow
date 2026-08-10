@@ -7,7 +7,7 @@
 export type UserRole = 'ADMIN' | 'COMMERCIAL' | 'REPORTER';
 
 /** Posibles estados de una propuesta. */
-export type ProposalStatus = 'ELABORACION' | 'PROPUESTA' | 'GANADA' | 'PERDIDA' | 'PENDIENTE_FACTURAR' | 'FACTURADA';
+export type ProposalStatus = 'ELABORACION' | 'PROPUESTA' | 'GANADA' | 'PERDIDA' | 'PENDIENTE_FACTURAR' | 'FACTURADA' | 'APLAZADA' | 'CANCELADA';
 
 /** Tipos de adquisición. */
 export type AcquisitionType = 'VENTA' | 'DAAS';
@@ -298,4 +298,11 @@ export interface ConflictRecord {
     validityDays: number;
     user?: { name: string };
 }
+
+/** Estado derivado del panel de cruce de cuentas. */
+export type ConflictSearchState =
+    | { status: 'idle' }
+    | { status: 'searching' }
+    | { status: 'ready'; conflicts: ConflictRecord[] }
+    | { status: 'failed' };
 

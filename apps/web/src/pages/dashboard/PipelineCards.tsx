@@ -57,7 +57,7 @@ export default function PipelineCards({
                             Pipeline por Estado
                         </span>
                     </div>
-                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                         {pipelineCards.map((card) => {
                             const cfg = STATUS_CONFIG[card.status];
                             return (

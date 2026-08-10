@@ -298,7 +298,7 @@ quantity: formValue,
 - [ ] **DTOs validados** — ¿El backend usa DTOs con `class-validator`?
 - [ ] **Coerción numérica** — ¿Los inputs se convierten a `Number()` antes de enviar al API?
 - [ ] **Componente < 200 líneas** — Si no, ¿se puede descomponer?
-- [ ] **`tsc --noEmit` pasa** — ¿Cero errores de TypeScript?
+- [ ] **`tsc --noEmit` pasa** — ¿Cero errores en `apps/web/tsconfig.app.json` y en `apps/api/tsconfig.json`? El gate de la api es `tsconfig.json`, no `tsconfig.build.json`, que excluye los specs por construcción (ADR-071).
 - [ ] **Funcionalidad verificada** — ¿Se probó que no se rompió nada?
 
 ---
@@ -392,8 +392,7 @@ novotechflow/
 │   │       └── store/                # Zustand stores
 │   │           └── authStore.ts
 ├── packages/
-│   ├── ui/                           # Design system (infrautilizado)
-│   ├── eslint-config/
+│   ├── item-display/                 # Componentes de display compartidos (numeroParte/modelo)
 │   └── typescript-config/
 ├── docs/
 │   ├── audits/                       # Reportes de auditoría
@@ -448,12 +447,12 @@ Medidas de seguridad ya activas (auditoría abril 2026):
 - Ownership check (IDOR) en TODOS los endpoints de propuestas, escenarios, páginas y bloques
 - `forbidNonWhitelisted: true` — rechaza campos extra en requests
 - Helmet con CSP, HSTS, X-Frame-Options
-- Rate limiting global (30/min) + estricto en login (5/min)
+- Rate limiting global (100/60s por IP real vía `X-Real-IP`, `RealIpThrottlerGuard`, no `req.ip`: detrás del edge de Railway `req.ip` rota entre peticiones y el límite nunca se alcanzaba — ADR-071) + estricto en auth: 5/min en login, 5/min en verify-code, 3/min en resend-code
+- Swagger/OpenAPI en `/api/docs` solo si `SWAGGER_ENABLED=true`; ausente por defecto en producción (ADR-071)
 - Upload: validación de magic bytes + sanitización de originalname
 - XSS: sanitización con sanitize-html en campos de texto
 - ParseUUIDPipe en todos los parámetros de ID
 - Transacciones atómicas en operaciones de delete
-- Swagger/OpenAPI en `/api/docs`
 
 **Al agregar endpoints nuevos, SIEMPRE:**
 1. Agregar `@UseGuards(JwtAuthGuard)` + `@ApiBearerAuth()`

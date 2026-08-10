@@ -97,7 +97,9 @@ export class BillingProjectionsService {
    */
   async findAll(user: AuthenticatedUser) {
     const accessFilter =
-      user.role === 'ADMIN' || user.role === 'REPORTER' ? {} : { userId: user.id };
+      user.role === 'ADMIN' || user.role === 'REPORTER'
+        ? {}
+        : { userId: user.id };
 
     return this.prisma.billingProjection.findMany({
       where: accessFilter,

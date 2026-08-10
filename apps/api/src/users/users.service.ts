@@ -36,6 +36,18 @@ export class UsersService {
     }) as unknown as Promise<User | null>;
   }
 
+  async findOneByIdForAuth(
+    id: string,
+  ): Promise<{ id: string; isActive: boolean } | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        isActive: true,
+      },
+    });
+  }
+
   async createUser(data: Prisma.UserCreateInput): Promise<User> {
     const existingUser = await this.prisma.user.findFirst({
       where: {

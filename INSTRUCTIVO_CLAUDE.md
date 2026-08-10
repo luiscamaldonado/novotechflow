@@ -31,6 +31,8 @@ El flujo es siempre **un paso a la vez**: Claude (chat) redacta el prompt → Lu
 
 > **El push a producción es el único límite absoluto.** Claude Code deja el trabajo commiteado pero **sin pushear**. El `push` a `master` dispara deploy automático a Railway (producción) — lo hace **Luis a mano**, solo tras verificar la funcionalidad en local. Antes de cualquier push, Claude **pregunta a Luis si es el momento**: puede haber usuarios trabajando en producción.
 
+**Railway vía CLI.** Claude Code opera Railway con el Railway CLI (instalado, autenticado como Luis, linkeado a novotechflow/production). El MCP local de Railway se intentó cablear pero no quedó operativo (el binario del CLI quedó en conflicto con el entorno tras un auto-update); queda como pendiente opcional. Las **lecturas** (deployments, logs, builds, variables, estado) las ejecuta libremente por CLI, sin pedir aprobación: `railway deployment list --json`, `railway logs --build`/`--deployment -n N` (el `-n` evita el hang de streaming), `railway status`, `railway variable list --json`. La **escritura y creación de variables** también la ejecuta Claude Code, pero **solo con aprobación previa de Luis, por operación**: Claude (chat) muestra la variable y el valor exactos, Luis da el visto bueno, y recién entonces va al prompt de ejecución. Ten en cuenta que cambiar una variable en Railway redeploya el servicio automáticamente. `railway up`/`redeploy` manuales y el push a `master` siguen siendo exclusivamente de Luis.
+
 ---
 
 ## 3. Regla madre — la memoria puede estar desactualizada
@@ -132,22 +134,24 @@ Claude Code corre en el entorno de Luis (Windows + PowerShell) y **sí puede bus
 - **Recordatorios de entorno cuando apliquen:** sin BOM, `pnpm exec` nunca `npx`, `;` en vez de `&&`.
 - **Alcance acotado:** si es solo lectura/búsqueda, decirlo ("solo lee y reporta, no modifiques nada"). Si no debe commitear ni pushear, decirlo.
 - **Indicar siempre si el prompt es para una sesión NUEVA o la MISMA** de Claude Code (y por qué).
-- **Modelo y esfuerzo: se fijan al abrir la sesión, nunca dentro del prompt.** Claude Code no arranca si el pegado empieza con slash commands, así que el modelo y el esfuerzo no van en el texto del prompt. Se fijan con el flag de arranque o con slashes en su propio Enter (ver subsección). El prompt se pega limpio.
+- **Indicar siempre la rama, en TODO prompt**, sea sesión nueva o la misma. La rama va **dentro del prompt** como paso 0: verificar `git branch --show-current`, hacer checkout si no coincide, y detenerse y reportar si el working tree tiene cambios sin commitear ajenos a la tarea.
+- **Modelo y esfuerzo: se fijan al abrir la sesión, nunca dentro del prompt.** Claude Code no arranca si el pegado empieza con slash commands, así que el modelo y el esfuerzo no van en el texto del prompt. Se fijan con el flag de arranque o con slashes en su propio Enter (ver subsección). El prompt se pega limpio. El chat anuncia los cuatro datos **encima del bloque**: `Modelo: <x> · Effort: <y> · Sesión: NUEVA|MISMA · Rama: <rama>` (effort omitido si es el default del modelo).
 
 ### Selección de modelo y esfuerzo (por prompt)
 
-Claude Code tiene dos perillas: **modelo** (qué tan capaz) y **esfuerzo** (cuánto razona antes de actuar). El esfuerzo es una escala **propia de cada modelo** — se elige el peldaño según la tarea, no hay acoplamiento fijo entre modelo y esfuerzo. Criterio: cuánto se le delega decidir y cuánto cuesta rehacer si falla.
+Claude Code tiene dos perillas: **modelo** (qué tan capaz) y **esfuerzo** (cuánto razona antes de actuar). El esfuerzo es una escala **propia de cada modelo** — se elige el peldaño según la tarea, no hay acoplamiento fijo entre modelo y esfuerzo. Criterio: cuánto se le delega decidir y cuánto cuesta rehacer si falla. Heurística cuando algo sale mal: si Claude Code tenía el contexto, lo intentó y aun así falló, se sube de **modelo**; si falló por saltarse un archivo, no verificar o abandonar a medias, se sube el **esfuerzo**.
 
 **Cómo se aplican** (Claude Code no arranca si el pegado empieza con `/`):
 - **Sesión NUEVA:** abrir con `claude --model <x> --effort <y>` y pegar el prompt limpio. Haiku no tiene esfuerzo: `claude --model haiku` (sin `--effort`).
-- **Sesión MISMA, solo si cambia modelo o esfuerzo:** enviar `/model <x>` y `/effort <y>` (cada uno en su propio Enter) y luego el prompt. Si no cambia nada, el prompt va limpio — el esfuerzo persiste en la sesión (`max` se resetea al cambiar de modelo, ahí se re-pone).
+- **Sesión MISMA, solo si cambia modelo o esfuerzo:** enviar `/model <x>` y `/effort <y>` (cada uno en su propio Enter) y luego el prompt. Si no cambia nada, el prompt va limpio — el esfuerzo persiste en la sesión (`max` se resetea al cambiar de modelo, ahí se re-pone). OJO: `/model` guarda la elección como default de sesiones futuras; por eso la sesión NUEVA se abre siempre con el flag `--model`, que aplica solo a esa sesión y no arrastra.
 - **Patrón normal:** si toda la tarea corre en el mismo modelo+esfuerzo, abrir la sesión una vez con el flag y pegar limpio cada prompt. El chat indica encima del bloque la sesión (NUEVA|MISMA) y, si cambió, qué arrancar o qué slashes mandar.
 
 | Modelo | Cuándo | Escala | Peldaño típico |
 |---|---|---|---|
 | **Haiku** | Mecánico puro y bajo riesgo: `grep`/`Select-String`, correr `tsc`/build, `str_replace` verbatim **sobre código**. | — (sin esfuerzo) | — |
-| **Sonnet** (default) | Buscar-y-reportar con juicio, ediciones que Claude Code arma desde la descripción, leer código para confirmar estado, migraciones rutinarias. **Piso obligatorio para todo markdown del repo** (`DECISIONS.md`, `CONVENTIONS.md`, `INSTRUCTIVO_CLAUDE.md`), aunque sea un `str_replace` verbatim. | low · medium · high · max | `high`; sube a `max` para juicio pesado, baja para lo mecánico |
+| **Sonnet** (default) | Buscar-y-reportar con juicio, ediciones que Claude Code arma desde la descripción, leer código para confirmar estado, migraciones rutinarias. **Piso obligatorio para todo markdown del repo** (`DECISIONS.md`, `CONVENTIONS.md`, `INSTRUCTIVO_CLAUDE.md`), aunque sea un `str_replace` verbatim. | low · medium · high · max (Sonnet 5 añade `xhigh`) | `high`; sube para juicio pesado, baja para lo mecánico |
 | **Opus** | Ejecución compleja o irreversible: migración delicada, cambio multi-archivo que cruza capas, donde puedan surgir estados inesperados y haya que razonar. | low · medium · high · xhigh · max · **ultracode** | `xhigh`; `max` para lo más difícil; `ultracode` solo en refactor grande aprobado |
+| **Fable** | El especialista: diagnóstico de causa raíz ambigua, incidentes donde no se sabe ni la capa, auditorías de invariantes (§10.6), tareas largas multi-paso que Opus no cierra. Incluido en el plan de Luis. Se abre con `claude --model fable`. | low · medium · high · xhigh · max | `high`; `xhigh` para lo más denso |
 
 **`ultracode` (solo Opus):** manda `xhigh` al modelo **y además** deja que Claude Code orqueste workflows multi-agente por su cuenta. Eso afloja el gate del proyecto (un paso a la vez, diff antes de aplicar, Claude Code no decide), por lo que **no es default**: se usa solo cuando Luis aprueba explícitamente un refactor grande aceptando ese trade-off. Es session-only y no es valor de `--effort` — se prende con `/effort ultracode` (en su Enter) tras abrir `claude --model opus`.
 
@@ -187,6 +191,7 @@ Reglas operativas asociadas:
 
 - **Atómicos por capa/concern.** No mezclar refactor con feature. Backend y frontend en commits distintos.
 - **Conventional commits:** `feat(scope):`, `fix(scope):`, `refactor:`, `docs:`. Mensajes en ASCII.
+- **Sin trailer `Co-Authored-By`.** Los mensajes de commit no llevan atribución de coautoría de la herramienta. Ni `Co-Authored-By:` ni ninguna variante, ni en el asunto ni en el cuerpo.
 - **ADR en commit aparte** (ver 4.5).
 - **`git status` antes de `git add`.** Adds con **rutas explícitas**, nunca `git add .`.
 - **El `push` a `master` lo hace Luis, no Claude Code.** Solo después de que Luis **verificó la funcionalidad en local**, y Claude debe **preguntarle si es el momento** (puede haber usuarios trabajando en producción). El push dispara `migrate deploy` automático en Railway (api y web son **servicios separados**); se revisa el log de ambos.
@@ -207,8 +212,10 @@ Get-ChildItem -Recurse -Include *.ts,*.tsx,*.prisma | Select-String "<termino>"
 **TypeScript check (antes de cada commit):**
 ```powershell
 pnpm exec tsc --noEmit --project apps/web/tsconfig.app.json
-pnpm exec tsc --noEmit --project apps/api/tsconfig.build.json
+pnpm exec tsc --noEmit --project apps/api/tsconfig.json
 ```
+
+> El gate de tipos de la api es `apps/api/tsconfig.json`, nunca `tsconfig.build.json`: esa última excluye `test` y `**/*spec.ts` por construcción, así que no puede ver una rotura en los specs. Es la config de build, no el gate de tipos. Regla general (ADR-071): la verificación se elige contra la clase de rotura que se está introduciendo; un gate que por construcción no puede verla no es un gate, aunque salga verde.
 
 **Migración de Prisma (desde `apps/api`, nunca desde la raíz):**
 ```powershell
@@ -270,9 +277,9 @@ Ante un bug reportado, la primera entrega es el **diagnóstico**: causa raíz + 
 
 ### 10.3 Modelos en depuración
 
-- **Prompts de diagnóstico/búsqueda (solo lectura):** `Modelo: Fable 5 · Sesión: NUEVA` mientras esté incluido en el plan (hasta 2026-07-07; después pasa a créditos → diagnóstico complejo en Opus, resto en Sonnet). Su ventaja documentada es bug-finding recall.
-- **Prompts de fix:** tabla normal de §6 (Haiku/Sonnet/Opus). Lo mecánico no necesita Fable.
-- **Anti-reruteo del clasificador (Fable):** no pedirle que transcriba su razonamiento interno; enmarcar verificaciones de seguridad en modo defensivo ("verificá que el guard niega X en todas las rutas"), nunca como caza de vulnerabilidades; `/clear` entre tareas no relacionadas. Si rerutea a Opus 4.8, la pasada continúa y vale.
+- **Prompts de diagnóstico/causa raíz (solo lectura):** Fable, en sesión NUEVA abierta con `claude --model fable`, cuando el problema es ambiguo o no se sabe la capa (incidentes de producción, regresiones sin pista, auditorías de invariantes §10.6). Fable está incluido en el plan. Diagnóstico acotado con hipótesis clara: Opus. Lecturas dirigidas simples: Sonnet.
+- **Prompts de fix:** tabla normal de §6. Lo mecánico no necesita Fable.
+- **Reruteo del clasificador (Fable):** los clasificadores de Fable (ciber/bio) pueden marcar un request; Claude Code lo re-corre en Opus 4.8 con aviso, la pasada continúa y vale, y se vuelve con `/model fable`. Puede dispararse en el **primer request** de la sesión, porque ese request lleva el CLAUDE.md y el git status del workspace. Mitigación: enmarcar verificaciones de seguridad en modo defensivo ("verifica que el guard niega X en todas las rutas"), nunca como caza de vulnerabilidades; `/clear` entre tareas no relacionadas; `claude --safe-mode` para descartar que lo disparen las customizaciones (desactiva CLAUDE.md, skills, MCP y hooks); con `/config` se puede apagar el cambio automático de modelo y elegir entre pasar a Opus o editar el prompt y reintentar en Fable. Es enrutamiento esperado del dominio, no una marca en la cuenta.
 
 ### 10.4 Checklist post-cambio (gate)
 
@@ -280,7 +287,7 @@ Sin esto, nada se declara resuelto:
 
 - [ ] Diff de los archivos cambiados mostrado.
 - [ ] Tests dirigidos del flujo tocado (si existen) antes que la suite completa.
-- [ ] `tsc --noEmit` en web y api.
+- [ ] `tsc --noEmit` en web y api — en la api contra `apps/api/tsconfig.json`, NO `tsconfig.build.json` (excluye los `*.spec.ts` y no ve romperse los tests — ADR-071).
 - [ ] Si algo falla: parar y reportar con la salida real. No continuar.
 - [ ] Nada se declara resuelto sin evidencia de esta sesión.
 - [ ] Flujos con estado (login, timers, polling, exportaciones): verificación del flujo completo en navegador — la hace Luis (CONVENTIONS §H).
