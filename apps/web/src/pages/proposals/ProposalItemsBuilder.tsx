@@ -10,7 +10,7 @@ import {
 import { cn } from '../../lib/utils';
 import type { ProposalItem, ProposalDetail, TechnicalSpecs } from '../../lib/types';
 import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, PROVEEDOR_OPTIONS, PROVEEDOR_NOVOTECHNO, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY, QUICK_SPEC_FIELDS_BY_ITEM_TYPE, SPEC_FIELDS_BY_ITEM_TYPE } from '../../lib/constants';
-import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '../../lib/pricing-engine';
+import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '@repo/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import PrefillModal from './components/PrefillModal';
 import SupplierSection from './components/SupplierSection';

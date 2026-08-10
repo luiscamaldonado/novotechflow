@@ -2,4 +2,8 @@
 **/node_modules
 **/dist
 **/.env
+!**/.env.example
+backups
+**/.turbo
+**/*.log
 # no excluir uploads/: los defaults se necesitan en build (nota heredada de apps/api)

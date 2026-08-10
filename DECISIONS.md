@@ -3317,3 +3317,175 @@ Corregir ADR-050 con `str_replace` aditivo en título y `**Estado:**` (INSTRUCTI
 - Lint type-aware en `apps/web` (último pendiente vivo de ADR-075): `apps/api` ya lo tiene vía `parserOptions.project`. Evaluar si conviene igualarlo y qué hallazgos nuevos saldrían.
 - Railway no tiene `watchPatterns` configurado: todo push a `master` reconstruye API y web aunque solo cambie uno. Cuesta ~1 min de build ocioso; el riesgo de un patrón mal armado (un servicio que deja de redesplegar en silencio, sobre todo con los paquetes compartidos del workspace) es mayor que el beneficio. Se difiere conscientemente.
 - `docs/audits/walkthrough8.md` y `README.md` aún describen `@repo/ui` y el scaffold original de Turborepo.
+
+## ADR-078 — Adopción del Railway CLI en el flujo de trabajo para lectura de variables y logs de producción, con manejo estricto de secretos
+
+**Fecha:** 2026-07-05
+**Estado:** Aceptado
+
+### Contexto
+
+El diagnóstico de incidentes de producción y la inspección de configuración en Railway (variables de entorno, logs de build y deploy) se venían haciendo a mano por Luis en el dashboard, copiando y pegando salidas al chat. Eso es lento y, en el caso de las variables, arriesgado: la salida cruda expone secretos reales (`JWT_SECRET`, `DATABASE_URL`, `RESEND_API_KEY`, etc.).
+
+Railway publica un MCP server oficial que envuelve su CLI, lo que abre la posibilidad de que Claude Code lea variables y logs por sí mismo. Antes de montar el MCP se decidió establecer y verificar la capa base —el Railway CLI— en modo estrictamente de lectura, y fijar por escrito las reglas de manejo de secretos que el MCP deberá respetar después.
+
+Restricción de entorno: el CLI no está en winget, y la regla del proyecto (§8, §6 de las instrucciones) prohíbe `npx`/`npm` global para herramientas del proyecto. El one-liner oficial (`curl ... | sh`) es solo macOS/Linux o Windows por WSL, y aquí se usa PowerShell nativo.
+
+### Decisión
+
+1. **Instalación del Railway CLI por binario pre-compilado, no por npm ni Scoop.** Se descargó el asset oficial `railway-v5.23.3-x86_64-pc-windows-msvc.zip` del release de GitHub y se dejó `railway.exe` en `C:\Users\admin\.local\bin` (ya en PATH, donde vive `claude.exe`). Cero `npm`/`npx`, cero cambio de execution policy, cero tooling nuevo. Contrapartida aceptada: los updates futuros son manuales (re-descargar).
+
+2. **Autenticación y link.** `railway login` (OAuth por navegador, lo aprueba Luis; scope `workspace:admin project:admin` — el CLI no ofrece scope de solo-lectura) y `railway link` al servicio `novotechflow` en el entorno `production` (la API NestJS; los otros servicios del proyecto son `web`, `Postgres`, `api-external`, `postgres-external`).
+
+3. **Etapa base = solo lectura.** Se habilitan tres lecturas, todas verificadas: nombres de variables, logs de deploy y logs de build. Ningún comando de escritura (`up`, `variable set`, `redeploy`) se corre en esta etapa. La barrera es disciplina; el gate técnico (deny-rules) se monta con el MCP (ver Pendientes).
+
+4. **Regla de manejo de secretos en variables (no negociable).** Nunca se usa `--kv` ni se pega el JSON crudo de `railway variable list` (el help advierte que ambos imprimen valores crudos). Para listar, se parsea el `--json` en PowerShell extrayendo solo los nombres de las propiedades (`$obj.PSObject.Properties.Name`), envuelto en try/catch para que ni un fallo de parseo vuelque el JSON crudo. Al chat llegan solo keys, nunca valores.
+
+5. **Regla de manejo de secretos en logs (no negociable).** Un log es texto libre y no se puede "filtrar a nombres". Se traen acotados en modo no-streaming (`-n <N>`, que desactiva el seguimiento en vivo; `railway logs` por defecto hace streaming y cuelga la sesión de agente) y se pasan por un wrapper de redacción que tapa connection strings, Bearer tokens, pares `key|token|secret|password=valor` y JWT antes de imprimir, con timeout por si `-n` no frena el streaming. `-d` para deploy/runtime, `-b` para build.
+
+### Consecuencias
+
+- Claude Code puede leer variables (solo keys), logs de deploy y logs de build de producción sin que Luis toque el dashboard y sin filtrar secretos al chat. Es capacidad de Claude Code corriendo el CLI, no de Claude (chat).
+- El límite absoluto "solo Luis despliega" queda intacto: crear o cambiar una variable en Railway dispara un redeploy automático del servicio (confirmado en doc de Railway: no hay forma de que un deploy vivo tome variables nuevas sin un deploy nuevo), por lo que toda escritura de variables sobre un servicio de producción es, de hecho, un despliegue — reservado a Luis.
+- Detalle operativo registrado: `-n` cuenta entradas de log lógicas, no renglones de texto; una corrida de `-n 100` de build devolvió 153 líneas por los bloques multilínea (Prisma Client, warnings de npm). No es un fallo del filtro.
+- Observación al pasar durante la lectura de logs de deploy (no diagnosticada aquí): se ven transacciones `BEGIN`/`COMMIT` sobre `app_settings`, consistente con el doble-upsert de `getMaintenanceBanner` ya marcado como deuda.
+- Las reglas 4 y 5 quedan como contrato que el MCP de Railway deberá respetar cuando se monte.
+
+### Archivos
+
+- Ninguno del repo. La instalación (binario en `.local\bin`), el login y el link son estado local de la máquina de Luis, fuera de versión. Este ADR es el único artefacto versionado del cambio.
+
+### Commits
+
+- docs: ADR-078 to ADR-081 external api to production
+
+### Pendientes
+
+- **Montar el MCP de Railway en Claude Code**, decidiendo el modo de cableado que respete la regla `npx`/`npm` (evaluar `railway mcp install` vía CLI vs. apuntar a un binario), y agregando deny-rules explícitas en `.claude/settings.local.json` para las tools de escritura (`variable set`, `up`, `redeploy`, `accept-deploy`), igual que el deny ya existente de `git push`. Verificar que Claude Code no pueda disparar un redeploy antes de darlo por cerrado.
+- **Reglas de manejo de secretos aplicadas al MCP:** trasladar las reglas 4 y 5 de este ADR al uso del MCP (variables solo por nombre, logs redactados y acotados).
+- **Habilitación de escrituras seguras (etapa futura, si se decide):** crear variables solo en entornos no-prod, o en prod con confirmación explícita de Luis (equivalente al gate del push). Fuera de alcance de este ADR.
+
+## ADR-079 — Enriquecimiento del contrato de la API externa: marca, número de parte, formato, modelo y quick specs derivados de technicalSpecs
+
+**Fecha:** 2026-07-08
+**Estado:** Aceptado
+
+### Contexto
+
+La API externa de solo lectura (módulo `/external` en `apps/api`, rama `feature/external-api`) expone las propuestas GANADA para consumo de Felipe. El contrato por ítem (`ExternalItemOut` / `ExternalChildItemOut`) traía `brand` y `partNumber` leídos directamente de las columnas escalares de `ProposalItem`. Al verificar la respuesta real contra la DB local se encontró que esas columnas venían vacías (`""`), mientras el dato real —marca, número de parte, formato, modelo— vivía dentro del JSON `technicalSpecs`, bajo las claves `fabricante`, `numeroParte`, `formato`, `modelo`. El consumidor tenía que entrar al blob `technicalSpecs` (tipado `Record<string, unknown>`, sin contrato) para leer esos valores, y la "descripción rápida" (quick specs) no se exponía en absoluto: se calcula solo en `apps/web` con `buildQuickDescription`.
+
+Regla de fondo acordada con Luis: la fuente de verdad de marca, número de parte, formato y modelo es **lo que el usuario ve en la UI de specs**, es decir `technicalSpecs`, no las columnas del `ProposalItem`. En la UI no existe un campo "Marca"; lo que el usuario captura es **Fabricante** (`technicalSpecs.fabricante`).
+
+### Decisión
+
+Enriquecer el contrato de la API externa tomando el dato desde `technicalSpecs`, sin introducir un paquete compartido (Opción A: cambio contenido en `apps/api/src/external`):
+
+1. **`brand` y `partNumber`** pasan a leerse de `technicalSpecs` (`fabricante` y `numeroParte` respectivamente) vía `pickSpecString`, en lugar de las columnas del `ProposalItem`. Se rellenan los campos que Felipe ya conocía, ahora con el dato real, sin cambiar sus nombres.
+2. **Campos nuevos de primer nivel**: `formato`, `modelo` (desde `technicalSpecs`), `quickSpecs` (derivado con `buildQuickDescription`) e `itemTypeLabel` (etiqueta legible del `itemType` vía `ITEM_TYPE_LABELS`, p. ej. `PCS` → `PCs`).
+3. Mismo tratamiento en `ExternalChildItemOut` (sub-ítems).
+4. La lógica de display (`buildQuickDescription`, `ITEM_TYPE_LABELS`, más el helper `pickSpecString`) se replica en un archivo nuevo `apps/api/src/external/external-spec-fields.ts`, adaptada al tipado `Record<string, unknown>` del backend (coerción `typeof === 'string'`, sin `any`).
+
+Se eligió la Opción A porque desbloquea a Felipe sin cargar el merge pendiente de la rama (que ya arrastraba la colisión del hoy ADR-078); no toca estructura de paquetes.
+
+### Consecuencias
+
+- El consumidor externo recibe marca, número de parte, formato, modelo y quick specs como campos planos con contrato explícito, alineados con lo que el usuario ve en la UI, sin tener que parsear el blob `technicalSpecs`.
+- `technicalSpecs` se sigue exponiendo crudo, por compatibilidad.
+- **Deuda registrada**: `buildQuickDescription` e `ITEM_TYPE_LABELS` quedan duplicados entre `apps/web` y `apps/api`. Si el mapa `itemType → campos` o las etiquetas cambian en web, la API externa queda desincronizada en silencio. Como es lógica de display read-only, el impacto de un drift es bajo. **Follow-up**: extraer esta lógica a un paquete compartido (patrón de `@repo/pricing-engine`, ADR-052) que consuman web y api, al estabilizar/mergear la rama.
+
+### Archivos
+
+- `apps/api/src/external/external-spec-fields.ts` (nuevo) — `resolveItemTypeLabel`, `pickSpecString`, `buildQuickDescription`.
+- `apps/api/src/external/dto/external-proposals.dto.ts` — `itemTypeLabel`, `formato`, `modelo`, `quickSpecs` en `ExternalItemOut` y `ExternalChildItemOut`.
+- `apps/api/src/external/external-proposals.service.ts` — `brand`/`partNumber` desde `technicalSpecs`; campos derivados en el ítem top-level y en `mapChildOut`.
+
+### Commits
+
+- `ba476c3` — feat(external): expose brand, part number, format, model and quick specs from technical specs
+- docs: ADR-078 to ADR-081 external api to production
+
+### Pendientes
+
+- **Extracción a paquete compartido** de `buildQuickDescription` / `ITEM_TYPE_LABELS` (elimina el duplicado web/api), al mergear la rama. — **Ejecutado**: el paquete es `@repo/item-display` (ADR-067); la copia local se eliminó tras el merge.
+- **Renumeración del ADR-057 de esta rama** (Railway CLI) al mergear a master, por colisión con el ADR-057 de master (getMaintenanceBanner). — **Ejecutado** en el merge: 057→068→078, 059→069→079.
+
+## ADR-080 — Contrato de la API externa por categoría: tipo, responsable y datos de contacto del proveedor
+
+**Fecha:** 2026-07-22
+**Estado:** Aceptado
+
+### Contexto
+
+La lista de campos que el consumidor externo necesita por ítem incluye, además de lo ya expuesto (número de parte, formato, fabricante, modelo, descripción rápida, categoría, flete, tiempo de entrega), el tipo del ítem, el responsable (en categorías de servicio) y los datos de la empresa proveedora con su contacto (nombre, teléfono, correo). Tras el merge de master (f11f074), la rama dispone del catálogo global de proveedores (ADR-062/064): `ProposalItem` referencia `SupplierCompany` y `SupplierContact` vía FKs, y teléfono/correo son atributos del contacto del catálogo, no del ítem. `tipo` y `responsable` viven como claves de `technicalSpecs`.
+
+### Decisión
+
+Seis campos planos nuevos en `ExternalItemOut` y `ExternalChildItemOut`: `tipo` y `responsable` (vía `pickSpecString` sobre `technicalSpecs`; `null` donde la categoría no los captura) y `supplierCompanyName`, `supplierContactName`, `supplierContactPhone`, `supplierContactEmail` (vía include de las relaciones `supplierCompany`/`supplierContact` en la query; `null` cuando el ítem no tiene proveedor asignado). Convención de nombres: inglés para lo que proviene del modelo relacional, español para claves de specs. El campo existente `proveedor` (categoría de origen en `internal_costs`) se conserva sin cambios. Mismo tratamiento en sub-ítems.
+
+### Consecuencias
+
+- El contrato cubre la lista completa de campos por categoría definida por Luis; el consumidor no necesita parsear `technicalSpecs` ni conocer el modelo de proveedores.
+- Los campos de proveedor llegan `null` en ítems sin proveedor asignado — en particular, los de `COT-LU00002-1` (copiados antes de que existiera el catálogo en esa base).
+
+### Archivos
+
+- `apps/api/src/external/external-proposals.types.ts` — include de `supplierCompany`/`supplierContact` en ambos niveles.
+- `apps/api/src/external/dto/external-proposals.dto.ts` — seis campos nuevos en ambas interfaces.
+- `apps/api/src/external/external-proposals.service.ts` — mapeo en ítem top-level y `mapChildOut`.
+
+### Commits
+
+- `bf8976f` — feat(external): expose spec type, responsable and supplier contact data per item
+- docs: ADR-078 to ADR-081 external api to production
+
+### Pendientes
+
+- **Prueba end-to-end** con data de proveedor poblada: asignar proveedor a los ítems de `COT-LU00002-1` en `postgres-external` o copiar una propuesta reciente con catálogo asignado. — **Ejecutado**: `COT-LU00003-1` clonada desde la local `COT-LMA00008-1` (6 categorías, 6/6 ítems con proveedor, catálogo de 5 empresas + 5 contactos clonado); los 4 criterios del contrato verificados contra el endpoint real.
+
+## ADR-081 — API externa a producción: entry point aislado y rol de base de datos de mínimo privilegio
+
+**Fecha:** 2026-08-10
+**Estado:** Aprobada — cutover de infraestructura pendiente
+
+### Contexto
+
+La API externa para requisiciones de compra (ADR-057/059 en la rama, renumerados a 079/080) fue validada contra postgres-external y aprobada para producción. El diagnóstico previo al cutover encontró que el servicio api-external construía la misma imagen que la API principal: montaba el AppModule completo (~120 rutas, incluidas todas las de escritura), corría prisma migrate deploy en cada arranque, y la rama estaba 60 commits detrás de master (sin ADR-074, sin el enum APLAZADA/CANCELADA, Swagger sin gate).
+
+### Decisión
+
+1. Merge de master a la rama, con master ganando en infraestructura (Dockerfile 3 etapas, gate de Swagger, trust proxy, throttler 100). El Dockerfile de master se extendió para construir y materializar @repo/item-display y @repo/pricing-engine como directorios reales en el node_modules del runner: el node-linker hoisted deja los links de workspace en apps/api/node_modules, que no viaja a la imagen final.
+2. Entry point propio para el servicio externo: ExternalAppModule + main-external.ts (mismo hardening que main.ts, sin Swagger ni estáticos). En Railway, api-external arrancará con node dist/src/main-external.js como start command, sin migrate deploy — las migraciones son exclusivas del servicio principal.
+3. Extracción de AuthCoreModule y UsersCoreModule (sin controladores) para que el grafo externo no monte AuthController ni UsersController. Superficie final del proceso externo: 4 rutas /external/*. La API principal conserva su superficie exacta (verificado por diff de rutas).
+4. Rol de Postgres novotech_external_ro en producción: LOGIN, CONNECTION LIMIT 12, SELECT sobre las 7 tablas del include de propuestas + verification_codes, INSERT/UPDATE solo sobre verification_codes. Sin DELETE, sin DDL, sin default privileges: una tabla nueva no es visible hasta otorgarla (fail-closed). El rol no puede correr migraciones.
+5. DATABASE_URL de api-external se hardcodea con la credencial del rol (connection_limit=5, pool_timeout=20) — excepción consciente al invariante de usar la referencia de Railway, que llevaría la credencial admin. Rotación de esa contraseña = actualización manual de la variable.
+6. packages/pricing-engine como paquete compartido consumido por la API es excepción consciente a CONVENTIONS §J; la fuente canónica sigue siendo el paquete (apps/web lo consume igual).
+
+### Consecuencias
+
+- El servicio externo contra producción expone solo el contrato: login 2FA + GET /external/proposals filtrado por userId del token, estado GANADA, deletedAt null. Cada comercial ve solo sus propuestas ganadas.
+- verification_codes es tabla compartida: un login externo invalida los códigos 2FA vivos del mismo usuario en la app principal (updateMany de sendVerificationCode). Preexistente, aceptado.
+- Los JWT de ambos servicios no son intercambiables (EXTERNAL_JWT_SECRET y JWT_SECRET distintos entre sí y distintos por servicio).
+- Un merge futuro de esta rama ya no rompe el deploy principal: el Dockerfile construye los paquetes @repo que apps/api ahora consume.
+
+### Archivos
+
+- apps/api/Dockerfile (3 etapas + materialización @repo)
+- apps/api/src/external-app.module.ts, apps/api/src/main-external.ts (nuevos)
+- apps/api/src/auth/auth-core.module.ts, apps/api/src/users/users-core.module.ts (nuevos)
+- apps/api/src/auth/auth.module.ts, apps/api/src/users/users.module.ts, apps/api/src/external/external.module.ts, apps/api/src/app.module.ts
+- .dockerignore
+
+### Commits
+
+- 0a42cf5 merge: master into feature/external-api
+- 2207bf4 fix(docker): materialize repo packages in runner node_modules
+- 0127893 feat(external): separate entry point for external api service
+- b56f5a7 refactor(auth): extract controller-free core modules for external entry point
+
+### Pendientes
+
+- Start command node dist/src/main-external.js en api-external (dashboard, Luis).
+- Variables de api-external: DATABASE_URL del rol, EXTERNAL_JWT_SECRET y JWT_SECRET propios, RESEND_*, CORS_ORIGIN.
+- Smoke test contra producción (login 2FA de un comercial + GET /external/proposals).
+- Decidir destino de postgres-external (apagar o conservar como staging).
+- Auditar pool: medir conexiones del rol bajo carga real (CONNECTION LIMIT 12 vs pool 5).

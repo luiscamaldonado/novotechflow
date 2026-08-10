@@ -4,6 +4,6 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  optimizeDeps: { include: ['@repo/item-display'] },
-  build: { commonjsOptions: { include: [/item-display/, /node_modules/] } },
+  optimizeDeps: { include: ['@repo/item-display', '@repo/pricing-engine'] },
+  build: { commonjsOptions: { include: [/item-display/, /pricing-engine/, /node_modules/] } },
 })

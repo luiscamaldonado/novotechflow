@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import {
     calculateScenarioTotals,
     type ScenarioTotals,
-} from '../lib/pricing-engine';
+} from '@repo/pricing-engine';
 
 // ── Tipos ────────────────────────────────────────────────────
 // ProposalCalcItem is kept here for backward-compat with consumers
