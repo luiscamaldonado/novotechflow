@@ -3487,5 +3487,5 @@ La API externa para requisiciones de compra (ADR-057/059 en la rama, renumerados
 - Ejecutado: start command node dist/src/main-external.js y rama master en api-external (vía Railway GraphQL).
 - Ejecutado: variables DATABASE_URL (rol novotech_external_ro, connection_limit=5, pool_timeout=20), EXTERNAL_JWT_SECRET y JWT_SECRET rotados.
 - Ejecutado: smoke test contra producción — validado por consumidor real (login 2FA + GET /external/proposals con datos reales; nulls reportados eran datos sin diligenciar, corregidos en la app).
-- Decidir destino de postgres-external (conservar como retorno de rollback ~2 semanas, luego apagar o formalizar como staging).
+- Ejecutado: postgres-external eliminada (2026-08-11) — integración entregada y validada contra producción; sin cambios de contrato previstos. Respaldo final en D:\backups\postgres-external-final-2026-08-11.dump (pg_dump -Fc, requiere pg_restore 18+).
 - Auditar pool: medir conexiones del rol bajo carga real (CONNECTION LIMIT 12 vs pool 5).
