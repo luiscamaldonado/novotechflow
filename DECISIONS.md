@@ -3445,7 +3445,7 @@ Seis campos planos nuevos en `ExternalItemOut` y `ExternalChildItemOut`: `tipo` 
 ## ADR-081 — API externa a producción: entry point aislado y rol de base de datos de mínimo privilegio
 
 **Fecha:** 2026-08-10
-**Estado:** Aprobada — cutover de infraestructura pendiente
+**Estado:** Ejecutada — en producción desde 2026-08-11
 
 ### Contexto
 
@@ -3484,8 +3484,8 @@ La API externa para requisiciones de compra (ADR-057/059 en la rama, renumerados
 
 ### Pendientes
 
-- Start command node dist/src/main-external.js en api-external (dashboard, Luis).
-- Variables de api-external: DATABASE_URL del rol, EXTERNAL_JWT_SECRET y JWT_SECRET propios, RESEND_*, CORS_ORIGIN.
-- Smoke test contra producción (login 2FA de un comercial + GET /external/proposals).
-- Decidir destino de postgres-external (apagar o conservar como staging).
+- Ejecutado: start command node dist/src/main-external.js y rama master en api-external (vía Railway GraphQL).
+- Ejecutado: variables DATABASE_URL (rol novotech_external_ro, connection_limit=5, pool_timeout=20), EXTERNAL_JWT_SECRET y JWT_SECRET rotados.
+- Ejecutado: smoke test contra producción — validado por consumidor real (login 2FA + GET /external/proposals con datos reales; nulls reportados eran datos sin diligenciar, corregidos en la app).
+- Decidir destino de postgres-external (conservar como retorno de rollback ~2 semanas, luego apagar o formalizar como staging).
 - Auditar pool: medir conexiones del rol bajo carga real (CONNECTION LIMIT 12 vs pool 5).
