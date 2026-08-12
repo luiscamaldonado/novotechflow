@@ -76,6 +76,7 @@ model User {
   role                 Role
   nomenclature         String   @unique @db.VarChar(10)
   signatureUrl         String?  @map("signature_url") @db.Text
+  signatureAssetId     String?  @map("signature_asset_id") @db.Uuid
   isActive             Boolean  @default(true) @map("is_active")
   proposalCounterStart Int      @default(0) @map("proposal_counter_start")
   lastSeenAt           DateTime? @map("last_seen_at")
@@ -91,6 +92,7 @@ model User {
   updatedAppSettings AppSetting[]        @relation("AppSettingUpdatedBy")
   supplierCompaniesCreated SupplierCompany[] @relation("SupplierCompanyCreatedBy")
   supplierContactsCreated  SupplierContact[] @relation("SupplierContactCreatedBy")
+  signatureAsset           ImageAsset?       @relation(fields: [signatureAssetId], references: [id])
 
   @@map("users")
 }
@@ -180,6 +182,20 @@ model ProposalPageBlock {
 
   @@index([pageId])
   @@map("proposal_page_blocks")
+}
+
+/// Almacena SOLO el payload base64, sin el prefijo "data:<mime>;base64,"
+model ImageAsset {
+  id        String   @id @default(uuid()) @db.Uuid
+  sha256    String   @unique @db.VarChar(64)
+  mimeType  String   @map("mime_type") @db.VarChar(100)
+  sizeBytes Int      @map("size_bytes")
+  data      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users User[]
+
+  @@map("image_assets")
 }
 
 model ProposalItem {
