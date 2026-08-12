@@ -12,7 +12,11 @@ export const externalProposalInclude = {
           item: { include: { supplierCompany: true, supplierContact: true } },
           children: {
             orderBy: { sortOrder: 'asc' },
-            include: { item: { include: { supplierCompany: true, supplierContact: true } } },
+            include: {
+              item: {
+                include: { supplierCompany: true, supplierContact: true },
+              },
+            },
           },
         },
       },

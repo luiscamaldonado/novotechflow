@@ -15,7 +15,11 @@ import type {
   ExternalItemOut,
   ExternalChildItemOut,
 } from './dto/external-proposals.dto';
-import { buildQuickDescription, pickSpecString, resolveItemTypeLabel } from '@repo/item-display';
+import {
+  buildQuickDescription,
+  pickSpecString,
+  resolveItemTypeLabel,
+} from '@repo/item-display';
 
 type ScenarioItemRel =
   ExternalProposalWithRelations['scenarios'][number]['scenarioItems'][number];
@@ -25,23 +29,37 @@ function toNumber(value: Prisma.Decimal | null): number | null {
   return value === null ? null : Number(value);
 }
 
-function extractFletePct(internalCosts: Prisma.JsonValue | null): number | null {
-  if (internalCosts === null || typeof internalCosts !== 'object' || Array.isArray(internalCosts)) {
+function extractFletePct(
+  internalCosts: Prisma.JsonValue | null,
+): number | null {
+  if (
+    internalCosts === null ||
+    typeof internalCosts !== 'object' ||
+    Array.isArray(internalCosts)
+  ) {
     return null;
   }
   const flete = (internalCosts as Record<string, unknown>).fletePct;
   return flete === undefined || flete === null ? null : Number(flete);
 }
 
-function extractProveedor(internalCosts: Prisma.JsonValue | null): string | null {
-  if (internalCosts === null || typeof internalCosts !== 'object' || Array.isArray(internalCosts)) {
+function extractProveedor(
+  internalCosts: Prisma.JsonValue | null,
+): string | null {
+  if (
+    internalCosts === null ||
+    typeof internalCosts !== 'object' ||
+    Array.isArray(internalCosts)
+  ) {
     return null;
   }
   const prov = (internalCosts as Record<string, unknown>).proveedor;
   return typeof prov === 'string' ? prov : null;
 }
 
-function toTechnicalSpecs(specs: Prisma.JsonValue | null): Record<string, unknown> | null {
+function toTechnicalSpecs(
+  specs: Prisma.JsonValue | null,
+): Record<string, unknown> | null {
   if (specs === null || typeof specs !== 'object' || Array.isArray(specs)) {
     return null;
   }
@@ -51,14 +69,19 @@ function toTechnicalSpecs(specs: Prisma.JsonValue | null): Record<string, unknow
 function childToPricingScenarioItem(child: ChildItemRel): PricingScenarioItem {
   return {
     quantity: child.quantity,
-    marginPctOverride: child.marginPctOverride === null ? null : Number(child.marginPctOverride),
-    unitPriceOverride: child.unitPriceOverride === null ? null : Number(child.unitPriceOverride),
+    marginPctOverride:
+      child.marginPctOverride === null ? null : Number(child.marginPctOverride),
+    unitPriceOverride:
+      child.unitPriceOverride === null ? null : Number(child.unitPriceOverride),
     isDiluted: child.isDiluted,
     item: {
       unitCost: Number(child.item.unitCost),
       costCurrency: child.item.costCurrency,
-      internalCosts: { fletePct: extractFletePct(child.item.internalCosts) ?? 0 },
-      marginPct: child.item.marginPct === null ? 0 : Number(child.item.marginPct),
+      internalCosts: {
+        fletePct: extractFletePct(child.item.internalCosts) ?? 0,
+      },
+      marginPct:
+        child.item.marginPct === null ? 0 : Number(child.item.marginPct),
       isTaxable: child.item.isTaxable,
     },
     children: [],
@@ -68,8 +91,10 @@ function childToPricingScenarioItem(child: ChildItemRel): PricingScenarioItem {
 function toPricingScenarioItem(si: ScenarioItemRel): PricingScenarioItem {
   return {
     quantity: si.quantity,
-    marginPctOverride: si.marginPctOverride === null ? null : Number(si.marginPctOverride),
-    unitPriceOverride: si.unitPriceOverride === null ? null : Number(si.unitPriceOverride),
+    marginPctOverride:
+      si.marginPctOverride === null ? null : Number(si.marginPctOverride),
+    unitPriceOverride:
+      si.unitPriceOverride === null ? null : Number(si.unitPriceOverride),
     isDiluted: si.isDiluted,
     item: {
       unitCost: Number(si.item.unitCost),
@@ -188,7 +213,8 @@ export class ExternalProposalsService {
         supplierContactName: si.item.supplierContact?.name ?? null,
         supplierContactPhone: si.item.supplierContact?.phone ?? null,
         supplierContactEmail: si.item.supplierContact?.email ?? null,
-        marginPct: si.item.marginPct === null ? null : Number(si.item.marginPct),
+        marginPct:
+          si.item.marginPct === null ? null : Number(si.item.marginPct),
         marginPctOverride: toNumber(si.marginPctOverride),
         unitCostOverride: toNumber(si.unitCostOverride),
         unitPriceOverride: toNumber(si.unitPriceOverride),

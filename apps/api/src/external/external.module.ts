@@ -25,6 +25,10 @@ import { ExternalProposalsService } from './external-proposals.service';
     }),
   ],
   controllers: [ExternalController],
-  providers: [ExternalAuthService, ExternalJwtStrategy, ExternalProposalsService],
+  providers: [
+    ExternalAuthService,
+    ExternalJwtStrategy,
+    ExternalProposalsService,
+  ],
 })
 export class ExternalModule {}

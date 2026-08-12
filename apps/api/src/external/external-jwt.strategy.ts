@@ -2,10 +2,16 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
-import type { ExternalJwtPayload, ExternalAuthUser } from './dto/external-auth.dto';
+import type {
+  ExternalJwtPayload,
+  ExternalAuthUser,
+} from './dto/external-auth.dto';
 
 @Injectable()
-export class ExternalJwtStrategy extends PassportStrategy(Strategy, 'jwt-external') {
+export class ExternalJwtStrategy extends PassportStrategy(
+  Strategy,
+  'jwt-external',
+) {
   constructor(private usersService: UsersService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
