@@ -3568,3 +3568,39 @@ Ensayo completo contra `novotechflow_prod_copy`: 599+1+9 filas migradas y 50 ass
 - Tests reales del ciclo dehydrate→rehydrate (los specs actuales son smoke).
 - Verificar los grants vivos de `novotech_external_ro` contra `information_schema.role_table_grants` (hoy solo documentados en prosa, ADR-081).
 - `novotechflow_prod_copy` quedó migrada y compactada por el ensayo; restaurar del dump de `D:\novotechflow-backups` si se necesita re-ensayar.
+
+## ADR-084 — Ejecución en producción del backfill de assets (ADR-083) y resultados
+
+**Fecha:** 2026-08-12
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-083 dejó el código desplegado en modo compat y el backfill ensayado contra `novotechflow_prod_copy`. Esta entrada registra la ejecución real contra producción y sus resultados, más un incidente operativo del cierre de la ventana.
+
+### Decisión
+
+Ventana de mantenimiento con el api detenido (`railway down`; api-external permaneció arriba: solo lectura vía rol fail-closed, verificado inocuo con `concurrentes=0`). Secuencia ejecutada: `pg_dump` pre-migración (787.4 MB, TOC verificado) → push y deploy (migración `add_image_assets` aplicada sola y limpia; `add_proposal_status_aplazada_cancelada` ya estaba en producción desde julio, la copia del ensayo era anterior) → backfill → verificación → `VACUUM FULL` + `ANALYZE` → redeploy y smoke.
+
+### Consecuencias
+
+Backfill en 17.7 min por el proxy público: 707 bloques + 1 template + 9 firmas migrados, 66 assets únicos (717 ocurrencias = 66 + 651 reutilizaciones), 0 malformados, 0 concurrentes, 0 data URIs restantes (verificado además por SQL independiente). Idempotencia confirmada (segunda corrida: 0 cambios, 11.9 s vs 1061.6 s). `VACUUM FULL` en 2.6 s — corre server-side, el proxy solo transporta el comando, y la reescritura solo copia tuplas vivas (~4.6 MB tras el backfill). Tamaños: `proposal_page_blocks` 1077 MB → 4.6 MB (−99.6%); base `railway` 1104 MB → 45 MB (−96%). Producción tenía 108 bloques y 16 imágenes únicas más que el snapshot de julio del ensayo, coherente con la actividad del período. Smoke en producción OK: imágenes viejas rehidratadas, firma en PDF, propuesta nueva con plantillas, upload nuevo.
+
+Incidente del cierre: `railway redeploy` por CLI relanzó una entrada histórica de mayo (`29f4315`) en vez del deployment vigente; su Dockerfile traía un `COPY uploads/defaults` que ya no existe y el build falló sin llegar a arrancar contenedor (sin impacto en datos). Lección operativa: para revivir el servicio tras una ventana, desplegar siempre desde el HEAD actual de master (commit vacío + push, o Redeploy sobre el deployment del commit vigente), nunca `redeploy` a ciegas ni sobre entradas históricas del listado.
+
+Durante la ventana quedó demostrada la señal de parada aceptable: deployments en REMOVED + HTTP no-200 + `pg_stat_activity` sin conexiones vivas del api (una conexión `idle` congelada con `backend_start` anterior al deployment tumbado es un socket huérfano de api-external, no un proceso que escriba).
+
+### Archivos
+
+- Sin cambios de código (ejecución operativa de ADR-083).
+- Dump pre-migración: `D:\novotechflow-backups\novotechflow_prod_pre_adr083_2026-08-12.dump`.
+
+### Commits
+
+- `bad69c9` chore: trigger redeploy after maintenance window
+
+### Pendientes
+
+- Verificar que el schedule de backups del volumen de Railway siga activo (el wipe de ADR-082 lo borró y se reprogramó; confirmar tras esta jornada) y tomar un `pg_dump` post-migración fresco (debería pesar decenas de MB).
+- `novotechflow_prod_copy` quedó con el estado del ensayo; para futuros ensayos, restaurar desde un dump post-migración.
+- Los pendientes técnicos de ADR-083 (GC de assets, select de findOneById, validación de content en PATCH, tests del ciclo) siguen vigentes.
