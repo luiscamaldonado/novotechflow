@@ -3489,3 +3489,38 @@ La API externa para requisiciones de compra (ADR-057/059 en la rama, renumerados
 - Ejecutado: smoke test contra producción — validado por consumidor real (login 2FA + GET /external/proposals con datos reales; nulls reportados eran datos sin diligenciar, corregidos en la app).
 - Ejecutado: postgres-external eliminada (2026-08-11) — integración entregada y validada contra producción; sin cambios de contrato previstos. Respaldo final en D:\backups\postgres-external-final-2026-08-11.dump (pg_dump -Fc, requiere pg_restore 18+).
 - Auditar pool: medir conexiones del rol bajo carga real (CONNECTION LIMIT 12 vs pool 5).
+
+## ADR-082 — Recuperación de espacio del volumen de Postgres en Railway (wipe + restore) y habilitación de PITR
+
+**Fecha:** 2026-08-11
+**Estado:** Implementado
+
+### Contexto
+
+Los backups diarios del volumen de Postgres en Railway pesaban 15.57 GB para una base cuyos datos reales suman ~1.1 GB. Diagnóstico (solo lectura, vía psql, funciones de superusuario y railway ssh): pg_database_size = 1101 MB; el 97% del peso vivo está en proposal_page_blocks (1069 MB, ~2900 filas, casi todo TOAST: imágenes base64); WAL 64 MB, sin replication slots, lost+found vacío, df dentro del contenedor reportando 1.2 GB usados de 220 GB. La métrica DISK_USAGE_GB de Railway marcaba 15.96 GB: asignación muerta en la capa de bloques ZFS (el volumen es un zvol) acumulada desde abril, que ext4 ya había liberado pero ZFS no desasignó. fstrim desde dentro del contenedor falla con "FITRIM ioctl failed: Operation not permitted" (el contenedor no tiene la capability necesaria).
+
+### Decisión
+
+Recuperar el espacio con el mecanismo formal del dashboard de Railway: pg_dump verificado → Wipe Volume → restore, en ventana sin usuarios. Se descartó el ticket a soporte (más lento) y la migración a un servicio Postgres nuevo (obligaba a reapuntar DATABASE_URL en tres servicios). El wipe conserva el mismo servicio y sus variables, por lo que la referencia ${{Postgres.DATABASE_URL}} y la credencial del rol externo no cambian. En la misma ventana se actualizó la imagen del servicio de ghcr.io/railwayapp-templates/postgres-ssl:18.4 al tag mayor :18 y se habilitó PITR (archivado continuo de WAL vía pgBackRest), manteniendo además los volume backups diarios como segunda capa.
+
+### Consecuencias
+
+- Restore limpio: pg_restore exit 0 sin errores (375 s), base en 1091 MB, conteos verificados (users y spec_options exactos contra referencia), rol novotech_external_ro recreado con su misma contraseña y sus 10 grants intactos.
+- El wipe borra también los backups de Railway del servicio: durante la operación la única copia fue el dump local verificado (D:\novotechflow-backups, formato custom, 780 MB, pg_restore --list con 142 entradas TOC).
+- El valor asentado esperado de DISK_USAGE_GB es ~6 GB, no ~1.2: Railway cuenta la metadata de ext4 (2–3% de los 220 GB del volumen). La ganancia real es de ~10 GB por backup.
+- Redeploy del servicio api tras el restore para renovar el pool de conexiones de Prisma.
+- La imagen con tag mayor :18 sigue los rebuilds de Railway y los fixes de pgBackRest automáticamente; ya no está congelada en 18.4.
+- Procedimiento repetible documentado: dump -Fc con imagen postgres:18-alpine (pg_dump ≥ versión del servidor) + pg_dumpall --roles-only, verificación con pg_restore --list y tamaño plausible, wipe, roles primero, restore, verificación de conteos y grants.
+
+### Archivos
+
+Ninguno en el repo. Dumps en D:\novotechflow-backups (fuera del repo).
+
+### Commits
+
+- docs: ADR-082 railway postgres volume wipe restore and pitr
+
+### Pendientes
+
+- Verificar que el backup diario nocturno bajó a ~6 GB y que PITR está archivando (pestaña Backups).
+- El peso vivo real y creciente sigue siendo proposal_page_blocks (imágenes base64): la deduplicación por hash (Cohorte 2 del fix de incidentes) es el fix estructural y sigue pendiente tras feature/wysiwyg-pages.
