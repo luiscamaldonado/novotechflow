@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ImageAssetsService } from '../image-assets/image-assets.service';
 import {
   ProposalStatus,
   ConsecutiveSource,
@@ -40,7 +41,10 @@ const CONSECUTIVE_PAD_LENGTH = 5;
 export class ProposalsService {
   private readonly logger = new Logger(ProposalsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly imageAssets: ImageAssetsService,
+  ) {}
 
   /**
    * Verifica que el usuario tenga acceso a la propuesta.
@@ -356,15 +360,38 @@ export class ProposalsService {
    */
   async getProposalById(id: string, user: AuthenticatedUser) {
     await this.verifyProposalOwnership(id, user);
-    return this.prisma.proposal.findUnique({
+    const proposal = await this.prisma.proposal.findUnique({
       where: { id },
       include: {
         proposalItems: { orderBy: { sortOrder: 'asc' } },
         user: {
-          select: { name: true, nomenclature: true, signatureUrl: true },
+          select: {
+            name: true,
+            nomenclature: true,
+            signatureUrl: true,
+            signatureAssetId: true,
+          },
         },
       },
     });
+    if (!proposal) return proposal;
+
+    // La firma del dueno alimenta el PDF en el cliente: si vive como asset,
+    // se resuelve aqui para que llegue como data URI bajo el mismo campo.
+    const { signatureAssetId, ...owner } = proposal.user;
+    const [resolved] = await this.imageAssets.rehydrateMany([
+      { assetId: signatureAssetId },
+    ]);
+    const signatureUrl: unknown = resolved.url;
+
+    return {
+      ...proposal,
+      user: {
+        ...owner,
+        signatureUrl:
+          typeof signatureUrl === 'string' ? signatureUrl : owner.signatureUrl,
+      },
+    };
   }
 
   /**

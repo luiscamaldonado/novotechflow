@@ -22,22 +22,76 @@ export class TemplatesService {
   }
 
   /**
+   * Reconstruye content.url desde el asset referenciado antes de responder.
+   * No-op si content no es objeto o si no referencia ningun asset.
+   */
+  private async rehydrateContent(content: unknown): Promise<unknown> {
+    if (!this.isContentObject(content)) return content;
+    return this.imageAssets.rehydrateImageContent(content);
+  }
+
+  /** true si el content del bloque es un objeto JSON (ni null ni escalar). */
+  private isContentObject(
+    content: unknown,
+  ): content is Record<string, unknown> {
+    return !!content && typeof content === 'object' && !Array.isArray(content);
+  }
+
+  /**
+   * Rehidrata los bloques de un lote de plantillas con un solo findMany
+   * para todos los assets referenciados (sin N+1). Muta el array content.
+   */
+  private async rehydrateTemplates<T extends { content: unknown }>(
+    templates: T[],
+  ): Promise<T[]> {
+    const contents: Record<string, unknown>[] = [];
+    const positions: [number, number][] = [];
+
+    templates.forEach((template, templateIndex) => {
+      if (!Array.isArray(template.content)) return;
+      template.content.forEach((block: unknown, blockIndex: number) => {
+        if (!this.isContentObject(block)) return;
+        if (!this.isContentObject(block.content)) return;
+        contents.push(block.content);
+        positions.push([templateIndex, blockIndex]);
+      });
+    });
+    if (contents.length === 0) return templates;
+
+    const rehydrated = await this.imageAssets.rehydrateMany(contents);
+
+    positions.forEach(([templateIndex, blockIndex], i) => {
+      const blocks = templates[templateIndex].content as unknown[];
+      blocks[blockIndex] = {
+        ...(blocks[blockIndex] as Record<string, unknown>),
+        content: rehydrated[i],
+      };
+    });
+
+    return templates;
+  }
+
+  /**
    * Get all active templates ordered by sortOrder.
    */
   async findAll() {
-    return this.prisma.pdfTemplate.findMany({
+    const templates = await this.prisma.pdfTemplate.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
+    return this.rehydrateTemplates(templates);
   }
 
   /**
    * Get one template by ID.
    */
   async findOne(id: string) {
-    return this.prisma.pdfTemplate.findUnique({
+    const template = await this.prisma.pdfTemplate.findUnique({
       where: { id },
     });
+    if (!template) return template;
+    const [rehydrated] = await this.rehydrateTemplates([template]);
+    return rehydrated;
   }
 
   /**
@@ -119,7 +173,11 @@ export class TemplatesService {
       data: { content: blocks },
     });
 
-    return newBlock;
+    // Lo persistido queda deshidratado; la respuesta lleva la url usable.
+    return {
+      ...newBlock,
+      content: await this.rehydrateContent(newBlock.content),
+    };
   }
 
   /**
@@ -142,7 +200,10 @@ export class TemplatesService {
       data: { content: blocks },
     });
 
-    return blocks[idx];
+    return {
+      ...blocks[idx],
+      content: await this.rehydrateContent(blocks[idx].content),
+    };
   }
 
   /**
@@ -197,7 +258,10 @@ export class TemplatesService {
       data: { content: blocks },
     });
 
-    return blocks[idx];
+    return {
+      ...blocks[idx],
+      content: await this.rehydrateContent(blocks[idx].content),
+    };
   }
 
   /**

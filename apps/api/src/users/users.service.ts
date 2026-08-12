@@ -17,6 +17,36 @@ export class UsersService {
     private imageAssets: ImageAssetsService,
   ) {}
 
+  /**
+   * Resuelve la firma de un lote de usuarios con una sola consulta.
+   * Precedencia: si hay signatureAssetId, signatureUrl pasa a ser el data URI
+   * del asset; si no, queda el signatureUrl legacy. signatureAssetId no se
+   * expone, para que el contrato de la respuesta no cambie.
+   */
+  private async resolveSignatures(
+    users: Record<string, unknown>[],
+  ): Promise<Record<string, unknown>[]> {
+    const resolved = await this.imageAssets.rehydrateMany(
+      users.map((user) => ({ assetId: user.signatureAssetId })),
+    );
+
+    return users.map((user, index) => {
+      const output: Record<string, unknown> = { ...user };
+      delete output.signatureAssetId;
+      const url: unknown = resolved[index].url;
+      if (typeof url === 'string') output.signatureUrl = url;
+      return output;
+    });
+  }
+
+  /** Version de un solo usuario de resolveSignatures. */
+  private async resolveSignature(
+    user: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const [resolved] = await this.resolveSignatures([user]);
+    return resolved;
+  }
+
   async findOneByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { email },
@@ -145,7 +175,7 @@ export class UsersService {
     }
 
     // 7. Ejecutar update SIN retornar passwordHash
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: targetUserId },
       data,
       select: {
@@ -155,16 +185,18 @@ export class UsersService {
         role: true,
         nomenclature: true,
         signatureUrl: true,
+        signatureAssetId: true,
         isActive: true,
         proposalCounterStart: true,
         createdAt: true,
         updatedAt: true,
       },
-    }) as unknown as Promise<User>;
+    });
+    return (await this.resolveSignature(updated)) as unknown as User;
   }
 
   async findAll() {
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       select: {
         id: true,
         name: true,
@@ -172,6 +204,7 @@ export class UsersService {
         role: true,
         nomenclature: true,
         signatureUrl: true,
+        signatureAssetId: true,
         isActive: true,
         proposalCounterStart: true,
         createdAt: true,
@@ -180,6 +213,7 @@ export class UsersService {
         createdAt: 'desc',
       },
     });
+    return this.resolveSignatures(users);
   }
 
   async deleteUser(id: string) {
@@ -291,10 +325,14 @@ export class UsersService {
     return { ...user, signatureUrl };
   }
 
+  /**
+   * Borra la firma en ambas representaciones. El asset queda huerfano en
+   * image_assets a proposito: su recoleccion es un pendiente aparte.
+   */
   async deleteSignature(id: string) {
     return this.prisma.user.update({
       where: { id },
-      data: { signatureUrl: null },
+      data: { signatureUrl: null, signatureAssetId: null },
       select: {
         id: true,
         name: true,

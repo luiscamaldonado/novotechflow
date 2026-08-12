@@ -35,6 +35,22 @@ export class PagesService {
   }
 
   /**
+   * Reconstruye content.url desde el asset referenciado antes de responder.
+   * No-op si content no es objeto o si no referencia ningun asset.
+   */
+  private async rehydrateContent(content: unknown): Promise<unknown> {
+    if (!this.isContentObject(content)) return content;
+    return this.imageAssets.rehydrateImageContent(content);
+  }
+
+  /** true si el content del bloque es un objeto JSON (ni null ni escalar). */
+  private isContentObject(
+    content: unknown,
+  ): content is Record<string, unknown> {
+    return !!content && typeof content === 'object' && !Array.isArray(content);
+  }
+
+  /**
    * Verifica ownership a través de una página.
    * Busca la page → obtiene proposalId → verifica ownership.
    */
@@ -219,11 +235,33 @@ export class PagesService {
   async getPagesByProposalId(proposalId: string, user?: AuthenticatedUser) {
     if (user)
       await this.proposalsService.verifyProposalOwnership(proposalId, user);
-    return this.prisma.proposalPage.findMany({
+    const pages = await this.prisma.proposalPage.findMany({
       where: { proposalId },
       include: { blocks: { orderBy: { sortOrder: 'asc' } } },
       orderBy: { sortOrder: 'asc' },
     });
+
+    // Un solo findMany para los assets de todos los bloques de todas las
+    // paginas: rehidratar bloque por bloque seria N+1.
+    const contents: Record<string, unknown>[] = [];
+    for (const page of pages) {
+      for (const block of page.blocks) {
+        contents.push(this.isContentObject(block.content) ? block.content : {});
+      }
+    }
+    if (contents.length === 0) return pages;
+
+    const rehydrated = await this.imageAssets.rehydrateMany(contents);
+
+    let cursor = 0;
+    return pages.map((page) => ({
+      ...page,
+      blocks: page.blocks.map((block) => {
+        const content = rehydrated[cursor++];
+        if (!this.isContentObject(block.content)) return block;
+        return { ...block, content: content as object };
+      }),
+    }));
   }
 
   /**
@@ -340,7 +378,7 @@ export class PagesService {
 
     const contentToPersist = await this.dehydrateContent(contentToSave);
 
-    return this.prisma.proposalPageBlock.create({
+    const created = await this.prisma.proposalPageBlock.create({
       data: {
         pageId,
         blockType: data.blockType as BlockType,
@@ -348,6 +386,12 @@ export class PagesService {
         sortOrder: nextOrder,
       },
     });
+
+    // Lo persistido queda deshidratado; la respuesta lleva la url usable.
+    return {
+      ...created,
+      content: (await this.rehydrateContent(created.content)) as object,
+    };
   }
 
   /**
