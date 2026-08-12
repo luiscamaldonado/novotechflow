@@ -1,10 +1,25 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ImageAssetsService } from '../image-assets/image-assets.service';
 import { PageType } from '@prisma/client';
 
 @Injectable()
 export class TemplatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly imageAssets: ImageAssetsService,
+  ) {}
+
+  /**
+   * Extrae a image_assets cualquier data URI en content.url antes de persistir.
+   * No-op si content no es objeto o si url no es un data URI.
+   */
+  private async dehydrateContent(content: unknown): Promise<unknown> {
+    if (!content || typeof content !== 'object') return content;
+    return this.imageAssets.dehydrateImageContent(
+      content as Record<string, unknown>,
+    );
+  }
 
   /**
    * Get all active templates ordered by sortOrder.
@@ -94,7 +109,7 @@ export class TemplatesService {
     const newBlock = {
       id: crypto.randomUUID(),
       blockType: block.blockType,
-      content: block.content,
+      content: await this.dehydrateContent(block.content),
       sortOrder: blocks.length + 1,
     };
     blocks.push(newBlock);
@@ -120,7 +135,7 @@ export class TemplatesService {
     const idx = blocks.findIndex((b: any) => b.id === blockId);
     if (idx === -1) throw new Error('Block not found');
 
-    blocks[idx].content = content;
+    blocks[idx].content = await this.dehydrateContent(content);
 
     await this.prisma.pdfTemplate.update({
       where: { id: templateId },
@@ -172,7 +187,10 @@ export class TemplatesService {
     const idx = blocks.findIndex((b: any) => b.id === blockId);
     if (idx === -1) throw new Error('Block not found');
 
-    blocks[idx].content = { ...blocks[idx].content, url: imageUrl };
+    blocks[idx].content = await this.dehydrateContent({
+      ...blocks[idx].content,
+      url: imageUrl,
+    });
 
     await this.prisma.pdfTemplate.update({
       where: { id: templateId },

@@ -4,6 +4,7 @@ import { ProposalsService } from './proposals.service';
 import { BlockType, PageType } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizeRichText } from '../common/sanitize';
+import { ImageAssetsService } from '../image-assets/image-assets.service';
 import { assertProposalNotLocked } from './proposals-lock.helper';
 import {
   CreatePageDto,
@@ -19,7 +20,19 @@ export class PagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly proposalsService: ProposalsService,
+    private readonly imageAssets: ImageAssetsService,
   ) {}
+
+  /**
+   * Extrae a image_assets cualquier data URI en content.url antes de persistir.
+   * No-op si content no es objeto o si url no es un data URI.
+   */
+  private async dehydrateContent(content: unknown): Promise<unknown> {
+    if (!content || typeof content !== 'object') return content;
+    return this.imageAssets.dehydrateImageContent(
+      content as Record<string, unknown>,
+    );
+  }
 
   /**
    * Verifica ownership a través de una página.
@@ -325,11 +338,13 @@ export class PagesService {
           }
         : data.content || {};
 
+    const contentToPersist = await this.dehydrateContent(contentToSave);
+
     return this.prisma.proposalPageBlock.create({
       data: {
         pageId,
         blockType: data.blockType as BlockType,
-        content: contentToSave as object,
+        content: contentToPersist as object,
         sortOrder: nextOrder,
       },
     });
@@ -360,9 +375,11 @@ export class PagesService {
           }
         : data.content;
 
+    const contentToPersist = await this.dehydrateContent(contentToSave);
+
     return this.prisma.proposalPageBlock.update({
       where: { id: blockId },
-      data: { content: contentToSave as object | undefined },
+      data: { content: contentToPersist as object | undefined },
       select: {
         id: true,
         pageId: true,

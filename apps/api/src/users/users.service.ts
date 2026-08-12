@@ -5,13 +5,17 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ImageAssetsService } from '../image-assets/image-assets.service';
 import { User, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private imageAssets: ImageAssetsService,
+  ) {}
 
   async findOneByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({
@@ -254,16 +258,37 @@ export class UsersService {
     });
   }
 
+  /**
+   * Guarda la firma. Si es un data URI valido se extrae a image_assets y solo
+   * queda la referencia; si no lo es, se conserva el comportamiento legacy de
+   * escribirla en signatureUrl. La respuesta expone siempre el data URI
+   * recibido, para no cambiarle el contrato al cliente.
+   */
   async updateSignature(id: string, signatureUrl: string) {
-    return this.prisma.user.update({
+    const assetId = await this.imageAssets.ingestDataUri(signatureUrl);
+
+    if (assetId === null) {
+      return this.prisma.user.update({
+        where: { id },
+        data: { signatureUrl },
+        select: {
+          id: true,
+          name: true,
+          signatureUrl: true,
+        },
+      });
+    }
+
+    const user = await this.prisma.user.update({
       where: { id },
-      data: { signatureUrl },
+      data: { signatureAssetId: assetId, signatureUrl: null },
       select: {
         id: true,
         name: true,
-        signatureUrl: true,
       },
     });
+
+    return { ...user, signatureUrl };
   }
 
   async deleteSignature(id: string) {
