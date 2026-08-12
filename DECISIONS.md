@@ -3524,3 +3524,47 @@ Ninguno en el repo. Dumps en D:\novotechflow-backups (fuera del repo).
 
 - Verificar que el backup diario nocturno bajó a ~6 GB y que PITR está archivando (pestaña Backups).
 - El peso vivo real y creciente sigue siendo proposal_page_blocks (imágenes base64): la deduplicación por hash (Cohorte 2 del fix de incidentes) es el fix estructural y sigue pendiente tras feature/wysiwyg-pages.
+
+## ADR-083 — Deduplicación de imágenes base64 en tabla de assets (Cohorte 2)
+
+**Fecha:** 2026-08-12
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-070 diagnosticó que el peso de la base vivía en imágenes base64 duplicadas dentro de `proposal_page_blocks.content`; ADR-082 lo midió en producción (~1069 MB de tabla). La auditoría de datos sobre `novotechflow_prod_copy` (2026-08-12) lo precisó: 609 data URIs en tres tablas (`proposal_page_blocks` 599, `pdf_templates` 1, `users.signature_url` 9) que reducen a solo 50 imágenes únicas — 98.32% de bytes duplicados. Un solo JPEG de 2.48 MB (bloque IMAGE de la plantilla "PROPUESTA DE VALOR", no la portada como se creyó inicialmente) aparecía 288 veces (714 MB, 85% del problema). El mecanismo de amplificación: `initializeDefaultPages` copia los bloques de plantilla a cada propuesta nueva y `cloneProposal` los re-copia verbatim en cada versión. Los data URIs entran a la DB por los PATCH de bloques y plantillas (los uploads de bloques son stateless: devuelven el data URI y el frontend lo re-envía) y por `updateSignature`. RICH_TEXT verificado limpio (TipTap sin extensión Image). Además se invirtió el orden registrado en ADR-070: la Cohorte 2 se ejecutó antes del aterrizaje de `feature/wysiwyg-pages`, porque esa rama aún tiene trabajo grande de UI pendiente y el editor nuevo conviene construirlo sobre el modelo final de assets; su migración (`isSectionModel`, `parentPageId`) se regenerará con timestamp nuevo durante su rebase (el drift de esas columnas en la base local de desarrollo proviene de esa rama y se reconcilia ahí).
+
+### Decisión
+
+Tabla global `image_assets` en Postgres (se mantiene la regla de no usar storage externo): `sha256` único (hash sobre los bytes decodificados), `mime_type`, `size_bytes`, `data` con SOLO el payload base64 sin prefijo. Deshidratación en los sumideros de persistencia — `pages.service` (createBlock/updateBlock), `templates.service` (addBlock/updateBlock/updateBlockImage), `users.service` (updateSignature con `signature_asset_id` y precedencia asset-primero en lectura) — vía `ImageAssetsService` (`ingestDataUri`/`dehydrateImageContent`): el content persiste `{ assetId }` sin base64, de forma idempotente ante re-envíos del frontend. Rehidratación en los read paths (`getPagesByProposalId`, lecturas de templates, `findAll`/`updateUser` de users, `getProposalById` para la firma del PDF) con `rehydrateMany` en lote (sin N+1): el frontend recibe `content.url` como siempre y no se tocó ni una línea de `apps/web`. `initializeDefaultPages` y `cloneProposal` quedan intactos: copian content crudo, que ahora es una referencia de ~50 caracteres — la duplicación muere en el origen. Compat legacy expand-contract: los data URIs preexistentes se sirven tal cual hasta el backfill. Backfill idempotente en `apps/api/scripts/backfill-image-assets.ts` (mismos criterios de hash que el servicio, compare-and-swap por fila contra escrituras concurrentes, manejo de carrera P2002, verificación integrada), a ejecutar con la API detenida, seguido de `VACUUM FULL proposal_page_blocks`. La API externa no se ve afectada: no expone páginas, bloques ni firmas, y el rol `novotech_external_ro` es fail-closed — `image_assets` NO se le otorga.
+
+### Consecuencias
+
+Ensayo completo contra `novotechflow_prod_copy`: 599+1+9 filas migradas y 50 assets únicos (coincidencia exacta con la auditoría), segunda corrida en 0 cambios (idempotencia), y base de 895 MB → 41 MB (−95.4%) tras `VACUUM FULL`; `proposal_page_blocks` de 869 MB → 3.6 MB. Clones y versiones nuevas dejan de duplicar bytes. El desperdicio de ~750 KB/request en `api-external` (el guard selecciona `signatureUrl`) desaparece de facto al quedar la columna nula tras el backfill. El despliegue a producción aplicará una sola migración pendiente: `add_image_assets` (`add_proposal_status_aplazada_cancelada` ya estaba aplicada en producción desde 2026-07-23; la copia local del ensayo era un snapshot anterior a esa fecha y la reportaba pendiente).
+
+### Archivos
+
+- `apps/api/prisma/schema.prisma` + migración `20260812131418_add_image_assets`
+- `apps/api/src/image-assets/image-assets.service.ts`, `image-assets.module.ts` (nuevo módulo, importado por Proposals/Templates/UsersCore)
+- `apps/api/src/proposals/pages.service.ts`, `apps/api/src/proposals/proposals.service.ts`
+- `apps/api/src/templates/templates.service.ts`
+- `apps/api/src/users/users.service.ts`, `users.service.spec.ts`
+- `apps/api/scripts/backfill-image-assets.ts`
+
+### Commits
+
+- `a1d5666` feat(api): add image_assets table and users.signature_asset_id
+- `ab910a7` feat(api): image assets service with sha256 dedup
+- `33b4720` feat(api): dehydrate image data URIs to assets on write
+- `949188b` feat(api): rehydrate image assets on read paths
+- `8dcea4a` feat(api): idempotent backfill script for image assets
+
+### Pendientes
+
+- GC de assets huérfanos en `image_assets` (riesgo bajo: la tabla completa pesa ~15 MB).
+- Sacar `signatureUrl` del select de `findOneById` (lo usan los guards de `api-external`; desperdicio preexistente, inofensivo tras el backfill).
+- Validar la forma de `content` en los PATCH de bloques y plantillas (hoy aceptan objeto arbitrario).
+- `sanitizeRichText` no corre con TipTap JSON (solo aplica si `content.html` es string); inofensivo hoy — sin extensión Image no entra base64 por RICH_TEXT — pero si se agrega `@tiptap/extension-image` habrá que revisarlo.
+- Tests reales del ciclo dehydrate→rehydrate (los specs actuales son smoke).
+- Verificar los grants vivos de `novotech_external_ro` contra `information_schema.role_table_grants` (hoy solo documentados en prosa, ADR-081).
+- `novotechflow_prod_copy` quedó migrada y compactada por el ensayo; restaurar del dump de `D:\novotechflow-backups` si se necesita re-ensayar.
