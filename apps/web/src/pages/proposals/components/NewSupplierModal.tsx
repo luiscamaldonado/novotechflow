@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { normalizeSupplierName, findSimilarCompanies } from '../../../lib/supplierMatch';
@@ -8,7 +8,6 @@ import type { SupplierCompany } from '../../../lib/types';
 const MAX_SIMILAR_SUGGESTIONS = 3;
 
 interface NewSupplierModalProps {
-    isOpen: boolean;
     initialName: string;
     companies: SupplierCompany[];
     onClose: () => void;
@@ -30,7 +29,6 @@ function extractConflictMessage(error: unknown): string | null {
 }
 
 export default function NewSupplierModal({
-    isOpen,
     initialName,
     companies,
     onClose,
@@ -42,13 +40,6 @@ export default function NewSupplierModal({
     const [isSaving, setIsSaving] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (isOpen) {
-            setName(initialName);
-            setErrorMsg(null);
-        }
-    }, [isOpen, initialName]);
-
     const trimmedName = name.trim();
     const normalizedName = normalizeSupplierName(name);
 
@@ -56,8 +47,6 @@ export default function NewSupplierModal({
         if (!trimmedName) return [];
         return findSimilarCompanies(trimmedName, companies, MAX_SIMILAR_SUGGESTIONS);
     }, [trimmedName, companies]);
-
-    if (!isOpen) return null;
 
     const isValid = trimmedName.length > 0;
 

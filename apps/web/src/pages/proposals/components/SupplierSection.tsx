@@ -148,15 +148,16 @@ export default function SupplierSection({
                 )}
             </div>
 
-            <NewSupplierModal
-                isOpen={isModalOpen}
-                initialName={pendingName}
-                companies={companies}
-                createCompany={createCompany}
-                onClose={() => setIsModalOpen(false)}
-                onCreated={company => onChange({ supplierCompanyId: company.id, supplierContactId: null })}
-                onSelectExisting={company => onChange({ supplierCompanyId: company.id, supplierContactId: null })}
-            />
+            {isModalOpen && (
+                <NewSupplierModal
+                    initialName={pendingName}
+                    companies={companies}
+                    createCompany={createCompany}
+                    onClose={() => setIsModalOpen(false)}
+                    onCreated={company => onChange({ supplierCompanyId: company.id, supplierContactId: null })}
+                    onSelectExisting={company => onChange({ supplierCompanyId: company.id, supplierContactId: null })}
+                />
+            )}
         </div>
     );
 }

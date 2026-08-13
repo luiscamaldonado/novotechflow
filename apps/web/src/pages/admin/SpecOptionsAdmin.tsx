@@ -283,12 +283,14 @@ export default function SpecOptionsAdmin() {
 
             {/* Create/Edit Modal */}
             <AnimatePresence>
-                <SpecOptionFormModal
-                    isOpen={isModalOpen}
-                    onClose={() => setIsModalOpen(false)}
-                    onSave={handleSave}
-                    editingOption={editingOption}
-                />
+                {isModalOpen && (
+                    <SpecOptionFormModal
+                        key={editingOption?.id ?? 'new'}
+                        onClose={() => setIsModalOpen(false)}
+                        onSave={handleSave}
+                        editingOption={editingOption}
+                    />
+                )}
             </AnimatePresence>
         </div>
     );

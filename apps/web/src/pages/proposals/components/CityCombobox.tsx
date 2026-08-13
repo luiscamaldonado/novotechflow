@@ -22,8 +22,12 @@ function CityCombobox({ value, onChange, disabled = false, required = false }: C
         return COLOMBIAN_CAPITAL_CITIES.filter(c => c.toLowerCase().includes(lower));
     }, [query]);
 
-    // Sync external value changes
-    useEffect(() => { setQuery(value); }, [value]);
+    // Sync external value changes (state adjusted during render, not in an effect)
+    const [prevValue, setPrevValue] = useState(value);
+    if (value !== prevValue) {
+        setPrevValue(value);
+        setQuery(value);
+    }
 
     // Close on outside click
     useEffect(() => {

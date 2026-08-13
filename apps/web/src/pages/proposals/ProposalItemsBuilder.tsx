@@ -711,11 +711,14 @@ export default function ProposalItemsBuilder() {
 
             <ProposalNavBar proposalId={id!} currentStep={1} />
 
-            <PrefillModal
-                isOpen={isPrefillOpen}
-                onClose={() => setIsPrefillOpen(false)}
-                onApply={handlePrefillApply}
-            />
+            <AnimatePresence>
+                {isPrefillOpen && (
+                    <PrefillModal
+                        onClose={() => setIsPrefillOpen(false)}
+                        onApply={handlePrefillApply}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 }

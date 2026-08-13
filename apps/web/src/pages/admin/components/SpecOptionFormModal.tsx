@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Loader2 } from 'lucide-react';
 import { SPEC_FIELD_NAMES, FIELD_NAME_LABELS } from '../../../hooks/useSpecOptionsAdmin';
@@ -7,7 +7,6 @@ import type { SpecOption, SpecFieldName } from '../../../hooks/useSpecOptionsAdm
 // ── Types ────────────────────────────────────────────────────
 
 interface SpecOptionFormModalProps {
-    isOpen: boolean;
     onClose: () => void;
     onSave: (fieldName: string, value: string) => Promise<void>;
     editingOption: SpecOption | null;
@@ -16,28 +15,18 @@ interface SpecOptionFormModalProps {
 // ── Component ────────────────────────────────────────────────
 
 export default function SpecOptionFormModal({
-    isOpen,
     onClose,
     onSave,
     editingOption,
 }: SpecOptionFormModalProps) {
-    const [fieldName, setFieldName] = useState<SpecFieldName>(SPEC_FIELD_NAMES[0]);
-    const [value, setValue] = useState('');
+    const [fieldName, setFieldName] = useState<SpecFieldName>(
+        editingOption ? (editingOption.fieldName as SpecFieldName) : SPEC_FIELD_NAMES[0],
+    );
+    const [value, setValue] = useState(editingOption?.value ?? '');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
     const isEditMode = editingOption !== null;
-
-    useEffect(() => {
-        if (editingOption) {
-            setFieldName(editingOption.fieldName as SpecFieldName);
-            setValue(editingOption.value);
-        } else {
-            setFieldName(SPEC_FIELD_NAMES[0]);
-            setValue('');
-        }
-        setError('');
-    }, [editingOption, isOpen]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -59,8 +48,6 @@ export default function SpecOptionFormModal({
             setSaving(false);
         }
     };
-
-    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
