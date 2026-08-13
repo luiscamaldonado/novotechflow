@@ -3752,3 +3752,39 @@ Bump: jest ^30.4.2 + @types/jest ^30.0.0 en el mismo commit; ts-jest intacto en 
 - El spec e2e no hace app.close(): el pool de Prisma queda abierto y Jest avisa "did not exit" — afterAll pendiente.
 - packages/pricing-engine (fuente de verdad de cálculo) no tiene suite de tests propia; los 6 unit specs de api solo verifican toBeDefined().
 - Cohorte D restante, en orden: Vite 8 + @vitejs/plugin-react 6; TypeScript 7 (verificar antes el peer de typescript-eslint, hoy <6.1.0).
+
+## ADR-089 — Migración a Vite 8 (Rolldown) y @vitejs/plugin-react 6
+
+**Fecha:** 2026-08-13
+**Estado:** Aceptado
+
+### Contexto
+
+Tercer bloque de la Cohorte D restante (ADR-087/088). Vite 8 reemplaza Rollup+esbuild por Rolldown/Oxc y Lightning CSS. Diagnóstico previo: Node sin cambio de mínimo (20.19+/22.12+, cumplido en local/CI/Docker), pipeline CSS (Tailwind 3 vía PostCSS) sin conflicto de peers, import.meta.env sin cambios (5 usos de VITE_API_URL, prefijo correcto), y un único hit directo del config: build.commonjsOptions, opción eliminada en 8 — existía por los paquetes workspace CJS @repo/pricing-engine y @repo/item-display (ADR-052), y como tsc -b typechequea vite.config.ts (tsconfig.node.json), el build rompería en compile-time. Superficie de riesgo real: el cambio de interop de default imports CJS de Rolldown, justo sobre el pricing-engine.
+
+### Decisión
+
+Salto conjunto: vite ^8.2.1 + @vitejs/plugin-react ^6.0.5. El plugin en 6.x es la versión nativa del pipeline Oxc (elimina Babel y la opción babel, que el repo no usa); quedarse en 5.2.0 —compatible solo por rango— habría repetido el patrón evitado con react-refresh en ADR-087. Se elimina build.commonjsOptions del config (Rolldown maneja CJS nativo); optimizeDeps.include se mantiene. Sin workarounds: no se activó legacy.inconsistentCjsInterop.
+
+### Consecuencias
+
+- Build 21.24 s → 5.48 s (~4×), 2573 módulos (vs 2652), chunks comparables o menores (index 480→405 kB); Rolldown reparte distinto (el chunk grande de tiptap pasa de llamarse RichTextEditor a PdfPreviewModal, mismo ~1 MB). Cero errores ni menciones de interop sobre los paquetes workspace.
+- tsc en cero (app y el tsc -b del build); verificación en navegador de Luis (CONVENTIONS §H): login, totales de escenarios contra pricing-engine, exportación a Excel y preview de PDF — todo correcto.
+- rollup desaparece del árbol de web; esbuild@0.28.2 permanece solo como peer opcional de vite que pnpm auto-instala, sin ejecutarse.
+- El warning de chunks >500 kB persiste y ahora sugiere build.rolldownOptions.output.codeSplitting — el pendiente de lazy loading (deploy 410db2f) cambia de vocabulario de Rollup a Rolldown.
+- Aviso informativo nuevo PLUGIN_TIMINGS: 64% del build en vite:css transform (Tailwind 3 vía PostCSS) — irrelevante con 5.48 s totales; se resolvería solo con Cohorte E (Tailwind 4), hoy en pausa.
+
+### Archivos
+
+- `apps/web/package.json` — vite y @vitejs/plugin-react
+- `apps/web/vite.config.ts` — eliminación de build.commonjsOptions
+- `pnpm-lock.yaml`
+
+### Commits
+
+- `1f048dd` — chore(deps): vite 8.2.1 + @vitejs/plugin-react 6.0.5
+
+### Pendientes
+
+- Cohorte D restante: TypeScript 7 — bloqueado por el peer de typescript-eslint (<6.1.0 hoy); verificar soporte antes de diseñar el salto.
+- Lazy loading de chunks grandes (tiptap/FileSaver), ahora en términos de Rolldown.
