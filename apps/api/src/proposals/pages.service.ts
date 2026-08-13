@@ -281,23 +281,38 @@ export class PagesService {
       user,
     );
     assertProposalNotLocked(proposal);
-    // Insert before TERMS (sortOrder 1000) but after everything else
-    const aggregate = await this.prisma.proposalPage.aggregate({
-      where: { proposalId, pageType: { not: 'TERMS' } },
-      _max: { sortOrder: true },
-    });
-    const nextOrder = (aggregate._max.sortOrder || 0) + 1;
 
-    return this.prisma.proposalPage.create({
-      data: {
-        proposalId,
-        pageType: 'CUSTOM',
-        title: data.title,
-        isLocked: false,
-        isSectionModel: true,
-        sortOrder: nextOrder,
-      },
-      include: { blocks: true },
+    return this.prisma.$transaction(async (tx) => {
+      // Punto de insercion: despues de todo lo que no es TERMS. Tras un
+      // reorder TERMS pierde su centinela 1000 (reorderPages renumera 1..N),
+      // asi que max+1 puede caer exactamente en su sortOrder.
+      const aggregate = await tx.proposalPage.aggregate({
+        where: { proposalId, pageType: { not: 'TERMS' } },
+        _max: { sortOrder: true },
+      });
+      const insertOrder = (aggregate._max.sortOrder || 0) + 1;
+
+      // Abre hueco: desplaza +1 todas las paginas de la propuesta que esten
+      // en insertOrder o despues, para que la nueva pagina no colisione.
+      await tx.proposalPage.updateMany({
+        where: {
+          proposalId,
+          sortOrder: { gte: insertOrder },
+        },
+        data: { sortOrder: { increment: 1 } },
+      });
+
+      return tx.proposalPage.create({
+        data: {
+          proposalId,
+          pageType: 'CUSTOM',
+          title: data.title,
+          isLocked: false,
+          isSectionModel: true,
+          sortOrder: insertOrder,
+        },
+        include: { blocks: true },
+      });
     });
   }
 
