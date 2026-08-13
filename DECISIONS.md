@@ -3604,3 +3604,39 @@ Durante la ventana quedó demostrada la señal de parada aceptable: deployments 
 - Verificar que el schedule de backups del volumen de Railway siga activo (el wipe de ADR-082 lo borró y se reprogramó; confirmar tras esta jornada) y tomar un `pg_dump` post-migración fresco (debería pesar decenas de MB).
 - `novotechflow_prod_copy` quedó con el estado del ensayo; para futuros ensayos, restaurar desde un dump post-migración.
 - Los pendientes técnicos de ADR-083 (GC de assets, select de findOneById, validación de content en PATCH, tests del ciclo) siguen vigentes.
+
+## ADR-085 — Migración a Turborepo 2 y pin de eslint-plugin-react-hooks
+
+**Fecha:** 2026-08-12
+**Estado:** Aceptado
+
+### Contexto
+
+La auditoría de actualización de entornos (agosto 2026) dejó el monorepo al día en patches y minors dentro de los majors declarados, y encontró Turborepo rezagado en v1 (1.13.4 frente a 2.10.9), pendiente P2 conocido. La verificación previa a la migración reveló que la única variable de entorno de build es VITE_API_URL, consumida por web#build en cinco archivos de apps/web/src, y que ambos Dockerfiles esquivan turbo por completo: ejecutan pnpm build directo en cada app (nest build / tsc -b && vite build), por lo que Railway nunca pasa por turbo ni por el lint de CI. Turbo 2 activa strict env mode por defecto: las variables no declaradas en turbo.json se filtran en silencio durante el build. Por otra parte, el batch de minors bumpeó eslint-plugin-react-hooks 7.0.1 → 7.1.1, cuyas reglas nuevas (react-hooks/set-state-in-effect, react-hooks/immutability) destaparon 19 errores preexistentes en apps/web y dejaron rojo el gate de lint de CI en el primer push que los ejercitó.
+
+### Decisión
+
+Migrar a Turborepo 2.10.9 renombrando pipeline → tasks en turbo.json y declarando env: ["VITE_API_URL"] en la task build, en lugar de restaurar el comportamiento laxo con envMode: loose. Declarar la variable desarma la trampa del strict mode (si mañana Docker, Railway o CI construyen vía turbo, la variable pasa) y conserva el hashing correcto de caché: con loose, la caché podría reutilizar un build horneado con otra VITE_API_URL. Para el gate de lint, pinnear eslint-plugin-react-hooks en 7.0.1 exacto (sin caret, porque ^7.0.1 es satisfecho por 7.1.1 y no revierte la resolución) en vez de corregir los 19 errores en caliente: las reglas nuevas señalan patrones cuyo arreglo cambia comportamiento en runtime (timing de fetches, sincronización de props a estado), y eso se planifica como refactor propio, no como fix de lint mecánico.
+
+### Consecuencias
+
+El pendiente P2 de Turborepo queda saldado y turbo.json ya no valida en falso contra el $schema de v2. La task build declara sus outputs reales (dist/**, corregido en la misma tanda desde el residuo .next/ del starter) y su variable de entorno, así que la caché de Turbo guarda artefactos y los invalida correctamente. CI volvió a verde de punta a punta (lint, typecheck, tests, build y docker build) con el pin. El pin es deuda explícita: retomar eslint-plugin-react-hooks 7.1.x exige resolver antes los 19 errores, y conviene hacerlo junto con o antes del salto a ESLint 10. Queda confirmado operativamente que Railway despliega directo del push sin esperar a CI, y que su build no ejercita ni turbo ni eslint.
+
+### Archivos
+
+- turbo.json — pipeline → tasks, env: ["VITE_API_URL"] en build (outputs a dist/** corregido en commit previo de la tanda)
+- package.json — turbo ^1.13.4 → ^2.10.9
+- apps/web/package.json — eslint-plugin-react-hooks pinneado a 7.0.1 exacto
+- pnpm-lock.yaml — resoluciones correspondientes
+
+### Commits
+
+- `df8637c` chore: migrate turborepo to v2
+- `17d6752` chore(deps): pin eslint-plugin-react-hooks to 7.0.1 pending hooks refactor
+
+### Pendientes
+
+- Refactor de los 19 errores de react-hooks 7.1.x en apps/web, agrupados por riesgo: (1) 3 casos en useDashboard.ts de funciones referenciadas antes de declararse — solo reordenar, riesgo mínimo; (2) 16 casos de setState síncrono dentro de useEffect — 10 son fetch-al-montar (mecánicos pero cambian timing) y 6 son sincronización de props a estado local en modales/combobox (decisión por caso: key, estado derivado o rediseño). Prerrequisito para despinnear eslint-plugin-react-hooks y para el salto a ESLint 10 (Cohorte D).
+- Cohorte D restante: ESLint 10 + globals 17 + @eslint/js 10, Jest 30, @vitejs/plugin-react 6 + Vite 8, TypeScript 7 (pin sincronizado en los 5 workspaces).
+- Cohortes E (Tailwind 3→4) y F (Prisma 5.10.2→7, escalonado 5→6→7 con ensayo contra novotechflow_prod_copy) en pausa hasta que feature/wysiwyg-pages llegue a master.
+- Chunks de Vite >500 kB (RichTextEditor, FileSaver) — lazy loading, pendiente arrastrado.
