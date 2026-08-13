@@ -105,6 +105,9 @@ export default function ProposalDocBuilder() {
     const moveTopLevel = (index: number, direction: 'up' | 'down') => {
         const newIndex = direction === 'up' ? index - 1 : index + 1;
         if (newIndex < 0 || newIndex >= topLevel.length) return;
+        // Las predeterminadas (COVER, INDEX, TERMS) conservan su posición:
+        // ni se mueven ni se les pasa por encima.
+        if (topLevel[index].page.isLocked || topLevel[newIndex].page.isLocked) return;
         const entries = [...topLevel];
         [entries[index], entries[newIndex]] = [entries[newIndex], entries[index]];
         reorderPages(flattenPageIds(entries));
@@ -435,7 +438,7 @@ export default function ProposalDocBuilder() {
                                                     <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); moveTopLevel(idx, 'up'); }}
-                                                            disabled={idx === 0}
+                                                            disabled={idx === 0 || page.isLocked || topLevel[idx - 1].page.isLocked}
                                                             className={cn(
                                                                 "p-0.5 rounded transition-colors disabled:opacity-30",
                                                                 isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
@@ -446,7 +449,7 @@ export default function ProposalDocBuilder() {
                                                         </button>
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); moveTopLevel(idx, 'down'); }}
-                                                            disabled={idx === topLevel.length - 1}
+                                                            disabled={idx === topLevel.length - 1 || page.isLocked || topLevel[idx + 1].page.isLocked}
                                                             className={cn(
                                                                 "p-0.5 rounded transition-colors disabled:opacity-30",
                                                                 isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
