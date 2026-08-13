@@ -3710,3 +3710,45 @@ Saltar en un solo bloque: eslint ^10.8.1 en ambas apps, @eslint/js ^10.0.1 solo 
 ### Pendientes
 
 - Cohorte D restante, en orden: Jest 30; Vite 8 + @vitejs/plugin-react 6; TypeScript 7 (pin exacto sincronizado en 5 workspaces — ojo: peer de typescript-eslint 8.67.0 es <6.1.0, requiere verificar soporte antes de saltar).
+
+## ADR-088 — Migración a Jest 30 y fix de la cadena ESM de htmlparser2 en Jest
+
+**Fecha:** 2026-08-13
+**Estado:** Aceptado
+
+### Contexto
+
+Segundo bloque de la Cohorte D restante (ADR-087). Diagnóstico previo: exposición casi nula a los breaking changes de Jest 30 (7 specs triviales sin fake timers, mocks, snapshots ni alias eliminados; config sin opciones tocadas; Node 22 uniforme; TS 6.0.2 > mínimo 5.4; ts-jest 29.4.12 ya con peer dual ^29 || ^30 — no existe ts-jest 30). Único paquete que obligaba a subir: @types/jest, que en 30 arrastra expect@30 y debe ir en el mismo commit que jest para no duplicar expect en el árbol.
+
+Al establecer el baseline e2e apareció un fallo preexistente e independiente del bump: el commit 63c976e (2026-08-12, chore de patches/minors) subió sanitize-html 2.17.2 → 2.17.6, cuyo htmlparser2 transitivo saltó de v10 (dual) a v12 (ESM puro). El require('sanitize-html') de common/sanitize.ts rompe en el runtime de Jest con SyntaxError: Cannot use import statement outside a module. Producción no está afectada: Node ≥22.12 implementa require(esm) nativo (verificado empíricamente); el fallo es exclusivo de jest-runtime, que solo soporta require(esm) en Node ≥24.9 — el bump a Jest 30 no lo curaba. Pasó inadvertido porque CI no ejecuta el e2e.
+
+### Decisión
+
+Desacoplar: primero el fix del e2e, luego el bump con baseline verde. Fix vía transformIgnorePatterns en vez de pinear sanitize-html (congelar un paquete de seguridad XSS para complacer a Jest es el trade-off equivocado; htmlparser2 v12+ es ESM permanente). El cierre ESM completo son 6 paquetes: htmlparser2, domelementtype, domhandler, domutils, dom-serializer, entities — todos type module sin build CJS, sin import.meta. Patrón único anclado a node_modules/.pnpm/ con clases [\\/] (Windows/Linux); la forma clásica de dos patrones se descartó porque el segmento node_modules interno de las rutas pnpm anula la excepción. Pieza imprescindible: allowJs: true como override inline en las opciones de ts-jest (el tsconfig no lo declara y sin él ts-jest no transforma los .js). El fix se replicó simétrico en el bloque jest unit de package.json — cualquier spec futuro que importe la cadena de sanitize reproduciría el mismo error críptico.
+
+Bump: jest ^30.4.2 + @types/jest ^30.0.0 en el mismo commit; ts-jest intacto en ^29.4.12.
+
+### Consecuencias
+
+- Unit 6/6, e2e 1/1 y tsc en cero en Jest 30; una sola copia de expect (30.4.1) compartida entre runtime y tipos; cero warnings de peers.
+- Las dos configs de Jest quedan simétricas frente a cadenas ESM-only; agregar un paquete al patrón es una edición puntual.
+- Lección: un chore(deps) de solo patches puede cambiar el sistema de módulos de una dependencia transitiva. La rotura entró por el lockfile sin tocar ningún package.json y ninguna puerta la detectó.
+
+### Archivos
+
+- `apps/api/test/jest-e2e.json` — transformIgnorePatterns + allowJs
+- `apps/api/package.json` — bloque jest unit simétrico; jest y @types/jest a 30
+- `pnpm-lock.yaml`
+
+### Commits
+
+- `0177bad` — fix(api): transform htmlparser2 esm chain in jest e2e config
+- `9386a03` — fix(api): mirror esm transform config in unit jest block
+- `2af1ac9` — chore(deps): jest 30.4.2 + @types/jest 30
+
+### Pendientes
+
+- E2e sin gate en CI: ci.yml y pr-check.yml corren solo unit; una regresión del e2e no se detecta automáticamente.
+- El spec e2e no hace app.close(): el pool de Prisma queda abierto y Jest avisa "did not exit" — afterAll pendiente.
+- packages/pricing-engine (fuente de verdad de cálculo) no tiene suite de tests propia; los 6 unit specs de api solo verifican toBeDefined().
+- Cohorte D restante, en orden: Vite 8 + @vitejs/plugin-react 6; TypeScript 7 (verificar antes el peer de typescript-eslint, hoy <6.1.0).
