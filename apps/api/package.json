@@ -92,8 +92,11 @@
         "rootDir": "src",
         "testRegex": ".*\\.spec\\.ts$",
         "transform": {
-            "^.+\\.(t|j)s$": "ts-jest"
+            "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": { "allowJs": true } }]
         },
+        "transformIgnorePatterns": [
+            "node_modules[\\\\/]\\.pnpm[\\\\/](?!(htmlparser2|domelementtype|domhandler|domutils|dom-serializer|entities)@)"
+        ],
         "collectCoverageFrom": [
             "**/*.(t|j)s"
         ],
