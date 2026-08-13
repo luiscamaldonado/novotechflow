@@ -3788,3 +3788,42 @@ Salto conjunto: vite ^8.2.1 + @vitejs/plugin-react ^6.0.5. El plugin en 6.x es l
 
 - Cohorte D restante: TypeScript 7 — bloqueado por el peer de typescript-eslint (<6.1.0 hoy); verificar soporte antes de diseñar el salto.
 - Lazy loading de chunks grandes (tiptap/FileSaver), ahora en términos de Rolldown.
+
+## ADR-090 — TypeScript 7 pospuesto: sin API programática hasta 7.1; Cohorte D cerrada
+
+**Fecha:** 2026-08-13
+**Estado:** Aceptado (posponer)
+
+### Contexto
+
+Último bloque de la Cohorte D (ADR-085 a 089). TypeScript 7.0.2 (GA 2026-07-08) es el compilador nativo en Go (tsgo/Corsa): el CLI sobrevive (tsc, --watch, -b, --noEmit funcionan — los dos gates del repo serían compatibles como comandos), pero 7.0 no incluye API programática; Microsoft la promete con 7.1, "al menos varios meses después", y será una API nueva. Diagnóstico contra registry y disco: el pin 6.0.2 está sincronizado en los 5 workspaces con una sola versión resuelta (la 5.9.3 anidada de @nestjs/cli es solo fallback — su TypeScriptBinaryLoader resuelve desde process.cwd(), así que nest build usa la del workspace).
+
+### Decisión
+
+Posponer el salto. Tres bloqueadores duros sin salida publicada, todos por la misma causa (la API inexistente):
+
+- typescript-eslint 8.67.0: peer >=4.8.4 <6.1.0, sin 9.x ni canary que lo amplíe; soporte de TS 7 cerrado como not-planned (issue #12521). Bloquea el lint de ambas apps.
+- ts-jest 29.4.12: peer >=4.3 <7. Bloquea los tests del api.
+- @nestjs/cli 11.0.24: nest build/start llaman createProgram()/emit() de la API — fallan con typescript@7 (nest-cli #3479); sin builder tsgo ni timeline (nest #15620).
+- ts-node y ts-loader pasan por semver pero usan la misma API: rotos en runtime bajo 7.0.
+
+Quedarse en 6.0.2 no es deuda urgente: es exactamente la línea que Microsoft mantiene como @typescript/typescript6 (binario tsc6, instalable como alias para convivencia 6/7).
+
+### Consecuencias
+
+- La Cohorte D queda cerrada en lo ejecutable: ESLint 10 (ADR-087), Jest 30 (ADR-088), Vite 8 (ADR-089); TS 7 pospuesto con este ADR. Baseline verde con 6.0.2 en ambos gates.
+- Cuando se retome, el trabajo real estará en apps/api/tsconfig.json: moduleResolution implícita (node10, eliminada en 7 — habría que declarar explícita), esModuleInterop forzado a true (hoy efectivamente false — cambia emit y chequeo de imports CJS), y endurecimientos que aplican aun con strict flags apagados. Web ya está prácticamente lista (bundler, strict, verbatimModuleSyntax).
+- Señales de re-evaluación: TS 7.1 publicada con API; typescript-eslint con peer ampliado o major nueva; ts-jest con peer >=7; nest-cli #3479 resuelto o builder tsgo disponible.
+
+### Archivos
+
+- Ninguno — diagnóstico sin cambios en el repo.
+
+### Commits
+
+- Ninguno de código; solo este ADR.
+
+### Pendientes
+
+- Re-evaluar TS 7 cuando aparezcan las señales listadas.
+- Cohortes E (Tailwind 3→4) y F (Prisma 5.10.2→7) siguen en pausa hasta el merge de feature/wysiwyg-pages.
