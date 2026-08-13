@@ -62,6 +62,7 @@ export default function ProposalDocBuilder() {
         if (priceWarningEvaluatedRef.current) return;
         priceWarningEvaluatedRef.current = true;
         if (priceWarnings.length > 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- latch de advertencia unica con guarda useRef
             setShowPriceWarning(true);
         }
     }, [scenariosLoading, priceWarnings]);

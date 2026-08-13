@@ -185,12 +185,6 @@ export function useDashboard() {
     const [closeMonthFilter, setCloseMonthFilter] = useState<Set<number>>(new Set());
     const [billingMonthFilter, setBillingMonthFilter] = useState<Set<number>>(new Set());
 
-    useEffect(() => {
-        loadData();
-        fetchTrm();
-        fetchTrmAverages();
-    }, []);
-
     const loadData = async () => {
         try {
             const [proposalsRes, projectionsRes] = await Promise.all([
@@ -241,6 +235,13 @@ export function useDashboard() {
             setIsLoadingTrmAverages(false);
         }
     };
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-al-montar: patron del proyecto, rediseno de data-fetching pendiente (ADR-086)
+        loadData();
+        fetchTrm();
+        fetchTrmAverages();
+    }, []);
 
     const loadProposals = async () => {
         try {

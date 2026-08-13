@@ -102,6 +102,7 @@ export function useSpecOptionsAdmin() {
     /* Fetch only when a specific field is selected; clear data when deselected. */
     useEffect(() => {
         if (selectedField) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-al-montar: patron del proyecto, rediseno de data-fetching pendiente (ADR-086)
             fetchOptions();
         } else {
             setOptions([]);

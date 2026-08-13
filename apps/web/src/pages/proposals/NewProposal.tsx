@@ -109,6 +109,7 @@ export default function NewProposal() {
     // ── Validación debounced del consecutivo manual ──────
     useEffect(() => {
         if (formData.consecutiveSource !== 'MANUAL') {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- validador con debounce: reset sincrono de estado derivado
             setManualValidation(null);
             setIsValidatingManual(false);
             return;

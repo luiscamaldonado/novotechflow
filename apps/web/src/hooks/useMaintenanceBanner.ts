@@ -45,6 +45,7 @@ export function useMaintenanceBanner(): UseMaintenanceBannerResult {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-al-montar: patron del proyecto, rediseno de data-fetching pendiente (ADR-086)
     fetchBanner();
     const intervalId = setInterval(fetchBanner, MAINTENANCE_BANNER_REFRESH_MS);
     return () => clearInterval(intervalId);

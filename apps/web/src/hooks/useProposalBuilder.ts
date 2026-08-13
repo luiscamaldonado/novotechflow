@@ -62,6 +62,7 @@ export function useProposalBuilder(proposalId: string | undefined) {
     }, []);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-al-montar: patron del proyecto, rediseno de data-fetching pendiente (ADR-086)
         loadProposalData();
         loadCatalogs();
     }, [loadProposalData, loadCatalogs]);
