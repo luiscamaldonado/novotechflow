@@ -3640,3 +3640,37 @@ El pendiente P2 de Turborepo queda saldado y turbo.json ya no valida en falso co
 - Cohorte D restante: ESLint 10 + globals 17 + @eslint/js 10, Jest 30, @vitejs/plugin-react 6 + Vite 8, TypeScript 7 (pin sincronizado en los 5 workspaces).
 - Cohortes E (Tailwind 3→4) y F (Prisma 5.10.2→7, escalonado 5→6→7 con ensayo contra novotechflow_prod_copy) en pausa hasta que feature/wysiwyg-pages llegue a master.
 - Chunks de Vite >500 kB (RichTextEditor, FileSaver) — lazy loading, pendiente arrastrado.
+
+## ADR-086 — Cierre de los errores de react-hooks 7.1.1: camino híbrido (fix real + supresiones documentadas)
+
+**Fecha:** 2026-08-13
+**Estado:** Aceptado
+
+### Contexto
+ADR-085 dejó eslint-plugin-react-hooks pinneado en 7.0.1 con 19 errores pendientes de las reglas nuevas de 7.1.1 (react-hooks/set-state-in-effect y react-hooks/immutability). El diagnóstico previo al refactor corrigió el plan registrado: eran 17 archivos (no 13), la regla reporta un solo error por useEffect aunque el cuerpo tenga varios setState (superficie real ~35 llamadas), no existe versión intermedia entre 7.0.1 y 7.1.1 que alivie, y el grupo "solo reordenar" de useDashboard.ts destaparía un error nuevo de set-state-in-effect al cerrarse los tres de immutability — cosa que ocurrió tal como se anticipó. Se evaluaron tres caminos: adoptar 7.1.1 con las reglas apagadas globalmente, refactor completo de los 19, o un híbrido.
+
+### Decisión
+Camino híbrido en tres commits. (1) Fix real de los cuatro casos de sincronización props→estado: los tres modales (SpecOptionFormModal, PrefillModal, NewSupplierModal) pasaron a montaje condicional en su padre — el remontaje con useState inicializado correctamente reemplaza los effects de reset, y SpecOptionFormModal remonta con key={editingOption?.id ?? 'new'} —, y CityCombobox pasó al patrón de estado derivado con comparación en render (prevValue). La prop isOpen se eliminó por completo de los tres modales. (2) Supresiones documentadas para lo que es patrón legítimo del proyecto: 11 sitios de fetch-al-montar (los 10 originales más el destapado en useDashboard.ts tras reordenar sus declaraciones arriba del effect, que cerró los 3 de immutability de verdad) con eslint-disable-next-line comentado como pendiente de rediseño de data-fetching, y 2 casos con patrón propio explicado en el comentario (validador con debounce en NewProposal.tsx, latch con guarda useRef en ProposalDocBuilder.tsx). La regla queda activa para código nuevo. (3) Despin a ^7.1.1, con lint en cero errores y cero warnings como prueba de cierre.
+
+### Consecuencias
+El pendiente principal de ADR-085 queda saldado y el salto a ESLint 10 (Cohorte D) deja de estar bloqueado por react-hooks. Las dos reglas nuevas vigilan el código nuevo; los 13 disables son localizables con grep para el día del rediseño de data-fetching (adopción de una librería o patrón de suscripción, decisión aparte). Cambios de comportamiento en runtime acotados al commit 1: los tres modales se desmontan al cerrar (nada persistía entre aperturas — sus effects eran reset-al-abrir), y la animación de salida de SpecOptionFormModal ahora corre (el AnimatePresence del padre por fin surte efecto). Smoke test de los cuatro flujos de UI realizado por Luis en local, en verde. Nota operativa: los tres modales ya no aceptan la prop isOpen; cualquier consumidor nuevo debe montarlos condicionalmente.
+
+### Archivos
+- apps/web/src/pages/admin/components/SpecOptionFormModal.tsx, apps/web/src/pages/admin/SpecOptionsAdmin.tsx — remontaje con key, sin isOpen ni effect de reset
+- apps/web/src/pages/proposals/components/PrefillModal.tsx, apps/web/src/pages/proposals/ProposalItemsBuilder.tsx — montaje condicional bajo AnimatePresence del padre
+- apps/web/src/pages/proposals/components/NewSupplierModal.tsx, apps/web/src/pages/proposals/components/SupplierSection.tsx — montaje condicional
+- apps/web/src/pages/proposals/components/CityCombobox.tsx — estado derivado con comparación en render
+- apps/web/src/hooks/useDashboard.ts — declaraciones movidas arriba del effect (cierra immutability)
+- 13 sitios con eslint-disable documentado: hooks/useActiveUsers.ts, hooks/useDashboard.ts, hooks/useMaintenanceBanner.ts, hooks/usePriceThresholds.ts, hooks/useProposalBuilder.ts, hooks/useProposalScenarios.ts, hooks/useScenarios.ts, hooks/useSpecOptionsAdmin.ts, hooks/useSupplierFieldRequirements.ts, hooks/useSuppliers.ts, pages/Users.tsx, pages/proposals/NewProposal.tsx, pages/proposals/ProposalDocBuilder.tsx
+- apps/web/package.json, pnpm-lock.yaml — despin a ^7.1.1
+
+### Commits
+- `13d6a5a` refactor(web): replace prop-sync effects with remount and derived state patterns
+- `3e0bc3c` chore(web): document set-state-in-effect suppressions pending data-fetching redesign
+- `7889856` chore(deps): unpin eslint-plugin-react-hooks to 7.1.1
+
+### Pendientes
+- Rediseño de data-fetching para eliminar los 11 disables de fetch-al-montar (librería de data-fetching o patrón de suscripción) — decisión de arquitectura aparte, sin urgencia.
+- Cohorte D restante (de ADR-085): ESLint 10 + globals 17 + @eslint/js 10 (ya desbloqueado), Jest 30, @vitejs/plugin-react 6 + Vite 8, TypeScript 7.
+- Cohortes E (Tailwind 3→4) y F (Prisma 5.10.2→7) en pausa hasta que feature/wysiwyg-pages llegue a master.
+- Chunks de Vite >500 kB (RichTextEditor, FileSaver) — lazy loading, pendiente arrastrado.
