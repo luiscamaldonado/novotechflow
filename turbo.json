@@ -1,9 +1,12 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
-  "pipeline": {
+  "tasks": {
     "build": {
       "dependsOn": [
         "^build"
+      ],
+      "env": [
+        "VITE_API_URL"
       ],
       "outputs": [
         "dist/**"
