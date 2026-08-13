@@ -3674,3 +3674,39 @@ El pendiente principal de ADR-085 queda saldado y el salto a ESLint 10 (Cohorte 
 - Cohorte D restante (de ADR-085): ESLint 10 + globals 17 + @eslint/js 10 (ya desbloqueado), Jest 30, @vitejs/plugin-react 6 + Vite 8, TypeScript 7.
 - Cohortes E (Tailwind 3→4) y F (Prisma 5.10.2→7) en pausa hasta que feature/wysiwyg-pages llegue a master.
 - Chunks de Vite >500 kB (RichTextEditor, FileSaver) — lazy loading, pendiente arrastrado.
+
+## ADR-087 — Migración a ESLint 10 (@eslint/js 10, globals 17, react-refresh 0.5)
+
+**Fecha:** 2026-08-13
+**Estado:** Aceptado
+
+### Contexto
+
+Primer bloque restante de la Cohorte D (ADR-085/086). ESLint 9.39.5 pasó a rama maintenance; 10.x es latest desde 2026-02 (10.8.1 al momento del salto). Diagnóstico previo contra registry y disco: todos los peers instalados (typescript-eslint 8.67.0, react-hooks 7.1.1, prettier plugins) admiten ^10; ambas configs ya son flat con los helpers canónicos (defineConfig/globalIgnores en web, tseslint.config() en api); Node local (22.22.2) y CI (22.x) cumplen el mínimo ^20.19 || ^22.13 || >=24; sin comentarios eslint-env ni reglas afectadas por los breaking changes. Único plugin no probado contra 10 era eslint-plugin-react-refresh 0.4.26 (compatible solo por rango abierto >=8.40); el soporte explícito llegó en la línea 0.5.x, que es breaking del plugin (ESM-only, configs como funciones invocables, customHOCs → extraHOCs).
+
+### Decisión
+
+Saltar en un solo bloque: eslint ^10.8.1 en ambas apps, @eslint/js ^10.0.1 solo en web (api no lo declara y en eslint 10 ya no llega ni transitivamente — dejó de ser dependencia interna del core), globals ^17.11.0 en ambas, y eslint-plugin-react-refresh ^0.5.4 en web para no dejar el único plugin sin soporte probado dentro del stack. Adaptación mínima del config de web al patrón documentado en 0.5: import named `{ reactRefresh }` y config invocado `reactRefresh.configs.vite()` (2 líneas). La opción customHOCs no se usa en el repo — nada que renombrar. Alineación de `engines.node` raíz a `>=22.13.0`, el mínimo real de eslint 10 en la serie 22.
+
+### Consecuencias
+
+- Lint en cero en ambas apps tras el salto: las 3 reglas nuevas de recommended en @eslint/js 10 (no-unassigned-vars, no-useless-assignment, preserve-caught-error) no dispararon ningún hallazgo.
+- Cero warnings de peers en el install; lockfile 116+/141−.
+- api queda sin @eslint/js en su árbol (solo tseslint.configs.recommended, que no lo requiere).
+- El config lookup from-file (nuevo default de v10) no afecta: no existe eslint.config.* en la raíz; cada app resuelve el suyo.
+
+### Archivos
+
+- `apps/web/package.json` — eslint, @eslint/js, globals, eslint-plugin-react-refresh
+- `apps/api/package.json` — eslint, globals
+- `package.json` — engines.node >=22.13.0
+- `apps/web/eslint.config.js` — patrón react-refresh 0.5
+- `pnpm-lock.yaml`
+
+### Commits
+
+- `44d9745` — chore(deps): eslint 10.8.1 + @eslint/js 10 + globals 17 + react-refresh 0.5.4
+
+### Pendientes
+
+- Cohorte D restante, en orden: Jest 30; Vite 8 + @vitejs/plugin-react 6; TypeScript 7 (pin exacto sincronizado en 5 workspaces — ojo: peer de typescript-eslint 8.67.0 es <6.1.0, requiere verificar soporte antes de saltar).
