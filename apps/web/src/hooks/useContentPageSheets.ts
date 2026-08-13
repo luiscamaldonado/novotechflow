@@ -36,6 +36,7 @@ export function useContentPageSheets(
 
     useEffect(() => {
         if (!isContentPage(page) || !page) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- medicion de DOM: limpieza sincrona de slices cuando la pagina no es de contenido, no es fetch
             setSlices([]);
             return;
         }

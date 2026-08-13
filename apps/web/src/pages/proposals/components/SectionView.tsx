@@ -16,6 +16,7 @@ function SectionView({ section, sheets, isReadOnly, onUpdateTitle, onAddSheet, o
 
     // Re-sincroniza el buffer solo al cambiar de sección
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync props->estado al cambiar de seccion: pendiente del tratamiento de ADR-086 (remontaje con key o estado derivado)
         setTitleBuffer(section.title || '');
     }, [section.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

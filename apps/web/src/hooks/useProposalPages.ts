@@ -39,6 +39,7 @@ export function useProposalPages(proposalId: string | undefined) {
     // Cubre borrados (incluida la cascada de secciones) sin depender de closures stale.
     useEffect(() => {
         if (activePageId && pages.length > 0 && !pages.some(p => p.id === activePageId)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- invariante deliberada de activePageId ante borrados en cascada, no es sync de props: fuera del rediseno de data-fetching
             setActivePageId(pages[0]?.id ?? null);
         }
     }, [pages, activePageId]);
