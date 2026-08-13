@@ -18,6 +18,7 @@ interface PageEditorProps {
     onCreateBlock: (pageId: string, blockType: 'RICH_TEXT' | 'IMAGE') => Promise<PageBlock | null>;
     onUpdateBlock: (blockId: string, content: Record<string, unknown>) => void;
     onDeleteBlock: (pageId: string, blockId: string) => void;
+    onReorderBlocks: (pageId: string, blockIds: string[]) => void;
     onAddTextBlock: () => void;
     onAddImageBlock: () => void;
     onUploadImageForBlock: (blockId: string) => void;
@@ -28,12 +29,20 @@ interface PageEditorProps {
 
 function PageEditor({
     page, editingTitle, setEditingTitle,
-    isReadOnly, onUpdatePage, onUpdateBlock, onDeleteBlock,
+    isReadOnly, onUpdatePage, onUpdateBlock, onDeleteBlock, onReorderBlocks,
     onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage,
     proposalVars,
 }: PageEditorProps) {
     const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
     const IconComponent = style.icon;
+
+    const moveBlock = (index: number, direction: 'up' | 'down') => {
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= page.blocks.length) return;
+        const ids = page.blocks.map(b => b.id);
+        [ids[index], ids[newIndex]] = [ids[newIndex], ids[index]];
+        onReorderBlocks(page.id, ids);
+    };
 
     return (
         <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-100 border border-slate-100">
@@ -156,6 +165,7 @@ function PageEditor({
                                     isReadOnly={isReadOnly}
                                     onUpdate={onUpdateBlock}
                                     onDelete={() => onDeleteBlock(page.id, block.id)}
+                                    onMove={(direction) => moveBlock(idx, direction)}
                                     onUploadImage={() => onUploadImageForBlock(block.id)}
                                     uploadImage={uploadImage}
                                     proposalVars={proposalVars}

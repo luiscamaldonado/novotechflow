@@ -50,7 +50,7 @@ export default function ProposalDocBuilder() {
     const {
         loading, saving, pages, activePageId, setActivePageId, activePage,
         loadPages, createSection, addSheet, updatePage, deletePage, reorderPages,
-        createBlock, updateBlock, deleteBlock, uploadImage,
+        createBlock, updateBlock, deleteBlock, reorderBlocks, uploadImage,
     } = useProposalPages(id);
 
     const { processedScenarios, loading: scenariosLoading } = useProposalScenarios(id);
@@ -726,6 +726,7 @@ export default function ProposalDocBuilder() {
                                 onCreateBlock={createBlock}
                                 onUpdateBlock={updateBlock}
                                 onDeleteBlock={deleteBlock}
+                                onReorderBlocks={reorderBlocks}
                                 onAddTextBlock={handleAddTextBlock}
                                 onAddImageBlock={handleAddImageBlock}
                                 onUploadImageForBlock={handleImageUploadForBlock}

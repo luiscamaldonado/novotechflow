@@ -231,6 +231,29 @@ export function useProposalPages(proposalId: string | undefined) {
         }
     };
 
+    const reorderBlocks = async (pageId: string, blockIds: string[]) => {
+        try {
+            await api.patch(`/proposals/pages/${pageId}/blocks/reorder`, { blockIds });
+            setPages(prev =>
+                prev.map(p => {
+                    if (p.id !== pageId) return p;
+                    const byId = new Map(p.blocks.map(b => [b.id, b]));
+                    return {
+                        ...p,
+                        blocks: blockIds
+                            .map((id, index) => {
+                                const block = byId.get(id);
+                                return block ? { ...block, sortOrder: index + 1 } : null;
+                            })
+                            .filter((b): b is PageBlock => b !== null),
+                    };
+                }),
+            );
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const uploadImage = async (file: File): Promise<string | null> => {
         const formData = new FormData();
         formData.append('file', file);
@@ -262,6 +285,7 @@ export function useProposalPages(proposalId: string | undefined) {
         createBlock,
         updateBlock,
         deleteBlock,
+        reorderBlocks,
         uploadImage,
     };
 }

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Trash2, ImagePlus } from 'lucide-react';
+import { Trash2, ImagePlus, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { validateImageFile, ACCEPT_IMAGES } from '../../../lib/file-validation';
 import { type PageBlock } from '../../../hooks/useProposalPages';
@@ -15,12 +15,13 @@ interface BlockEditorProps {
     isReadOnly: boolean;
     onUpdate: (blockId: string, content: Record<string, unknown>) => void;
     onDelete: () => void;
+    onMove: (direction: 'up' | 'down') => void;
     onUploadImage: () => void;
     uploadImage: (file: File) => Promise<string | null>;
     proposalVars: ProposalVariables;
 }
 
-function BlockEditor({ block, index, totalBlocks, isReadOnly, onUpdate, onDelete, uploadImage, proposalVars }: BlockEditorProps) {
+function BlockEditor({ block, index, totalBlocks, isReadOnly, onUpdate, onDelete, onMove, uploadImage, proposalVars }: BlockEditorProps) {
     const [captionBuffer, setCaptionBuffer] = useState(
         (block.content as Record<string, string>)?.caption || ''
     );
@@ -62,6 +63,26 @@ function BlockEditor({ block, index, totalBlocks, isReadOnly, onUpdate, onDelete
                     <span className="text-[10px] text-slate-400 font-bold">Bloque {index + 1} de {totalBlocks}</span>
                 </div>
                 <div className="flex items-center space-x-1">
+                    {!isReadOnly && (
+                        <>
+                            <button
+                                onClick={() => onMove('up')}
+                                disabled={index === 0}
+                                className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-30"
+                                title="Subir bloque"
+                            >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                onClick={() => onMove('down')}
+                                disabled={index === totalBlocks - 1}
+                                className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-30"
+                                title="Bajar bloque"
+                            >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                        </>
+                    )}
                     {!isReadOnly && isImage && (
                         <>
                             <input ref={blockFileRef} type="file" accept={ACCEPT_IMAGES} className="hidden" onChange={handleInlineUpload} />
