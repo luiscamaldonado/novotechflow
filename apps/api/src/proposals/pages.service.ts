@@ -304,10 +304,7 @@ export class PagesService {
   /**
    * Agrega una hoja hija a una seccion personalizada.
    */
-  async addSheetToSection(
-    sectionId: string,
-    user: AuthenticatedUser,
-  ) {
+  async addSheetToSection(sectionId: string, user: AuthenticatedUser) {
     const section = await this.prisma.proposalPage.findUnique({
       where: { id: sectionId },
     });
