@@ -203,6 +203,9 @@ export default function ProposalDocBuilder() {
 
     const startRename = (page: ProposalPage) => {
         if (isReadOnly) return;
+        // Cierra la edicion central del titulo si estaba abierta: dos inputs
+        // del mismo titulo con buffers propios pueden revertirse entre si.
+        setEditingTitle(null);
         setRenamingPageId(page.id);
         setRenameBuffer(page.title || '');
     };
@@ -765,7 +768,7 @@ export default function ProposalDocBuilder() {
                 {activePage && isSectionPage(activePage) ? (
                     <div className="lg:col-span-9">
                         <SectionView
-                            key={activePage.id}
+                            key={`${activePage.id}:${activePage.title ?? ''}`}
                             section={activePage}
                             sheets={activeSectionSheets}
                             sheetHeadings={activeSectionSheetHeadings}
