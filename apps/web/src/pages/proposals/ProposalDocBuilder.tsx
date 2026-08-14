@@ -6,7 +6,7 @@ import {
     Lock, GripVertical,
     BookOpen, Eye, ShieldAlert,
     ChevronUp, ChevronDown, MapPin, Cpu, DollarSign,
-    Folder,
+    Folder, Pencil,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useProposalPages, type ProposalPage } from '../../hooks/useProposalPages';
@@ -141,6 +141,9 @@ export default function ProposalDocBuilder() {
     const [isCreatingPage, setIsCreatingPage] = useState(false);
     const [newPageTitle, setNewPageTitle] = useState('');
     const [editingTitle, setEditingTitle] = useState<string | null>(null);
+    /** Renombrado inline desde el sidebar: id del nodo en edicion + buffer del titulo */
+    const [renamingPageId, setRenamingPageId] = useState<string | null>(null);
+    const [renameBuffer, setRenameBuffer] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
     const [selectedVirtualSection, setSelectedVirtualSection] = useState<string | null>(null);
@@ -197,6 +200,23 @@ export default function ProposalDocBuilder() {
     useEffect(() => {
         loadPages();
     }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const startRename = (page: ProposalPage) => {
+        if (isReadOnly) return;
+        setRenamingPageId(page.id);
+        setRenameBuffer(page.title || '');
+    };
+
+    /** Mismo patron blur/Enter de SectionView; Escape desmonta el input sin blur, no guarda */
+    const commitRename = () => {
+        if (!renamingPageId) return;
+        const trimmed = renameBuffer.trim();
+        const current = pages.find(p => p.id === renamingPageId);
+        if (trimmed && current && trimmed !== current.title) {
+            updatePage(renamingPageId, { title: trimmed });
+        }
+        setRenamingPageId(null);
+    };
 
     const handleCreatePage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -434,10 +454,29 @@ export default function ProposalDocBuilder() {
                                                 ) : (
                                                     <GripVertical className={cn("h-4 w-4 shrink-0", isActive ? "text-indigo-200" : "text-slate-300")} />
                                                 )}
-                                                <div className="min-w-0">
-                                                    <span className="text-sm font-black tracking-tight truncate block">
-                                                        {idx + 1}. {page.title || PAGE_TYPE_LABELS[page.pageType]}
-                                                    </span>
+                                                <div className="min-w-0 flex-1">
+                                                    {renamingPageId === page.id ? (
+                                                        <input
+                                                            autoFocus
+                                                            type="text"
+                                                            value={renameBuffer}
+                                                            onChange={(e) => setRenameBuffer(e.target.value)}
+                                                            onBlur={commitRename}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                                if (e.key === 'Escape') setRenamingPageId(null);
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className={cn(
+                                                                "w-full text-sm font-black tracking-tight rounded-lg px-1.5 py-0.5 border-2 outline-none",
+                                                                isActive ? "bg-indigo-500 border-indigo-300 text-white" : "bg-white border-indigo-200 text-slate-700"
+                                                            )}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-sm font-black tracking-tight truncate block">
+                                                            {idx + 1}. {page.title || PAGE_TYPE_LABELS[page.pageType]}
+                                                        </span>
+                                                    )}
                                                     <span className={cn(
                                                         "text-[9px] font-black uppercase tracking-widest",
                                                         isActive ? "text-indigo-200" : "text-slate-400"
@@ -472,6 +511,18 @@ export default function ProposalDocBuilder() {
                                                             <ChevronDown className="h-3.5 w-3.5" />
                                                         </button>
                                                     </div>
+                                                )}
+                                                {!page.isLocked && !isReadOnly && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); startRename(page); }}
+                                                        className={cn(
+                                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                                            isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-600"
+                                                        )}
+                                                        title="Renombrar"
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </button>
                                                 )}
                                                 {!page.isLocked && !isReadOnly && (
                                                     <button
