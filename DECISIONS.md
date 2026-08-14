@@ -3874,3 +3874,40 @@ Rebase sobre `8f4f207` (15 commits, `de5b5c5..fbefa63`); supresiones de lint `87
 - `fetchPages` sin consumidor y las supresiones `set-state-in-effect` restantes (`useContentPageSheets`: medición de DOM; `useProposalPages`: invariante de `activePageId`): candidatos al rediseño de data-fetching de ADR-086.
 - `variables` de página: capacidad del backend sin UI.
 - Suite e2e sin gate en CI (arrastrado de Cohorte D).
+
+## ADR-092 — Piso de modelo para prompts mixtos y regla de un prompt por mensaje
+
+**Fecha:** 2026-08-14
+**Estado:** Aceptado
+
+### Contexto
+
+Al estrenar el proyecto en la cuenta Team se corrieron pruebas de arranque. En dos respuestas consecutivas, Claude (chat) eligió Haiku para prompts que mezclaban búsqueda mecánica con juicio — clasificar archivos por categoría, evaluar posibles violaciones de la regla del pricing-engine, extraer la superficie de personalización de Tailwind — y entregó dos prompts ejecutables en un mismo mensaje. Ninguna de las dos cosas violaba la letra de §6: la tabla definía Haiku como "mecánico puro" pero no resolvía el caso mixto, y la regla de un paso a la vez prohibía encadenar tareas dentro de un prompt pero no cubría entregar varios prompts a la vez, lo que invita a correrlos de corrido y rompe el gate de validación entre pasos.
+
+### Decisión
+
+Dos reglas nuevas en INSTRUCTIVO_CLAUDE.md §6:
+
+1. **Desempate para prompts mixtos:** si cualquier parte del prompt exige clasificar, evaluar, interpretar contenido o decidir (no solo buscar, contar o transcribir), el piso es Sonnet aunque el resto de la tarea sea mecánica. Un prompt 90% grep y 10% juicio es un prompt de juicio.
+2. **Un mensaje del chat = un solo prompt ejecutable.** El siguiente prompt se redacta cuando llega el resultado del anterior, porque ese resultado puede cambiarlo.
+
+Ambas reglas se replican resumidas en la skill novotechflow de claude.ai (vive fuera del repo; la edita Luis a mano).
+
+### Consecuencias
+
+- Haiku queda restringido a tareas 100% mecánicas; las mixtas suben a Sonnet. Costo marginal mayor por prompt a cambio de que la parte de juicio no la haga el modelo equivocado.
+- El gate de un paso a la vez queda cerrado también en la entrega, no solo en la ejecución.
+- El molde de comportamiento queda documentado para cualquier cuenta o sesión nueva, en vez de depender de correcciones en el chat.
+
+### Archivos
+
+INSTRUCTIVO_CLAUDE.md (§6, dos ediciones).
+
+### Commits
+
+Ediciones de §6: 1e455c9.
+
+### Pendientes
+
+- Replicar las dos reglas en la skill novotechflow y corregir de paso el dato obsoleto de la API externa ("sin mergear"; está en producción desde ADR-081). Lo hace Luis a mano en claude.ai.
+- Re-subir INSTRUCTIVO_CLAUDE.md y DECISIONS.md del disco a los attachments del proyecto Team tras el push.
