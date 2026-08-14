@@ -25,13 +25,15 @@ interface PageEditorProps {
     uploadImage: (file: File) => Promise<string | null>;
     isAdmin: boolean;
     proposalVars: ProposalVariables;
+    /** Encabezado ya resuelto para hojas hijas: "Titulo de la seccion — Hoja N". La seccion es dueña del titulo. */
+    resolvedSheetHeading?: string;
 }
 
 function PageEditor({
     page, editingTitle, setEditingTitle,
     isReadOnly, onUpdatePage, onUpdateBlock, onDeleteBlock, onReorderBlocks,
     onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage,
-    proposalVars,
+    proposalVars, resolvedSheetHeading,
 }: PageEditorProps) {
     const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
     const IconComponent = style.icon;
@@ -54,7 +56,12 @@ function PageEditor({
                             <IconComponent className={cn("h-6 w-6", style.text)} />
                         </div>
                         <div>
-                            {editingTitle !== null ? (
+                            {page.parentPageId !== null ? (
+                                /* Hoja hija: el titulo pertenece a la seccion, aqui solo se muestra */
+                                <h4 className="text-xl font-black text-slate-900 tracking-tight">
+                                    {resolvedSheetHeading || page.title || PAGE_TYPE_LABELS[page.pageType]}
+                                </h4>
+                            ) : editingTitle !== null ? (
                                 <input
                                     type="text"
                                     value={editingTitle}

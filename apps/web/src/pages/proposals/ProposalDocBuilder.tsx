@@ -98,6 +98,17 @@ export default function ProposalDocBuilder() {
         [pages, activePage],
     );
 
+    /** Encabezado de una hoja hija activa: titulo de la seccion padre + numero de hoja (B1: la seccion es dueña del titulo) */
+    const resolvedSheetHeading = useMemo(() => {
+        if (!activePage?.parentPageId) return undefined;
+        const parent = pages.find(p => p.id === activePage.parentPageId);
+        const siblings = pages
+            .filter(p => p.parentPageId === activePage.parentPageId)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+        const sheetIdx = siblings.findIndex(s => s.id === activePage.id);
+        return `${parent?.title || 'Secci\u00f3n'} \u2014 Hoja ${sheetIdx + 1}`;
+    }, [pages, activePage]);
+
     /** Aplana la jerarquía al orden plano que espera el PATCH de reorder (sección seguida de sus hojas) */
     const flattenPageIds = (entries: SidebarEntry[]): string[] =>
         entries.flatMap(entry => [entry.page.id, ...entry.children.map(c => c.id)]);
@@ -706,6 +717,7 @@ export default function ProposalDocBuilder() {
                 {activePage && isSectionPage(activePage) ? (
                     <div className="lg:col-span-9">
                         <SectionView
+                            key={activePage.id}
                             section={activePage}
                             sheets={activeSectionSheets}
                             isReadOnly={isReadOnly}
@@ -733,6 +745,7 @@ export default function ProposalDocBuilder() {
                                 uploadImage={uploadImage}
                                 isAdmin={isAdmin}
                                 proposalVars={proposalVars}
+                                resolvedSheetHeading={resolvedSheetHeading}
                             />
                         ) : (
                             <LockedPageView page={activePage} />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Folder, Plus, FileText, ChevronRight } from 'lucide-react';
 import { type ProposalPage } from '../../../hooks/useProposalPages';
 
@@ -12,13 +12,9 @@ interface SectionViewProps {
 }
 
 function SectionView({ section, sheets, isReadOnly, onUpdateTitle, onAddSheet, onOpenSheet }: SectionViewProps) {
+    // El consumidor remonta con key={section.id} (ADR-086): el buffer se
+    // inicializa una vez por seccion, sin prop-sync effect.
     const [titleBuffer, setTitleBuffer] = useState(section.title || '');
-
-    // Re-sincroniza el buffer solo al cambiar de sección
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync props->estado al cambiar de seccion: pendiente del tratamiento de ADR-086 (remontaje con key o estado derivado)
-        setTitleBuffer(section.title || '');
-    }, [section.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const commitTitle = () => {
         const trimmed = titleBuffer.trim();
