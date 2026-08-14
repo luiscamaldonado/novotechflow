@@ -5,6 +5,7 @@ import { buildPageHtml } from '../lib/renderPageHtml';
 import {
     measureContentElements,
     paginateContentPage,
+    paginateSheet,
     type ContentPageSlice,
 } from '../lib/paginateContentPage';
 import { resolveImageUrl as resolveImageUrlShared, getApiBase } from '../lib/resolveImageUrl';
@@ -49,7 +50,8 @@ export function useContentPageSheets(
             if (!container) return;
             const html = buildPageHtml(page.blocks, proposalVars, resolveImageUrl, page.pageType, ownerSignatureUrl);
             const elements = measureContentElements(html, container);
-            setSlices(paginateContentPage(elements));
+            // Hoja hija (C1): contenedor rigido de una pagina fisica, slice unico.
+            setSlices(page.parentPageId ? paginateSheet(elements) : paginateContentPage(elements));
         };
 
         const timer = window.setTimeout(build, 200);

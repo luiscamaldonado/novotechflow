@@ -17,6 +17,8 @@ const SHEET_SCALE = 0.6;
 
 export default function PageSheetsPreview({ page, proposalVars, ownerSignatureUrl }: PageSheetsPreviewProps) {
     const { measureRef, slices } = useContentPageSheets(page, proposalVars, ownerSignatureUrl);
+    /** Hoja hija (C1): slice unico, sin continuaciones; el desborde es un error visible */
+    const isChildSheet = page.parentPageId !== null;
 
     return (
         <>
@@ -81,7 +83,11 @@ export default function PageSheetsPreview({ page, proposalVars, ownerSignatureUr
                                     <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3">
                                         <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                                         <p className="text-[11px] font-medium text-amber-700 leading-relaxed">
-                                            El contenido excede el área útil de la hoja.
+                                            {isChildSheet ? (
+                                                <>El contenido excede la hoja: en el PDF se cortará al límite de la página. Divide el contenido en otra hoja.</>
+                                            ) : (
+                                                <>El contenido excede el área útil de la hoja.</>
+                                            )}
                                         </p>
                                     </div>
                                 )}

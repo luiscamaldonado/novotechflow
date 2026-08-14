@@ -68,6 +68,31 @@ export function measureContentElements(html: string, container: HTMLElement): Me
 }
 
 /**
+ * Modo hoja rigida (C1): una hoja hija es un contenedor de UNA pagina fisica.
+ *
+ * Funcion PURA, hermana de paginateContentPage — nunca corta. Devuelve SIEMPRE
+ * exactamente un slice con todo el contenido y sin continuaciones; si la altura
+ * acumulada (con el header de primera hoja, mismo criterio que la hermana)
+ * excede el alto util, se marca isOverflowing para que el consumidor muestre
+ * el error. Con `elements` vacio devuelve un slice vacio.
+ */
+export function paginateSheet(elements: MeasuredElement[]): ContentPageSlice[] {
+    let totalHeight: number = FIRST_SLICE_HEADER_HEIGHT;
+    let htmlContent = '';
+
+    for (const el of elements) {
+        htmlContent += el.html;
+        totalHeight += el.height;
+    }
+
+    return [{
+        htmlContent,
+        isContinuation: false,
+        isOverflowing: totalHeight > USABLE_HEIGHT,
+    }];
+}
+
+/**
  * Pagina los elementos medidos en slices por altura acumulada.
  *
  * Función PURA: sin React, sin DOM, sin side effects. Apta para tests unitarios.
