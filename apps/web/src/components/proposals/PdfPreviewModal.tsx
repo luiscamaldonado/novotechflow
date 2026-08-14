@@ -17,7 +17,8 @@ import { paginateEconomicProposal, type EconomicPageSlice } from '../../lib/pagi
 import { getApiBase, resolveImageUrl as resolveImageUrlShared } from '../../lib/resolveImageUrl';
 import { PAGE_GEOMETRY, PAGE_TYPE_LABELS } from '../../lib/constants';
 import { buildPageHtml } from '../../lib/renderPageHtml';
-import { measureContentElements, paginateContentPage } from '../../lib/paginateContentPage';
+import { measureContentElements, paginateContentPage, paginateSheet } from '../../lib/paginateContentPage';
+import { resolveSheetHeading, resolveSheetSectionTitle } from '../../lib/resolveSheetHeading';
 import { useEconomicRowHeights } from '../../hooks/useEconomicRowHeights';
 
 interface PdfPreviewModalProps {
@@ -53,6 +54,8 @@ interface VisualPage {
     economicScenario?: ProcessedScenario;
     /** For pages ECONOMIC: slice específico del escenario */
     economicSlice?: EconomicPageSlice;
+    /** For section sheets: owning section identity (marks the visual page as a sheet) */
+    section?: { id: string; title: string };
 }
 
 export default function PdfPreviewModal({ pages, onClose, proposalVars, processedScenarios = [], enableExcelExport = false, ownerSignatureUrl }: PdfPreviewModalProps) {
@@ -217,6 +220,32 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     }
                 }
 
+                continue;
+            }
+
+            // Seccion contenedora: no emite hoja propia — el PDF la representa por sus hojas hijas
+            if (page.isSectionModel && !page.parentPageId) {
+                continue;
+            }
+
+            // Hoja hija (C1): contenedor rigido de una pagina fisica — slice unico via paginateSheet;
+            // el desborde lo recorta el overflow hidden de PdfSheet. Vacia tambien emite su hoja.
+            if (page.parentPageId !== null) {
+                const sheetHtml = buildPageHtml(page.blocks, proposalVars, resolveImageUrl, page.pageType, ownerSignatureUrl);
+                const [sheetSlice] = paginateSheet(measureContentElements(sheetHtml, container));
+                result.push({
+                    id: `${page.id}-0`,
+                    pageType: page.pageType,
+                    title: resolveSheetHeading(page, pages) ?? page.title,
+                    htmlContent: sheetSlice.htmlContent,
+                    isContinuation: false,
+                    isCover: false,
+                    isIndex: false,
+                    isTechSpec: false,
+                    isEconomic: false,
+                    coverBlocks: [],
+                    section: { id: page.parentPageId, title: resolveSheetSectionTitle(page, pages) },
+                });
                 continue;
             }
 
@@ -392,7 +421,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                                         slice={vPage.economicSlice}
                                     />
                                 ) : (
-                                    <PdfContentPage pageType={vPage.pageType} title={vPage.title} htmlContent={vPage.htmlContent} isContinuation={vPage.isContinuation} />
+                                    <PdfContentPage pageType={vPage.pageType} title={vPage.title} htmlContent={vPage.htmlContent} isContinuation={vPage.isContinuation} isSheet={vPage.section != null} />
                                 )}
                             </PdfSheet>
                         </motion.div>
@@ -477,6 +506,20 @@ function IndexPageContent({ visualPages }: { visualPages: VisualPage[] }) {
                 pageNum: idx + 1,
                 pageType: 'ECONOMIC',
             });
+            return;
+        }
+
+        // Section sheets: one entry per section, pointing at its first sheet
+        if (vp.section) {
+            const sectionKey = `section-${vp.section.id}`;
+            if (!seenSections.has(sectionKey)) {
+                seenSections.add(sectionKey);
+                entries.push({
+                    label: vp.section.title,
+                    pageNum: idx + 1,
+                    pageType: vp.pageType,
+                });
+            }
             return;
         }
 

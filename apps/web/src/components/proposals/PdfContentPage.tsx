@@ -5,14 +5,17 @@ interface PdfContentPageProps {
     title: string | null;
     htmlContent: string;
     isContinuation: boolean;
+    /** Hoja hija de seccion (C1): vacia es un estado valido, sin placeholder de contenido */
+    isSheet?: boolean;
 }
 
 /**
  * Cuerpo de una hoja de contenido: el padding de hoja, el header condicional
  * (primera hoja vs continuacion, con caso especial CUSTOM) y el contenedor
- * prose donde se inyecta el htmlContent ya paginado.
+ * prose donde se inyecta el htmlContent ya paginado. En modo hoja de seccion
+ * (isSheet) una hoja sin contenido se imprime en blanco, sin placeholder.
  */
-export default function PdfContentPage({ pageType, title, htmlContent, isContinuation }: PdfContentPageProps) {
+export default function PdfContentPage({ pageType, title, htmlContent, isContinuation, isSheet = false }: PdfContentPageProps) {
     return (
         <div className="px-16 py-16 h-full">
             {/* Header */}
@@ -46,11 +49,11 @@ export default function PdfContentPage({ pageType, title, htmlContent, isContinu
                     className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-p:leading-relaxed"
                     dangerouslySetInnerHTML={{ __html: htmlContent }}
                 />
-            ) : (
+            ) : !isSheet ? (
                 <div className="py-20 text-center">
                     <p className="text-sm text-slate-300 italic">Esta página no tiene contenido aún.</p>
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }
