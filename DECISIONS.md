@@ -3827,3 +3827,50 @@ Quedarse en 6.0.2 no es deuda urgente: es exactamente la línea que Microsoft ma
 
 - Re-evaluar TS 7 cuando aparezcan las señales listadas.
 - Cohortes E (Tailwind 3→4) y F (Prisma 5.10.2→7) siguen en pausa hasta el merge de feature/wysiwyg-pages.
+
+## ADR-091 — Constructor WYSIWYG: geometría única, pipeline compartido con el PDF y modelo sección/hoja
+
+**Fecha:** 2026-08-13
+**Estado:** Aceptado
+
+### Contexto
+
+El constructor del documento editaba cada página como una tarjeta elástica de alto infinito, sin noción de hoja física; la paginación real solo existía en `PdfPreviewModal`, que medía el contenido en el DOM y lo repartía en hojas Carta antes de rasterizar. Lo que se editaba no era lo que salía. La rama `feature/wysiwyg-pages` atacó esto en dos etapas: primero la vista previa WYSIWYG (hojas reales junto al editor, con la medición del corte compartida entre generador y constructor — decisión que viajó en la rama numerada como ADR-067 y luego ADR-069, y que se dropeó en el rebase sobre master por colisión de numeración; este ADR la registra), y después un modelo de sección/hoja para componer documentos por hojas físicas.
+
+Quedaban tres decisiones de fondo: quién es dueño del título de una hoja (B), qué es exactamente una hoja (C) y cómo se comporta el PDF frente al modelo (D).
+
+### Decisión
+
+**Geometría única y pipeline compartido.** `PAGE_GEOMETRY` (816×1056 px, alto útil 928) vive una sola vez en `constants.ts`. El HTML de una página se construye con `buildPageHtml` (`renderPageHtml.ts`), se mide con `measureContentElements` y se pagina con `paginateContentPage` — los mismos módulos para el PDF (`PdfPreviewModal`) y para la vista previa del editor (`useContentPageSheets` → `PageSheetsPreview`). El corte que muestra el editor es el del PDF por construcción.
+
+**Modelo de datos sección/hoja.** `ProposalPage` gana `isSectionModel` y `parentPageId` (self-relation `PageSheets`, `onDelete: Cascade`; migración `20260718193601_add_section_model_to_proposal_page`). Una sección es una página `CUSTOM` con `isSectionModel: true` y sin padre; sus hojas son páginas hijas con `parentPageId`. El clonado remapea en dos pasadas (crea todas las páginas, luego remapea `parentPageId`). `addSheetToSection` y `createCustomPage` insertan con desplazamiento +1 transaccional para no colisionar `sortOrder` — en particular con TERMS después de un reorder que le borró el centinela 1000.
+
+**B1 — la sección es la única dueña del título.** El encabezado de una hoja se resuelve en render con `resolveSheetHeading(sheet, pages)` ("Título de sección — Hoja N"), la misma función para editor, miniaturas y PDF (precedente ADR-066: resolver en render, no snapshot). La hoja no expone ni escribe título propio; el `title` copiado que persiste `addSheetToSection` queda como dato muerto que el render ignora.
+
+**C1 — una hoja es un contenedor rígido de una página física.** `paginateSheet` (hermana de `paginateContentPage`, misma geometría) produce siempre un slice único; si el contenido excede el alto útil, el editor muestra un aviso de corte y el PDF recorta al límite físico por el `overflow: hidden` de `PdfSheet`. Nunca continuación silenciosa. Una hoja vacía imprime en blanco: estado válido, sin placeholder.
+
+**D-b — header en toda hoja.** La geometría del editor descuenta el alto del header en toda hoja, así que el PDF renderiza el header (con el heading resuelto) en todas, no solo en la primera: si difiriera, el WYSIWYG mentiría en el borde. La página contenedora de la sección no emite página en el PDF; el índice lista una entrada por sección apuntando a la página de su primera hoja.
+
+**UI.** `SectionView` muestra miniaturas de papel real (`SheetThumbnail`: `PdfSheet` + `PdfContentPage` escalados) clickeables; rename inline desde el sidebar para secciones y páginas planas no bloqueadas; reorder de bloques cableado al endpoint que existía sin consumidores; `moveTopLevel` con guarda de `isLocked` en lógica y chevrons. El buffer del título de sección se resetea por remontaje con key compuesto id:título (patrón ADR-086), lo que elimina el revert silencioso entre el input central y el rename del sidebar.
+
+### Consecuencias
+
+- El WYSIWYG es honesto por construcción: mismo heading, mismo pipeline y mismo corte en editor, miniaturas y PDF.
+- Una sección sin hojas desaparece del PDF y del índice (sin contenedora no hay página); consistente con el modelo.
+- Renombrar la sección se propaga a todas las vistas al instante, sin escrituras en cascada.
+- La migración corre en producción con `migrate deploy` en el deploy del merge; `pg_dump` previo obligatorio.
+
+### Archivos
+
+`apps/api`: `prisma/schema.prisma`, `prisma/migrations/20260718193601_add_section_model_to_proposal_page/migration.sql`, `src/proposals/pages.service.ts`, `src/proposals/proposals.service.ts`, `src/proposals/proposals.controller.ts`. `apps/web`: `lib/constants.ts`, `lib/renderPageHtml.ts`, `lib/paginateContentPage.ts`, `lib/resolveSheetHeading.ts`, `lib/resolveImageUrl.ts`, `hooks/useProposalPages.ts`, `hooks/useContentPageSheets.ts`, `components/proposals/PdfPreviewModal.tsx`, `components/proposals/PdfSheet.tsx`, `components/proposals/PdfContentPage.tsx`, `pages/proposals/ProposalDocBuilder.tsx`, `pages/proposals/components/SectionView.tsx`, `SheetThumbnail.tsx`, `PageEditor.tsx`, `BlockEditor.tsx`, `PageSheetsPreview.tsx`.
+
+### Commits
+
+Rebase sobre `8f4f207` (15 commits, `de5b5c5..fbefa63`); supresiones de lint `8764bd4` y `93ee908`; insert-shift `6e92fa5`; guardas del sidebar `9faeede`; reorder de bloques `40d3250`; B1 `366d042`; C1 `9e35687`; D `8af6c8d`; preview lateral fiel `1b677be`; miniaturas `14c7d96`; rename desde sidebar `0627bbe`; limpieza `8419d21`; borde del rename `4220df0`.
+
+### Pendientes
+
+- Drag & drop en el sidebar y mover hojas entre secciones (nice-to-have registrados en el diagnóstico).
+- `fetchPages` sin consumidor y las supresiones `set-state-in-effect` restantes (`useContentPageSheets`: medición de DOM; `useProposalPages`: invariante de `activePageId`): candidatos al rediseño de data-fetching de ADR-086.
+- `variables` de página: capacidad del backend sin UI.
+- Suite e2e sin gate en CI (arrastrado de Cohorte D).
