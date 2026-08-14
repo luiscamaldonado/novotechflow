@@ -1,17 +1,23 @@
 import { useState } from 'react';
-import { Folder, Plus, FileText, ChevronRight } from 'lucide-react';
+import { Folder, Plus } from 'lucide-react';
 import { type ProposalPage } from '../../../hooks/useProposalPages';
+import { type ProposalVariables } from '../../../lib/proposalVariables';
+import SheetThumbnail from './SheetThumbnail';
 
 interface SectionViewProps {
     section: ProposalPage;
     sheets: ProposalPage[];
+    /** Encabezados resueltos por resolveSheetHeading, paralelos a sheets */
+    sheetHeadings: string[];
+    proposalVars: ProposalVariables;
+    ownerSignatureUrl?: string;
     isReadOnly: boolean;
     onUpdateTitle: (title: string) => void;
     onAddSheet: () => void;
     onOpenSheet: (id: string) => void;
 }
 
-function SectionView({ section, sheets, isReadOnly, onUpdateTitle, onAddSheet, onOpenSheet }: SectionViewProps) {
+function SectionView({ section, sheets, sheetHeadings, proposalVars, ownerSignatureUrl, isReadOnly, onUpdateTitle, onAddSheet, onOpenSheet }: SectionViewProps) {
     // El consumidor remonta con key={section.id} (ADR-086): el buffer se
     // inicializa una vez por seccion, sin prop-sync effect.
     const [titleBuffer, setTitleBuffer] = useState(section.title || '');
@@ -59,36 +65,20 @@ function SectionView({ section, sheets, isReadOnly, onUpdateTitle, onAddSheet, o
                 </p>
             </div>
 
-            {/* Hojas de la sección */}
-            <div className="p-8 space-y-3">
-                {sheets.map((sheet, idx) => (
-                    <button
-                        key={sheet.id}
-                        type="button"
-                        onClick={() => onOpenSheet(sheet.id)}
-                        className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 border-2 border-transparent hover:bg-white hover:border-indigo-100 transition-all text-left"
-                    >
-                        <div className="flex items-center space-x-3 min-w-0">
-                            <FileText className="h-4 w-4 shrink-0 text-slate-400" />
-                            <span className="text-sm font-black tracking-tight text-slate-700">
-                                Hoja {idx + 1}
-                            </span>
-                            <span className="text-xs text-slate-400 font-medium">
-                                · {sheet.blocks.length} bloque{sheet.blocks.length !== 1 ? 's' : ''}
-                            </span>
-                        </div>
-                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-                    </button>
-                ))}
-
-                {sheets.length === 0 && (
-                    <div className="py-10 text-center">
-                        <FileText className="h-12 w-12 mx-auto text-slate-100 mb-3" />
-                        <p className="text-sm font-bold text-slate-400">
-                            Esta sección no tiene hojas aún.
-                        </p>
-                    </div>
-                )}
+            {/* Miniaturas de las hojas: papel real escalado, corte identico al PDF */}
+            <div className="p-8 space-y-6">
+                <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 justify-items-center">
+                    {sheets.map((sheet, idx) => (
+                        <SheetThumbnail
+                            key={sheet.id}
+                            sheet={sheet}
+                            heading={sheetHeadings[idx] ?? ''}
+                            proposalVars={proposalVars}
+                            ownerSignatureUrl={ownerSignatureUrl}
+                            onOpen={() => onOpenSheet(sheet.id)}
+                        />
+                    ))}
+                </div>
 
                 <button
                     type="button"

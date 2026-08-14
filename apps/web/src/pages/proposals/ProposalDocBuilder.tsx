@@ -105,6 +105,12 @@ export default function ProposalDocBuilder() {
         [pages, activePage],
     );
 
+    /** Encabezados de las hojas de la seccion activa para sus miniaturas, misma fuente que el PDF (resolveSheetHeading) */
+    const activeSectionSheetHeadings = useMemo(
+        () => activeSectionSheets.map(sheet => resolveSheetHeading(sheet, pages) ?? ''),
+        [activeSectionSheets, pages],
+    );
+
     /** Aplana la jerarquía al orden plano que espera el PATCH de reorder (sección seguida de sus hojas) */
     const flattenPageIds = (entries: SidebarEntry[]): string[] =>
         entries.flatMap(entry => [entry.page.id, ...entry.children.map(c => c.id)]);
@@ -716,6 +722,9 @@ export default function ProposalDocBuilder() {
                             key={activePage.id}
                             section={activePage}
                             sheets={activeSectionSheets}
+                            sheetHeadings={activeSectionSheetHeadings}
+                            proposalVars={proposalVars}
+                            ownerSignatureUrl={proposal?.user?.signatureUrl}
                             isReadOnly={isReadOnly}
                             onUpdateTitle={(title) => updatePage(activePage.id, { title })}
                             onAddSheet={() => addSheet(activePage.id)}
