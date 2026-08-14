@@ -18,8 +18,9 @@ interface SectionViewProps {
 }
 
 function SectionView({ section, sheets, sheetHeadings, proposalVars, ownerSignatureUrl, isReadOnly, onUpdateTitle, onAddSheet, onOpenSheet }: SectionViewProps) {
-    // El consumidor remonta con key={section.id} (ADR-086): el buffer se
-    // inicializa una vez por seccion, sin prop-sync effect.
+    // El consumidor remonta con key compuesto id:titulo (ADR-086): el buffer se
+    // inicializa una vez por valor de titulo, sin prop-sync effect; un rename
+    // externo (p. ej. desde el sidebar) tambien reinicializa el buffer.
     const [titleBuffer, setTitleBuffer] = useState(section.title || '');
 
     const commitTitle = () => {
