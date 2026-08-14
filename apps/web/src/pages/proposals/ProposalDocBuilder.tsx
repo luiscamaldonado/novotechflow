@@ -766,7 +766,7 @@ export default function ProposalDocBuilder() {
                 )}
                 {activePage && !isSectionPage(activePage) && (
                     <div className="lg:col-span-4">
-                        <PageSheetsPreview page={activePage} proposalVars={proposalVars} ownerSignatureUrl={proposal?.user?.signatureUrl} />
+                        <PageSheetsPreview page={activePage} proposalVars={proposalVars} ownerSignatureUrl={proposal?.user?.signatureUrl} resolvedSheetHeading={resolvedSheetHeading} />
                     </div>
                 )}
             </div>

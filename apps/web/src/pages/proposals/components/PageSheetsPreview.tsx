@@ -10,12 +10,14 @@ interface PageSheetsPreviewProps {
     page: ProposalPage;
     proposalVars: ProposalVariables;
     ownerSignatureUrl?: string;
+    /** Encabezado resuelto de la hoja hija activa ("Titulo de la seccion — Hoja N"); undefined para paginas planas */
+    resolvedSheetHeading?: string;
 }
 
 /** Escala de la hoja en la columna de vista previa del constructor */
 const SHEET_SCALE = 0.6;
 
-export default function PageSheetsPreview({ page, proposalVars, ownerSignatureUrl }: PageSheetsPreviewProps) {
+export default function PageSheetsPreview({ page, proposalVars, ownerSignatureUrl, resolvedSheetHeading }: PageSheetsPreviewProps) {
     const { measureRef, slices } = useContentPageSheets(page, proposalVars, ownerSignatureUrl);
     /** Hoja hija (C1): slice unico, sin continuaciones; el desborde es un error visible */
     const isChildSheet = page.parentPageId !== null;
@@ -74,7 +76,7 @@ export default function PageSheetsPreview({ page, proposalVars, ownerSignatureUr
                                         }}
                                     >
                                         <PdfSheet>
-                                            <PdfContentPage pageType={page.pageType} title={page.title} htmlContent={slice.htmlContent} isContinuation={slice.isContinuation} />
+                                            <PdfContentPage pageType={page.pageType} title={isChildSheet ? (resolvedSheetHeading ?? page.title) : page.title} htmlContent={slice.htmlContent} isContinuation={slice.isContinuation} isSheet={isChildSheet} />
                                         </PdfSheet>
                                     </div>
                                 </div>
