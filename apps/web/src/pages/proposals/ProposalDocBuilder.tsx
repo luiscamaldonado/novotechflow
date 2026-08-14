@@ -264,11 +264,6 @@ export default function ProposalDocBuilder() {
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    const handleImageUploadForBlock = (blockId: string) => {
-        setUploadingBlockId(blockId);
-        fileInputRef.current?.click();
-    };
-
     /** Check whether the current user can edit the active page */
     const canEditPage = (page: ProposalPage | null): boolean => {
         if (!page) return false;
@@ -791,15 +786,12 @@ export default function ProposalDocBuilder() {
                                 setEditingTitle={setEditingTitle}
                                 isReadOnly={isReadOnly}
                                 onUpdatePage={updatePage}
-                                onCreateBlock={createBlock}
                                 onUpdateBlock={updateBlock}
                                 onDeleteBlock={deleteBlock}
                                 onReorderBlocks={reorderBlocks}
                                 onAddTextBlock={handleAddTextBlock}
                                 onAddImageBlock={handleAddImageBlock}
-                                onUploadImageForBlock={handleImageUploadForBlock}
                                 uploadImage={uploadImage}
-                                isAdmin={isAdmin}
                                 proposalVars={proposalVars}
                                 resolvedSheetHeading={resolvedSheetHeading}
                             />

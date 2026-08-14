@@ -11,12 +11,10 @@ interface BlockEditorProps {
     block: PageBlock;
     index: number;
     totalBlocks: number;
-    pageId: string;
     isReadOnly: boolean;
     onUpdate: (blockId: string, content: Record<string, unknown>) => void;
     onDelete: () => void;
     onMove: (direction: 'up' | 'down') => void;
-    onUploadImage: () => void;
     uploadImage: (file: File) => Promise<string | null>;
     proposalVars: ProposalVariables;
 }

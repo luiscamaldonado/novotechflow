@@ -4,7 +4,7 @@ import {
     FileText, ListOrdered,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { type ProposalPage, type PageBlock } from '../../../hooks/useProposalPages';
+import { type ProposalPage } from '../../../hooks/useProposalPages';
 import { type ProposalVariables } from '../../../lib/proposalVariables';
 import { PAGE_TYPE_LABELS, PAGE_TYPE_STYLES } from '../../../lib/constants';
 import BlockEditor from './BlockEditor';
@@ -15,15 +15,12 @@ interface PageEditorProps {
     setEditingTitle: (v: string | null) => void;
     isReadOnly: boolean;
     onUpdatePage: (pageId: string, data: { title?: string }) => void;
-    onCreateBlock: (pageId: string, blockType: 'RICH_TEXT' | 'IMAGE') => Promise<PageBlock | null>;
     onUpdateBlock: (blockId: string, content: Record<string, unknown>) => void;
     onDeleteBlock: (pageId: string, blockId: string) => void;
     onReorderBlocks: (pageId: string, blockIds: string[]) => void;
     onAddTextBlock: () => void;
     onAddImageBlock: () => void;
-    onUploadImageForBlock: (blockId: string) => void;
     uploadImage: (file: File) => Promise<string | null>;
-    isAdmin: boolean;
     proposalVars: ProposalVariables;
     /** Encabezado ya resuelto para hojas hijas: "Titulo de la seccion — Hoja N". La seccion es dueña del titulo. */
     resolvedSheetHeading?: string;
@@ -32,7 +29,7 @@ interface PageEditorProps {
 function PageEditor({
     page, editingTitle, setEditingTitle,
     isReadOnly, onUpdatePage, onUpdateBlock, onDeleteBlock, onReorderBlocks,
-    onAddTextBlock, onAddImageBlock, onUploadImageForBlock, uploadImage,
+    onAddTextBlock, onAddImageBlock, uploadImage,
     proposalVars, resolvedSheetHeading,
 }: PageEditorProps) {
     const style = PAGE_TYPE_STYLES[page.pageType] || PAGE_TYPE_STYLES.CUSTOM;
@@ -168,12 +165,10 @@ function PageEditor({
                                     block={block}
                                     index={idx}
                                     totalBlocks={page.blocks.length}
-                                    pageId={page.id}
                                     isReadOnly={isReadOnly}
                                     onUpdate={onUpdateBlock}
                                     onDelete={() => onDeleteBlock(page.id, block.id)}
                                     onMove={(direction) => moveBlock(idx, direction)}
-                                    onUploadImage={() => onUploadImageForBlock(block.id)}
                                     uploadImage={uploadImage}
                                     proposalVars={proposalVars}
                                 />
