@@ -20,6 +20,14 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "bcrypt"
-    ]
+    ],
+    "overrides": {
+      "@nestjs/swagger>js-yaml": "5.2.2"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-w5hq-g745-h8pq"
+      ]
+    }
   }
 }
