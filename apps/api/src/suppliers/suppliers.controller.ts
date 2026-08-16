@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import type { SupplierContact } from '@prisma/client';
+import type { SupplierContact } from '../generated/prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SuppliersService } from './suppliers.service';
 import type { SupplierCompanyWithContacts } from './suppliers.service';

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ProposalStatus, Prisma } from '@prisma/client';
+import { ProposalStatus, Prisma } from '../generated/prisma/client';
 import {
   calculateItemDisplayValues,
   type PricingScenarioItem,

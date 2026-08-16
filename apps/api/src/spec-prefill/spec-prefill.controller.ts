@@ -12,7 +12,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Role } from '@prisma/client';
+import { Role } from '../generated/prisma/client';
 import { SpecPrefillService } from './spec-prefill.service';
 import { ExtractSpecsDto } from './dto/extract-specs.dto';
 import type { PrefillResponseDto } from './dto/prefill-response.dto';

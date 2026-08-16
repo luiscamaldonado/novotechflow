@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageAssetsService } from '../image-assets/image-assets.service';
-import { User, Prisma, Role } from '@prisma/client';
+import { User, Prisma, Role } from '../generated/prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 

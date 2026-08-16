@@ -11,7 +11,7 @@ import {
   ProposalStatus,
   ConsecutiveSource,
   AcquisitionType,
-} from '@prisma/client';
+} from '../generated/prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizePlainText } from '../common/sanitize';
 import {

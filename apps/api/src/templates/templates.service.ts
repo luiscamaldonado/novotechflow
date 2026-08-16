@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageAssetsService } from '../image-assets/image-assets.service';
-import { PageType } from '@prisma/client';
+import { PageType } from '../generated/prisma/client';
 
 @Injectable()
 export class TemplatesService {

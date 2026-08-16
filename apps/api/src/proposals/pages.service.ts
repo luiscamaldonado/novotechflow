@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProposalsService } from './proposals.service';
-import { BlockType, PageType } from '@prisma/client';
+import { BlockType, PageType } from '../generated/prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 import { sanitizeRichText } from '../common/sanitize';
 import { ImageAssetsService } from '../image-assets/image-assets.service';

@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProposalStatus, AcquisitionType } from '@prisma/client';
+import { ProposalStatus, AcquisitionType } from '../generated/prisma/client';
 import { AuthenticatedUser } from '../auth/dto/auth.dto';
 
 export interface CreateBillingProjectionDto {

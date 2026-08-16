@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client';
 
 export const externalProposalInclude = {
   user: { select: { name: true, nomenclature: true } },

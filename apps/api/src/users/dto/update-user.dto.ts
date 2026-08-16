@@ -12,7 +12,7 @@ import {
   Matches,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import { Role } from '../../generated/prisma/client';
 
 /**
  * DTO para edición de usuario desde el panel admin.
