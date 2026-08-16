@@ -10,21 +10,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.7.1",
+    "@hookform/resolvers": "^5.9.0",
     "@repo/item-display": "workspace:*",
     "@repo/pricing-engine": "workspace:*",
-    "@tiptap/extension-text-align": "^3.30.0",
-    "@tiptap/extension-underline": "^3.30.0",
-    "@tiptap/html": "^3.30.0",
-    "@tiptap/pm": "^3.30.0",
-    "@tiptap/react": "^3.30.0",
-    "@tiptap/starter-kit": "^3.30.0",
+    "@tiptap/extension-text-align": "^3.30.1",
+    "@tiptap/extension-underline": "^3.30.1",
+    "@tiptap/html": "^3.30.1",
+    "@tiptap/pm": "^3.30.1",
+    "@tiptap/react": "^3.30.1",
+    "@tiptap/starter-kit": "^3.30.1",
     "axios": "^1.19.0",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.43.0",
-    "html2canvas-pro": "^2.3.5",
+    "html2canvas-pro": "^2.3.8",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.577.0",
     "react": "^19.2.8",
@@ -33,7 +33,7 @@
     "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0",
     "yup": "^1.7.1",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
