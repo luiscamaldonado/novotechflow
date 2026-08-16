@@ -11,7 +11,8 @@ RUN pnpm install --frozen-lockfile --filter api...
 RUN pnpm --filter @repo/item-display build
 RUN pnpm --filter @repo/pricing-engine build
 COPY apps/api/ apps/api/
-RUN cd apps/api && pnpm exec prisma generate
+# prisma.config.ts exige DATABASE_URL al cargarse; generate no toca la base: placeholder solo para este RUN
+RUN cd apps/api && DATABASE_URL="postgresql://build:build@localhost:5432/build" pnpm exec prisma generate
 RUN cd apps/api && pnpm build
 
 # Stage 2: Production dependencies (prod-only tree from lockfile, hoisted)
