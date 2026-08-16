@@ -204,7 +204,7 @@ Reglas operativas asociadas:
 
 ## 9. Comandos PowerShell de referencia (paste-ready)
 
-> Encadenar con `;` (nunca `&&`). Usar `pnpm exec` (nunca `npx`: resuelve a global y rompe versiones pinneadas como Prisma 5.10.2).
+> Encadenar con `;` (nunca `&&`). Usar `pnpm exec` (nunca `npx`: resuelve a global y rompe versiones pinneadas como Prisma 7.9.1).
 > Estos comandos los corre **Claude Code**: Claude redacta el prompt, Luis lo pega y devuelve el resultado.
 
 **Ubicar un archivo (desde la raíz):**
@@ -226,7 +226,7 @@ cd apps/api
 pnpm exec prisma migrate dev --name <nombre_migracion>
 pnpm exec prisma generate
 ```
-> El `EPERM` sobre `query_engine-windows.dll.node` en `migrate dev` es cosmético. Si `generate` se queja del lock, parar los procesos Node y repetir.
+> Prisma 7: el CLI carga `prisma.config.ts` (schema, migraciones, seed y `DATABASE_URL` vía dotenv) antes de cualquier comando, incluido `generate`. `migrate dev` ya no corre `generate` ni el seed automáticamente. El cliente se genera como TypeScript en `apps/api/src/generated/` (gitignored): ya no hay engines binarios ni `query_engine-windows.dll.node`, y con ellos murió el lock EPERM clásico de Windows.
 
 **ADR — número y formato:**
 ```powershell
