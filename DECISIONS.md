@@ -3998,3 +3998,47 @@ El bloque de compatibilidad de border-color que insertó la tool (`border-color:
 - `apps/web/src/App.css` está muerto (CSS del starter de Vite, sin ningún import): borrarlo en una limpieza menor.
 - react-router: vigilar releases que publiquen condición `production` en el `exports`; sin acción local mientras tanto.
 - Cohorte F (Prisma 5.10.2→7) sigue en cola; prerequisito: regenerar `novotechflow_prod_copy`.
+
+## ADR-095 — Cohorte F: migración Prisma 5→7 al cliente Rust-free con driver adapter de pg
+
+**Fecha:** 2026-08-16
+**Estado:** Aceptado
+
+### Contexto
+
+Prisma llevaba dos majors congelado en 5.10.2 (pin de ADR-041). El reconocimiento contra las guías oficiales dejó la superficie v6 en cero para este repo — sin relaciones m-n implícitas (única fuente de migración de esquema del salto), sin campos Bytes, sin NotFoundError, sin $use ni full-text search — así que se saltó directo 5→7 sin hop intermedio. v7 es un cambio generacional: generador `prisma-client` con `output` obligatorio fuera de node_modules, cliente sin engines Rust que exige driver adapter, `prisma.config.ts` como configuración del CLI, fin del autoload de `.env` y prohibición de `url` en el datasource del schema (P1012, endurecido en 7.9.x respecto a la guía oficial, que lo listaba como deprecado).
+
+### Decisión
+
+Salto directo a 7.9.1 con pins exactos en lockstep (`prisma`, `@prisma/client`, `@prisma/adapter-pg`) más `pg`, `dotenv` y `@types/pg`. Generador `prisma-client` con `output = "../src/generated/prisma"` y `moduleFormat = "cjs"` (el api es CommonJS): carpeta gitignored, generada en build, con los 20 imports del api repuntados a rutas relativas. El datasource quedó sin `url`: la del CLI vive en `prisma.config.ts` con `env("DATABASE_URL")` estricto (fail-fast con mensaje claro si falta en runtime) y la del proceso entra por el adapter. `PrismaService` instancia `PrismaPg` parseando `connection_limit`/`pool_timeout` de la propia `DATABASE_URL` hacia `max`/`connectionTimeoutMillis`: el dimensionamiento del ADR-072 se conserva sin tocar variables de Railway (los defaults del driver pg difieren de los de v6). El shutdown pasó de `$on('beforeExit')` (eliminado en v7) a `onModuleDestroy` + `app.enableShutdownHooks()`. `import 'dotenv/config'` abre `main.ts` y `seed.ts` porque v7 dejó de autocargar `.env` al instanciar el cliente. Se retiraron 10 scripts legacy que instanciaban el cliente viejo (6 de limpieza/import de clientes, 3 seeds `.js`, y el backfill de ADR-082/084 ya ejecutado); `seed.ts` queda como único seed, con adapter. `express` pasó a dependencia directa (`^5.2.1`): `main.ts` ya lo importaba y solo llegaba transitivo. Dockerfile del api: el `generate` del stage prod-deps se eliminó (el output ya no va a node_modules; el cliente viaja compilado dentro de `dist` desde el builder), el runner ganó `COPY` de `prisma.config.ts` para el `migrate deploy` del CMD, y el `generate` del builder lleva un `DATABASE_URL` placeholder inline porque el CLI resuelve el config antes de cualquier comando, incluso los que no tocan base.
+
+### Consecuencias
+
+- Ensayo completo contra `novotechflow_prod_copy` regenerada del dump del 16-ago: `migrate status` 35/35, `db execute` sin `--url`, lecturas y `$transaction` batch vía adapter (70 image_assets, 3145 proposal_page_blocks, 11 users, 426 proposals), include relacional, y api local respondiendo 200.
+- Imagen validada desde `git archive` del HEAD (mismo contexto limpio que construye Railway): build sin descarga de engines, `migrate deploy` no-op, bootstrap completo de Nest y 200 en la sonda; 207 MB de contenido. El test de imagen local queda institucionalizado como guardia previa al push de cambios de runtime.
+- La cohorte no introduce migración de esquema: el deploy aplicará cero migraciones.
+- Gates al cierre: tsc de web y gate completo del api (`apps/api/tsconfig.json`, ADR-071). Los commits de la rama se validaron con `tsconfig.build.json` por una instrucción desactualizada de claude.ai; el gate completo corrió en verde antes del push.
+- `typescript` 6.0.2 viaja al runner como peerDependency opcional de `prisma` resuelta por el lockfile; la carga de `prisma.config.ts` en el runner no está probada sin él. Si algún día se poda, revalidar; fallback: config en `.mjs`.
+- `GEMINI_API_KEY` es obligatoria para arrancar el contenedor (fail-fast preexistente de GeminiClient): todo `docker run` de prueba la necesita como dummy.
+- Flags muertos en v7: `--url`/`--schema` de `db execute` y los `--from-url`/`--to-url` de `migrate diff`; `migrate dev` ya no corre `generate` ni seed automáticamente. §9 del instructivo actualizado; el lock EPERM de `query_engine-windows.dll.node` murió con los engines.
+- pnpm 10 ignora los build scripts de `prisma`/`@prisma/engines`; `generate` funciona igual porque el provider nuevo no necesita engines binarios.
+
+### Archivos
+
+`apps/api`: package.json, prisma/schema.prisma, prisma.config.ts (nuevo), prisma/seed.ts, Dockerfile, src/main.ts, src/prisma/prisma.service.ts y 18 archivos de src/ con el import repuntado. 10 scripts legacy eliminados. Raíz: .gitignore, pnpm-lock.yaml, INSTRUCTIVO_CLAUDE.md (§9).
+
+### Commits
+
+- `63950f8` — chore(api): remove legacy prisma scripts superseded by seed.ts and completed backfill
+- `89c1d89` — chore(api): declare express as direct dependency
+- `62f9159` — chore(deps): migrate prisma 5 to 7 with pg driver adapter
+- `ef92a04` — fix(api): load dotenv at bootstrap after prisma 7 removed env autoloading
+- `5ae5ebf` — chore(api): adapt dockerfile to prisma 7 client output and cli config
+- `dbec210` — fix(api): use placeholder database url for prisma generate in image build
+- `316b15f` — docs: update section 9 prisma notes for prisma 7
+
+### Pendientes
+
+- Revalidar la carga de `prisma.config.ts` en el runner si `typescript` deja de viajar en el árbol prod (fallback: migrar el config a `.mjs`).
+- Actualizar a mano en claude.ai las instrucciones del proyecto y la skill novotechflow: gate de tipos del api (`tsconfig.json`, no `tsconfig.build.json`, ADR-071), comandos y workarounds de la era v7. Lo hace Luis.
+- Re-subir INSTRUCTIVO_CLAUDE.md y DECISIONS.md del disco a los attachments del proyecto tras el push.
