@@ -26,8 +26,6 @@ COPY packages/ packages/
 COPY --from=builder /app/packages/item-display/dist packages/item-display/dist
 COPY --from=builder /app/packages/pricing-engine/dist packages/pricing-engine/dist
 RUN pnpm install --frozen-lockfile --filter api... --prod --config.node-linker=hoisted
-COPY apps/api/prisma apps/api/prisma
-RUN cd apps/api && pnpm exec prisma generate
 
 # Stage 3: Production
 FROM node:22-alpine AS runner
@@ -41,6 +39,7 @@ COPY --from=builder /app/packages/item-display/dist ./node_modules/@repo/item-di
 COPY --from=builder /app/packages/pricing-engine/package.json ./node_modules/@repo/pricing-engine/package.json
 COPY --from=builder /app/packages/pricing-engine/dist ./node_modules/@repo/pricing-engine/dist
 COPY --from=builder /app/apps/api/prisma ./prisma
+COPY --from=builder /app/apps/api/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/apps/api/package.json ./
 COPY --from=builder /app/apps/api/tsconfig.json ./
 RUN mkdir -p uploads/signatures uploads/templates
