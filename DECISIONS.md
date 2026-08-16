@@ -3954,3 +3954,47 @@ package.json (raíz), pnpm-lock.yaml.
 
 - Retirar el override cuando `@nestjs/swagger` declare js-yaml >= 5.2.2 (o al migrar a la major 12, que hoy vuelve a la línea 4.x, fuera del rango afectado).
 - Re-evaluar el ignore de uuid si exceljs publica una versión con uuid >= 11.1.1 o si entra otro consumidor de uuid al grafo.
+
+## ADR-094 — Cohorte E: migración Tailwind 3→4 por la vía del plugin de Vite
+
+**Fecha:** 2026-08-16
+**Estado:** Aceptado
+
+### Contexto
+
+Cohorte E (Tailwind 3→4), desbloqueada tras el merge del constructor WYSIWYG (ADR-090, ADR-091). El reconocimiento del 2026-08-16 dimensionó una superficie chica: config de 30 líneas (paleta novo + Inter), dos plugins (tailwind-scrollbar 3.1.0 con `nocompatible: true`, @tailwindcss/typography 0.5.20), un único CSS de entrada (`src/index.css`) con las tres directivas `@tailwind` y dos `@apply`; cero utilidades de opacity deprecadas, cero `theme()`, cero renombradas de v3. Lo material eran los renames semánticos de v4 — 57 `shadow-sm`→`shadow-xs`, 9 `backdrop-blur-sm`→`backdrop-blur-xs`, 16 `outline-none`→`outline-hidden` — que compilan en v4 con otro significado y degradan render y focus accesible en silencio. Peers contra el registry: @tailwindcss/vite declara `vite ^5.2 || ^6 || ^7 || ^8` (la incógnita Rolldown de ADR-089 quedó despejada de fábrica); typography 0.5.20 ya soporta v4; tailwind-scrollbar 4.0.2 exige `tailwindcss 4.x` estricto — acoplado al salto.
+
+El reconocimiento cerró además tres checks menores de la capa web: `@tiptap/pm` se queda (peer real de @tiptap/core/react/html, no residuo); `@tiptap/extension-underline` se removió (redundante: starter-kit lo arrastra y lo registra, cero imports directos; los hashes del bundle quedaron idénticos tras quitarlo); html2canvas sin acción (el código importa solo html2canvas-pro; el clásico entra únicamente como optionalDependency de jspdf). Hallazgo mayor sin acción local: el bundle de producción lleva la build development de react-router 7.18.2 porque el `exports` del paquete apunta todas sus condiciones a `dist/development/` — no existe condición `production`, y `ENABLE_DEV_WARNINGS = true` queda inlineado con sus warnings sobreviviendo a la minificación. Causa upstream (7.18.2 es latest); responde la pregunta abierta nº 5 del diagnóstico 2026-07-24.
+
+### Decisión
+
+Vía @tailwindcss/vite, no @tailwindcss/postcss: integración nativa al pipeline de Vite 8/Rolldown, elimina `postcss.config.js` y autoprefixer del manifiesto de web (v4 autoprefija vía Lightning CSS), peer `^8` explícito. postcss permanece en el árbol solo como transitiva (sanitize-html en api, vite).
+
+Ejecución con la herramienta oficial (`pnpm dlx @tailwindcss/upgrade`; dlx corre aislado y no toca los pins del árbol). El primer intento abortó en la fase de templates: la tool actualiza dependencias antes de migrar templates, pnpm re-resolvió el peer de tailwind-scrollbar@3.1.0 contra tailwindcss@4 y el plugin v3 requirió `tailwindcss/lib/util/toColorValue`, subpath interno que v4 ya no exporta (ERR_PACKAGE_PATH_NOT_EXPORTED). Vía adoptada: revert de lo parcial, bump previo de tailwind-scrollbar a ^4.0.2 en commit intermedio (árbol deliberadamente no funcional en tránsito — scrollbar 4 bajo tailwind 3 —, aceptado porque nadie desarrolla parado ahí y el push lleva el conjunto), y re-run de la tool con working tree limpio. Completó las cuatro fases: config JS→CSS-first (`@theme` con los cinco colores novo y `--font-sans` Inter; `@plugin 'tailwind-scrollbar' { nocompatible: true; }`; `@plugin '@tailwindcss/typography'`; `@utility glass` con su `@apply` original; `tailwind.config.js` borrado por la propia tool), stylesheet migrado, 49 `.tsx` con el 100% de los renames (incluido el `outline-none` dentro del string de `editorProps.attributes.class` en RichTextEditor.tsx), y PostCSS reconfigurado — reconvertido a mano a la vía vite: `@tailwindcss/vite` en `vite.config.ts` (`plugins: [react(), tailwindcss()]`), fuera @tailwindcss/postcss, postcss y autoprefixer, `postcss.config.js` borrado.
+
+El bloque de compatibilidad de border-color que insertó la tool (`border-color: var(--color-gray-200, currentcolor)` sobre `*`, `::before`, `::after`, `::backdrop`, `::file-selector-button`) se conserva: replica el default v3 sin auditar borde por borde.
+
+### Consecuencias
+
+- Config CSS-first: toda la configuración de Tailwind vive en `apps/web/src/index.css`; no existen `tailwind.config.js` ni `postcss.config.js`.
+- CSS de dist: 85,85 kB → 109,25 kB (~+23 kB de preflight/theme v4; gzip 16,62 kB). Build de web ~1,8 s.
+- Gates verdes: tsc en web y api, build de web, y verificación del CSS compilado (paleta novo presente, `.glass` presente, utilidades `scrollbar-` presentes).
+- Verificación visual en navegador (Luis) sin regresiones: bordes bajo el bloque de compatibilidad, focus con `outline-hidden` (Login, 2FA, editor tiptap), scrollbars en modo nocompatible, cursor y placeholders del preflight v4, y PDF de prueba con html2canvas-pro rasterizando estilos v4. No hizo falta regla base para `cursor: pointer`.
+- La cola larga de renames (ring desnudo, `!important` v3, variables arbitrarias `[--x]`) dio cero ocurrencias: ninguna migración manual de clases.
+
+### Archivos
+
+`apps/web`: package.json, vite.config.ts, src/index.css, 49 `.tsx` bajo src/ (listados en el commit de la migración), tailwind.config.js y postcss.config.js (eliminados). pnpm-lock.yaml.
+
+### Commits
+
+- `39a1bc0` — chore(deps): remove redundant tiptap underline direct dependency.
+- `7a9fe33` — chore(deps): bump tailwind-scrollbar to 4 ahead of tailwind 4 migration.
+- `22985c1` — chore(deps): migrate tailwindcss 3 to 4 with vite plugin.
+
+### Pendientes
+
+- Retirar el bloque de compatibilidad de border-color: exige auditar los elementos que dependen del default y ponerles utilidad explícita de color de borde. Sin urgencia; el bloque es inocuo.
+- `apps/web/src/App.css` está muerto (CSS del starter de Vite, sin ningún import): borrarlo en una limpieza menor.
+- react-router: vigilar releases que publiquen condición `production` en el `exports`; sin acción local mientras tanto.
+- Cohorte F (Prisma 5.10.2→7) sigue en cola; prerequisito: regenerar `novotechflow_prod_copy`.
