@@ -1,16 +1,45 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@plugin 'tailwind-scrollbar' {
+  nocompatible: true;
+}
+@plugin '@tailwindcss/typography';
+
+@theme {
+  --color-novo-primary: #713aec;
+  --color-novo-dark: #10082b;
+  --color-novo-secondary: #2e1f56;
+  --color-novo-light: #faf9fb;
+  --color-novo-accent: #6e36e7;
+
+  --font-sans: Inter, system-ui, sans-serif;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility glass {
+  @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl;
+}
 
 @layer base {
   body {
     @apply bg-novo-light text-gray-900 leading-relaxed font-sans scroll-smooth;
-  }
-}
-
-@layer utilities {
-  .glass {
-    @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl;
   }
 }
 

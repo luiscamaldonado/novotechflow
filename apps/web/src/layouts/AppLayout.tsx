@@ -29,7 +29,7 @@ export default function AppLayout() {
                     <div className="flex items-center">
                         <button
                             onClick={() => setSidebarOpen(true)}
-                            className="lg:hidden p-2 mr-4 text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-novo-primary rounded-lg"
+                            className="lg:hidden p-2 mr-4 text-gray-500 hover:text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-novo-primary rounded-lg"
                         >
                             <Menu className="h-6 w-6" />
                         </button>
@@ -47,7 +47,7 @@ export default function AppLayout() {
                 </header>
 
                 {/* Page Content */}
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#FAF9FB] p-4 sm:p-8">
+                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-novo-light p-4 sm:p-8">
                     <Outlet />
                 </main>
             </div>

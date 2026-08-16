@@ -147,7 +147,7 @@ export default function SpecFieldsSection({
                 .map(([field, spec]) => {
                 const currentVal = (technicalSpecs as Record<string, string>)?.[field] || '';
                 const inputClasses = cn(
-                    'w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-none',
+                    'w-full px-4 py-3 rounded-2xl bg-slate-50 border-2 border-transparent focus:bg-white text-[13px] font-bold text-slate-700 transition-all outline-hidden',
                     theme.focusColor,
                     'disabled:opacity-60 disabled:cursor-not-allowed',
                 );

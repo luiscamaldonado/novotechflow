@@ -26,7 +26,7 @@ function ToggleRow({ label, description, checked, isSaving, disabled, onChange }
                     checked={checked}
                     disabled={disabled}
                     onChange={e => onChange(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="h-4 w-4 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
             </label>
         </div>

@@ -56,7 +56,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={() => setIsOpen(false)}
-                        className="fixed inset-0 bg-novo-dark/50 z-20 lg:hidden backdrop-blur-sm"
+                        className="fixed inset-0 bg-novo-dark/50 z-20 lg:hidden backdrop-blur-xs"
                     />
                 )}
             </AnimatePresence>
@@ -129,7 +129,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
                 <div className="p-4 border-t border-novo-secondary/30 bg-novo-dark/50">
                     <div className="flex items-center space-x-3 px-4 py-3 mb-2">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-novo-primary to-novo-accent flex items-center justify-center text-sm font-bold shadow-inner">
+                        <div className="w-9 h-9 rounded-full bg-linear-to-tr from-novo-primary to-novo-accent flex items-center justify-center text-sm font-bold shadow-inner">
                             {user?.name.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">

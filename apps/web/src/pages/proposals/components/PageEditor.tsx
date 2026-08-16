@@ -75,7 +75,7 @@ function PageEditor({
                                         if (e.key === 'Escape') setEditingTitle(null);
                                     }}
                                     autoFocus
-                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none w-full max-w-md disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-hidden w-full max-w-md disabled:opacity-60 disabled:cursor-not-allowed"
                                 />
                             ) : (
                                 <button

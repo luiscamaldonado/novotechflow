@@ -270,14 +270,14 @@ export default function ScenarioItemRow({
                         <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                                 onClick={onMoveUp}
-                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                className="p-0.5 rounded-sm transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                 title="Subir"
                             >
                                 <ChevronUp className="h-3.5 w-3.5" />
                             </button>
                             <button
                                 onClick={onMoveDown}
-                                className="p-0.5 rounded transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                className="p-0.5 rounded-sm transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                 title="Bajar"
                             >
                                 <ChevronDown className="h-3.5 w-3.5" />
@@ -327,9 +327,9 @@ export default function ScenarioItemRow({
                                     const childDv = calculateItemDisplayValues(child, scenarioItems, scenarioCurrency, effectiveConversionTrm);
                                     const cLanded = childDv.parentLandedCost;
                                     return (
-                                        <div key={child.id} className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-violet-100 shadow-sm">
+                                        <div key={child.id} className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-violet-100 shadow-xs">
                                             <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                                <span className="text-[10px] font-black text-violet-400 bg-violet-100 px-1.5 py-0.5 rounded shrink-0">#{childDisplayIdx}</span>
+                                                <span className="text-[10px] font-black text-violet-400 bg-violet-100 px-1.5 py-0.5 rounded-sm shrink-0">#{childDisplayIdx}</span>
                                                 <div className="min-w-0">
                                                     <p className="text-xs font-black text-slate-800 truncate">{child.item.name}</p>
                                                     <p className="text-[9px] text-slate-400 font-bold uppercase">{child.item.itemType}</p>

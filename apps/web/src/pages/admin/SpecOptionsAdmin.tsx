@@ -146,7 +146,7 @@ export default function SpecOptionsAdmin() {
                         className={cn(
                             "flex items-center space-x-2 px-6 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest",
                             hasFieldSelected
-                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300"
+                                ? "bg-linear-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300"
                                 : "bg-slate-100 text-slate-300 cursor-not-allowed"
                         )}
                     >
@@ -157,7 +157,7 @@ export default function SpecOptionsAdmin() {
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-4xl p-6 shadow-xs border border-slate-100">
                 <div className="flex items-center flex-wrap gap-4">
                     <select
                         value={selectedField}
@@ -216,7 +216,7 @@ export default function SpecOptionsAdmin() {
                         </button>
                         <button
                             onClick={handleBulkDelete}
-                            className="flex items-center space-x-1 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-sm"
+                            className="flex items-center space-x-1 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-xs"
                         >
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>Eliminar seleccionados</span>
@@ -227,7 +227,7 @@ export default function SpecOptionsAdmin() {
 
             {/* Table / Empty placeholder */}
             {!hasFieldSelected ? (
-                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 py-24 text-center">
+                <div className="bg-white rounded-4xl shadow-xs border border-slate-100 py-24 text-center">
                     <Database className="h-16 w-16 mx-auto text-slate-200 mb-4" />
                     <p className="text-base font-bold text-slate-400">Selecciona un campo para ver y gestionar sus opciones</p>
                     <p className="text-xs text-slate-300 mt-2">Usa el selector de campo de arriba para comenzar.</p>
@@ -237,7 +237,7 @@ export default function SpecOptionsAdmin() {
                     <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
                 </div>
             ) : (
-                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                <div className="bg-white rounded-4xl shadow-xs border border-slate-100 overflow-hidden">
                     {filtered.length === 0 ? (
                         <div className="py-20 text-center">
                             <PackageOpen className="h-16 w-16 mx-auto text-slate-100 mb-4" />
@@ -254,7 +254,7 @@ export default function SpecOptionsAdmin() {
                                             checked={isAllSelected}
                                             ref={el => { if (el) el.indeterminate = isSomeSelected && !isAllSelected; }}
                                             onChange={handleToggleAll}
-                                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                            className="h-4 w-4 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                         />
                                     </th>
                                     <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Campo</th>
@@ -318,7 +318,7 @@ function OptionRow({
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => onToggleSelect(option.id)}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="h-4 w-4 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
             </td>
             <td className="px-6 py-4">

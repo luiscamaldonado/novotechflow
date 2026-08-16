@@ -21,7 +21,7 @@ interface RichTextEditorProps {
 }
 
 const TOOLBAR_BTN = "p-1.5 rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all";
-const TOOLBAR_BTN_ACTIVE = "bg-indigo-100 text-indigo-600 shadow-sm";
+const TOOLBAR_BTN_ACTIVE = "bg-indigo-100 text-indigo-600 shadow-xs";
 
 export default function RichTextEditor({ content, onUpdate, readOnly = false, proposalVars }: RichTextEditorProps) {
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,7 +51,7 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false, pr
         editable: !readOnly,
         editorProps: {
             attributes: {
-                class: 'prose prose-sm max-w-none focus:outline-none min-h-[120px] px-5 py-4',
+                class: 'prose prose-sm max-w-none focus:outline-hidden min-h-[120px] px-5 py-4',
             },
         },
         onUpdate: ({ editor: ed }) => {
@@ -143,7 +143,7 @@ export default function RichTextEditor({ content, onUpdate, readOnly = false, pr
     );
 
     return (
-        <div ref={editorWrapperRef} className="border-2 border-slate-100 rounded-2xl bg-white shadow-sm relative">
+        <div ref={editorWrapperRef} className="border-2 border-slate-100 rounded-2xl bg-white shadow-xs relative">
             {/* Editor */}
             <EditorContent editor={editor} />
 

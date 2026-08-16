@@ -112,7 +112,7 @@ export default function ScenarioHeader({
                                 }
                             }}
                             autoFocus
-                            className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none w-full max-w-md"
+                            className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-hidden w-full max-w-md"
                         />
                     ) : (
                         <button
@@ -131,7 +131,7 @@ export default function ScenarioHeader({
                 <div className="flex flex-col items-end mr-4">
                     <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Margen Global</span>
                     <div className={cn(
-                        "flex items-center px-4 py-2 rounded-xl border shadow-sm",
+                        "flex items-center px-4 py-2 rounded-xl border shadow-xs",
                         isDaasMode
                             ? "bg-slate-100 border-slate-200"
                             : "bg-emerald-50 border-emerald-100"
@@ -165,7 +165,7 @@ export default function ScenarioHeader({
                 {/* Acquisition Mode Selector */}
                 <div className="flex flex-col items-end mr-4">
                     <span className="text-[9px] font-black text-sky-600 uppercase tracking-widest mb-1">Adquisición</span>
-                    <div className="flex items-center bg-sky-50 px-3 py-2 rounded-xl border border-sky-100 shadow-sm">
+                    <div className="flex items-center bg-sky-50 px-3 py-2 rounded-xl border border-sky-100 shadow-xs">
                         <ShoppingCart className="h-3.5 w-3.5 text-sky-400 mr-2" />
                         <select
                             value={acquisitionModes[activeScenarioId!] || 'VENTA'}
@@ -189,7 +189,7 @@ export default function ScenarioHeader({
                         disabled={isReadOnly}
                         className={cn(
                             "px-4 py-2 rounded-lg text-[10px] font-black transition-all",
-                            activeScenario.currency === 'COP' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                            activeScenario.currency === 'COP' ? "bg-white text-indigo-600 shadow-xs" : "text-slate-400 hover:text-slate-600"
                         )}
                     >
                         COP
@@ -199,7 +199,7 @@ export default function ScenarioHeader({
                         disabled={isReadOnly}
                         className={cn(
                             "px-4 py-2 rounded-lg text-[10px] font-black transition-all",
-                            activeScenario.currency === 'USD' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                            activeScenario.currency === 'USD' ? "bg-white text-indigo-600 shadow-xs" : "text-slate-400 hover:text-slate-600"
                         )}
                     >
                         USD
@@ -213,7 +213,7 @@ export default function ScenarioHeader({
                         isConversionUnnecessary ? "text-slate-400" : "text-amber-600"
                     )}>TRM Conversión</span>
                     <div className={cn(
-                        "flex items-center px-4 py-2 rounded-xl border shadow-sm",
+                        "flex items-center px-4 py-2 rounded-xl border shadow-xs",
                         isConversionUnnecessary
                             ? "bg-slate-100 border-slate-200"
                             : "bg-amber-50 border-amber-100"

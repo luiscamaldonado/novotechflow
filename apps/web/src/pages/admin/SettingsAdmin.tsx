@@ -87,7 +87,7 @@ export default function SettingsAdmin() {
             </div>
 
             {/* Card */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-6">
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6 space-y-6">
                 {/* Secci&oacute;n: Sesi&oacute;n */}
                 <div>
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
@@ -154,7 +154,7 @@ export default function SettingsAdmin() {
                             className={
                                 isSaveDisabled
                                     ? 'px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-300 cursor-not-allowed'
-                                    : 'px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all'
+                                    : 'px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-linear-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all'
                             }
                         >
                             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar'}
@@ -164,12 +164,12 @@ export default function SettingsAdmin() {
             </div>
 
             {/* Card: Validación de precios */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6">
                 <PriceThresholdsSettings />
             </div>
 
             {/* Card: Campos de proveedor */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6">
                 <SupplierFieldsSettings />
             </div>
         </div>

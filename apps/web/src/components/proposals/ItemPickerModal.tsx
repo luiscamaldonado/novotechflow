@@ -20,7 +20,7 @@ export default function ItemPickerModal({ isOpen, onClose, proposalItems, scenar
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
                 >
                     <motion.div 
                         initial={{ scale: 0.9, opacity: 0 }}
@@ -51,14 +51,14 @@ export default function ItemPickerModal({ isOpen, onClose, proposalItems, scenar
                                     <div 
                                         key={item.id}
                                         className={cn(
-                                            "flex items-center justify-between p-6 rounded-[2rem] border-2 transition-all",
+                                            "flex items-center justify-between p-6 rounded-4xl border-2 transition-all",
                                             isAlreadyIn 
                                                 ? "bg-emerald-50 border-emerald-100 opacity-60" 
                                                 : "bg-white border-slate-100 hover:border-indigo-200"
                                         )}
                                     >
                                         <div className="flex items-center space-x-6">
-                                            <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-50">
+                                            <div className="bg-white p-3 rounded-2xl shadow-xs border border-slate-50">
                                                 <Package className="h-6 w-6 text-indigo-600" />
                                             </div>
                                             <div>
@@ -74,7 +74,7 @@ export default function ItemPickerModal({ isOpen, onClose, proposalItems, scenar
                                         </div>
                                         
                                         {isAlreadyIn ? (
-                                            <div className="flex items-center space-x-2 text-emerald-600 font-black text-[10px] uppercase tracking-widest px-6 py-3 bg-white rounded-xl shadow-sm">
+                                            <div className="flex items-center space-x-2 text-emerald-600 font-black text-[10px] uppercase tracking-widest px-6 py-3 bg-white rounded-xl shadow-xs">
                                                 <CheckCircle2 className="h-4 w-4" />
                                                 <span>Incluido</span>
                                             </div>

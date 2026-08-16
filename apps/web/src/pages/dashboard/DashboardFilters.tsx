@@ -310,7 +310,7 @@ function UserFilter({ value, onChange }: {
 
 export default function DashboardFilters(props: DashboardFiltersProps) {
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5 animate-in slide-in-from-top-2">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-5 space-y-5 animate-in slide-in-from-top-2">
             <div className="flex items-center justify-between">
                 <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">
                     Filtros Avanzados

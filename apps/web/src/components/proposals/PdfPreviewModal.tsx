@@ -460,7 +460,7 @@ function CoverPageContent({ blocks, title, resolveImageUrl }: { blocks: PageBloc
     return (
         <div className="flex flex-col items-center justify-center" style={{ minHeight: `${PAGE_GEOMETRY.HEIGHT_PX}px` }}>
             <div className="w-full max-w-md mx-auto text-center space-y-8">
-                <div className="w-24 h-24 mx-auto bg-gradient-to-br from-indigo-600 to-violet-600 rounded-3xl shadow-2xl shadow-indigo-600/30 flex items-center justify-center">
+                <div className="w-24 h-24 mx-auto bg-linear-to-br from-indigo-600 to-violet-600 rounded-3xl shadow-2xl shadow-indigo-600/30 flex items-center justify-center">
                     <FileText className="h-12 w-12 text-white" />
                 </div>
                 <div className="space-y-4 pt-8">

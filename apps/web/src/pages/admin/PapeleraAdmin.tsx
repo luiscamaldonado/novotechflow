@@ -23,7 +23,7 @@ export default function PapeleraAdmin() {
       </div>
 
       {/* Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6">
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
             <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
@@ -69,7 +69,7 @@ export default function PapeleraAdmin() {
                         className={
                           restoringId === proposal.id
                             ? 'inline-flex items-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-300 cursor-not-allowed'
-                            : 'inline-flex items-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all'
+                            : 'inline-flex items-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-linear-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all'
                         }
                       >
                         {restoringId === proposal.id ? (

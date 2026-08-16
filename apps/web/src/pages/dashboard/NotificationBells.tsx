@@ -108,7 +108,7 @@ function BellButton({
                 <Icon className="h-5 w-5" />
                 {unreadCount > 0 && (
                     <span
-                        className={`absolute -top-0.5 -right-0.5 flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-black text-white ${styles.badgeBg} shadow-sm`}
+                        className={`absolute -top-0.5 -right-0.5 flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-black text-white ${styles.badgeBg} shadow-xs`}
                     >
                         {unreadCount}
                     </span>

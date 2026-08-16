@@ -23,7 +23,7 @@ import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
 import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
 
 /** Clases base de un chip de specs en la tabla de items. */
-const SPEC_CHIP_BASE_CLASS = 'px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border';
+const SPEC_CHIP_BASE_CLASS = 'px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-xs border';
 /** Color por campo: conserva el codigo de colores que tenian los chips hardcodeados. */
 const SPEC_CHIP_COLOR_BY_FIELD: Record<string, string> = {
     modelo: 'bg-rose-50 text-rose-600 border-rose-100/50',
@@ -287,7 +287,7 @@ export default function ProposalItemsBuilder() {
                     </h2>
                     <p className="text-slate-500 text-sm mt-1 font-medium">Arquitectura de Oferta y Estructura de Costos</p>
                 </div>
-                <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm text-right ring-1 ring-slate-100">
+                <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-xs text-right ring-1 ring-slate-100">
                     <span className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Referencia Única</span>
                     <p className="text-2xl font-mono font-black text-indigo-600 leading-tight">{proposal.proposalCode}</p>
                 </div>
@@ -300,7 +300,7 @@ export default function ProposalItemsBuilder() {
                 className="grid grid-cols-1 lg:grid-cols-12 gap-6"
             >
                 {/* Info Cliente */}
-                <div className="lg:col-span-3 bg-slate-900 rounded-[2rem] p-6 text-white shadow-xl shadow-slate-200 flex flex-col justify-center relative overflow-hidden group">
+                <div className="lg:col-span-3 bg-slate-900 rounded-4xl p-6 text-white shadow-xl shadow-slate-200 flex flex-col justify-center relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                         <Lock className="h-12 w-12" />
                     </div>
@@ -315,7 +315,7 @@ export default function ProposalItemsBuilder() {
                 </div>
 
                 {/* Ajustes Horizontales */}
-                <div className="lg:col-span-9 bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6">
+                <div className="lg:col-span-9 bg-white rounded-4xl shadow-xs border border-slate-100 p-6">
                     <form onSubmit={handleUpdateProposal} className="flex flex-col gap-6">
                         <div className="w-full space-y-2">
                             <label className="flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -390,14 +390,14 @@ export default function ProposalItemsBuilder() {
 
                         <div className="flex items-center space-x-3">
                             {isAddingItem ? (
-                                <button onClick={() => setIsAddingItem(false)} className="flex items-center space-x-2 text-slate-500 hover:text-slate-700 transition-colors px-5 py-3.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-sm">
+                                <button onClick={() => setIsAddingItem(false)} className="flex items-center space-x-2 text-slate-500 hover:text-slate-700 transition-colors px-5 py-3.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xs">
                                      <ChevronRight className="h-4 w-4 -rotate-90" />
                                      <span>CONTRAER</span>
                                 </button>
                             ) : (
                                 <>
                                     {!isReadOnly && (itemForm.name !== '' || editingItemId) && (
-                                        <button onClick={() => setIsAddingItem(true)} className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 transition-colors px-6 py-4 font-black text-xs uppercase tracking-widest border-2 border-indigo-200 rounded-2xl bg-indigo-50 hover:bg-indigo-100 shadow-sm">
+                                        <button onClick={() => setIsAddingItem(true)} className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 transition-colors px-6 py-4 font-black text-xs uppercase tracking-widest border-2 border-indigo-200 rounded-2xl bg-indigo-50 hover:bg-indigo-100 shadow-xs">
                                              <ChevronRight className="h-5 w-5 rotate-90" />
                                              <span>EXPANDIR</span>
                                         </button>
@@ -430,7 +430,7 @@ export default function ProposalItemsBuilder() {
                                         {/* Selector de Tipo */}
                                         <div className="md:col-span-3 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Elegible Categoría</label>
-                                            <select name="itemType" value={itemForm.itemType} onChange={handleItemChange} disabled={isReadOnly} className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 appearance-none shadow-sm cursor-pointer hover:border-indigo-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                                            <select name="itemType" value={itemForm.itemType} onChange={handleItemChange} disabled={isReadOnly} className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 appearance-none shadow-xs cursor-pointer hover:border-indigo-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
                                                 {Object.entries(ITEM_TYPE_LABELS).map(([key, label]) => (
                                                     <option key={key} value={key}>{label}</option>
                                                 ))}
@@ -440,7 +440,7 @@ export default function ProposalItemsBuilder() {
                                         {/* Nombre del Item */}
                                         <div className="md:col-span-7 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nombre de Item</label>
-                                            <input type="text" name="name" value={itemForm.name} onChange={handleItemChange} required disabled={isReadOnly} placeholder="Ej. Laptops Dell Vostro 3400..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
+                                            <input type="text" name="name" value={itemForm.name} onChange={handleItemChange} required disabled={isReadOnly} placeholder="Ej. Laptops Dell Vostro 3400..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-xs placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
                                         </div>
 
                                         {itemForm.itemType === 'PCS' && !isReadOnly && (
@@ -470,7 +470,7 @@ export default function ProposalItemsBuilder() {
                                         {/* Descripción General */}
                                         <div className="md:col-span-12 space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Notas Técnicas Complementarias</label>
-                                            <textarea name="description" value={itemForm.description} onChange={handleItemChange} rows={3} disabled={isReadOnly} placeholder="Ingrese detalles específicos no contemplados en la ficha técnica..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-medium text-slate-700 resize-none shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
+                                            <textarea name="description" value={itemForm.description} onChange={handleItemChange} rows={3} disabled={isReadOnly} placeholder="Ingrese detalles específicos no contemplados en la ficha técnica..." className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-medium text-slate-700 resize-none shadow-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed" />
                                         </div>
 
                                         {/* Tiempo de Entrega */}
@@ -491,7 +491,7 @@ export default function ProposalItemsBuilder() {
                                                 step={1}
                                                 placeholder="Ej: 30"
                                                 disabled={isReadOnly}
-                                                className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-sm placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-indigo-100 focus:border-indigo-600 focus:ring-0 text-sm font-black text-slate-800 shadow-xs placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                             />
                                         </div>
 
@@ -605,7 +605,7 @@ export default function ProposalItemsBuilder() {
                                         {!isReadOnly && <button type="button" onClick={() => { setIsAddingItem(false); setEditingItemId(null); setItemForm(initialItemForm); setItemError(null); }} className="px-10 py-5 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
                                             Descartar
                                         </button>}
-                                        {!isReadOnly && <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
+                                        {!isReadOnly && <button type="submit" disabled={saving} className="px-14 py-5 bg-indigo-600 text-white rounded-3xl text-xs font-black uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 disabled:opacity-50 flex items-center">
                                             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-3" /> : (
                                                 <>
                                                     <Save className="h-4 w-4 mr-3" />
@@ -648,7 +648,7 @@ export default function ProposalItemsBuilder() {
                                             <td className="px-8 py-8 font-black text-slate-300 text-xs">Item {idx + 1}</td>
                                             <td className="px-4 py-8">
                                                 <div className={cn(
-                                                    "inline-flex px-3 py-1.5 rounded-xl text-[9px] font-black tracking-widest uppercase shadow-sm",
+                                                    "inline-flex px-3 py-1.5 rounded-xl text-[9px] font-black tracking-widest uppercase shadow-xs",
                                                     i.itemType === 'PCS' ? "bg-indigo-600 text-white" :
                                                     i.itemType === 'SOFTWARE' ? "bg-purple-500 text-white" :
                                                     "bg-slate-800 text-white"

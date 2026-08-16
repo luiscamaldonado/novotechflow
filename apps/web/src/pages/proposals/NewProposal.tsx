@@ -319,7 +319,7 @@ export default function NewProposal() {
                 <motion.div
                     initial={{ opacity: 0, x: -15 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-2"
+                    className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden lg:col-span-2"
                 >
                     <div className="bg-gray-50/50 p-6 border-b border-gray-100">
                         <h3 className="text-lg font-semibold text-gray-900">Datos de la Propuesta</h3>

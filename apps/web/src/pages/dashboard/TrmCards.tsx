@@ -63,7 +63,7 @@ export default function TrmCards({ trmRate, trmCurrentMonthAvg, trmPreviousMonth
             {cards.map((card) => (
                 <div
                     key={card.label}
-                    className={`rounded-2xl p-4 shadow-sm border ${card.accentBorder} bg-gradient-to-br from-white ${card.accentBg}/30`}
+                    className={`rounded-2xl p-4 shadow-xs border ${card.accentBorder} bg-linear-to-br from-white ${card.accentBg}/30`}
                 >
                     <p className={`text-[10px] font-bold uppercase tracking-wider ${card.accentText} mb-2`}>
                         {card.label}

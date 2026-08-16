@@ -65,7 +65,7 @@ function BillingCardRow({ cards, acquisitionType }: { cards: BillingCardsType; a
                 {CARD_DEFINITIONS.map(({ key, label, Icon, iconBg, iconText, labelText, valueText }) => (
                     <div
                         key={key}
-                        className={`bg-white rounded-2xl p-5 shadow-sm border ${theme.accentBorder} bg-gradient-to-br ${theme.gradientFrom}`}
+                        className={`bg-white rounded-2xl p-5 shadow-xs border ${theme.accentBorder} bg-linear-to-br ${theme.gradientFrom}`}
                     >
                         <div className="flex items-center space-x-3 mb-3">
                             <div className={`h-10 w-10 ${iconBg} rounded-xl flex items-center justify-center ${iconText}`}>

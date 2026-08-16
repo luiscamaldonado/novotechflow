@@ -70,7 +70,7 @@ export default function CodeDigitInputs({
                     onChange={(e) => handleChange(i, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(i, e)}
                     onPaste={i === 0 ? handlePaste : undefined}
-                    className="w-12 h-14 text-center text-xl font-bold rounded-xl border-2 transition-all outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-12 h-14 text-center text-xl font-bold rounded-xl border-2 transition-all outline-hidden disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                         borderColor: hasError ? '#EF4444' : '#E2E8F0',
                         background: '#F8FAFC',

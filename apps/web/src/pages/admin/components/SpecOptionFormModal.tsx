@@ -53,7 +53,7 @@ export default function SpecOptionFormModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                className="absolute inset-0 bg-black/40 backdrop-blur-xs"
                 onClick={onClose}
             />
 
@@ -62,7 +62,7 @@ export default function SpecOptionFormModal({
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="relative z-10 bg-white rounded-[2rem] shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden"
+                className="relative z-10 bg-white rounded-4xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
@@ -123,7 +123,7 @@ export default function SpecOptionFormModal({
                         <button
                             type="submit"
                             disabled={saving}
-                            className="flex-1 flex items-center justify-center space-x-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all disabled:opacity-60"
+                            className="flex-1 flex items-center justify-center space-x-2 bg-linear-to-r from-indigo-600 to-violet-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all disabled:opacity-60"
                         >
                             {saving ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />

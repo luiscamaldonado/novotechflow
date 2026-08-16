@@ -172,7 +172,7 @@ export default function PriceThresholdsSettings() {
                     className={
                         isSaveDisabled
                             ? 'px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-300 cursor-not-allowed'
-                            : 'px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all'
+                            : 'px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-linear-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all'
                     }
                 >
                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar'}

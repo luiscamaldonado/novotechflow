@@ -52,7 +52,7 @@ export default function ScenarioSidebar({
 
     return (
         <div className="lg:col-span-3 space-y-4">
-            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-4xl p-6 shadow-xs border border-slate-100">
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Escenarios</h3>
                     {!isReadOnly && (

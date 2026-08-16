@@ -63,7 +63,7 @@ export default function PipelineCards({
                             return (
                                 <div
                                     key={card.status}
-                                    className={`rounded-2xl p-5 shadow-sm border ${cfg.border} bg-gradient-to-br from-white ${cfg.bg}/40`}
+                                    className={`rounded-2xl p-5 shadow-xs border ${cfg.border} bg-linear-to-br from-white ${cfg.bg}/40`}
                                 >
                                     <div className="flex items-center gap-2 mb-4">
                                         <span className={`h-2.5 w-2.5 rounded-full ${cfg.bg} ring-2 ring-white ${cfg.border}`} />
@@ -98,7 +98,7 @@ export default function PipelineCards({
 
             {/* Forecast Card */}
             {hasForecastData && (
-                <div className="rounded-2xl p-6 shadow-md border border-indigo-200 bg-gradient-to-br from-indigo-50/60 via-white to-violet-50/40">
+                <div className="rounded-2xl p-6 shadow-md border border-indigo-200 bg-linear-to-br from-indigo-50/60 via-white to-violet-50/40">
                     <div className="flex items-center gap-3 mb-5">
                         <div className="h-10 w-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
                             <TrendingUp className="h-5 w-5" />

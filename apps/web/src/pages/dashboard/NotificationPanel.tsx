@@ -101,7 +101,7 @@ function NotificationItem({ notification, onMarkRead }: NotificationItemProps) {
                     {/* Severity badge + proposal code */}
                     <div className="flex items-center gap-2 flex-wrap">
                         <span
-                            className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${badge.classes}`}
+                            className={`inline-block px-1.5 py-0.5 rounded-sm text-[9px] font-black uppercase tracking-wide ${badge.classes}`}
                         >
                             {badge.label}
                         </span>

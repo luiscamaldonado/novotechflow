@@ -84,7 +84,7 @@ export default function ProposalStepper({ proposalId, currentStep }: ProposalSte
                 </button>
 
                 <span
-                  className={`mt-2 hidden text-xs text-center max-w-[7rem] leading-tight sm:block ${LABEL_STYLES[status]}`}
+                  className={`mt-2 hidden text-xs text-center max-w-28 leading-tight sm:block ${LABEL_STYLES[status]}`}
                 >
                   {step.label}
                 </span>

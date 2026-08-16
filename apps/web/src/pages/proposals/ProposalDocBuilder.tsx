@@ -339,7 +339,7 @@ export default function ProposalDocBuilder() {
             </div>
 
             {/* City selector bar */}
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-6 flex-wrap">
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 flex items-center gap-6 flex-wrap">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-50 rounded-xl">
                         <MapPin className="h-4 w-4 text-indigo-600" />
@@ -407,7 +407,7 @@ export default function ProposalDocBuilder() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Sidebar — Pages */}
                 <div className="lg:col-span-3 space-y-4">
-                    <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+                    <div className="bg-white rounded-4xl p-6 shadow-xs border border-slate-100">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Páginas</h3>
                             {!isReadOnly && (
@@ -466,7 +466,7 @@ export default function ProposalDocBuilder() {
                                                             }}
                                                             onClick={(e) => e.stopPropagation()}
                                                             className={cn(
-                                                                "w-full text-sm font-black tracking-tight rounded-lg px-1.5 py-0.5 border-2 outline-none",
+                                                                "w-full text-sm font-black tracking-tight rounded-lg px-1.5 py-0.5 border-2 outline-hidden",
                                                                 isActive ? "bg-indigo-500 border-indigo-300 text-white" : "bg-white border-indigo-200 text-slate-700"
                                                             )}
                                                         />
@@ -490,7 +490,7 @@ export default function ProposalDocBuilder() {
                                                             onClick={(e) => { e.stopPropagation(); moveTopLevel(idx, 'up'); }}
                                                             disabled={idx === 0 || page.isLocked || topLevel[idx - 1].page.isLocked}
                                                             className={cn(
-                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                "p-0.5 rounded-sm transition-colors disabled:opacity-30",
                                                                 isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                                             )}
                                                             title="Subir"
@@ -501,7 +501,7 @@ export default function ProposalDocBuilder() {
                                                             onClick={(e) => { e.stopPropagation(); moveTopLevel(idx, 'down'); }}
                                                             disabled={idx === topLevel.length - 1 || page.isLocked || topLevel[idx + 1].page.isLocked}
                                                             className={cn(
-                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                "p-0.5 rounded-sm transition-colors disabled:opacity-30",
                                                                 isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                                             )}
                                                             title="Bajar"
@@ -652,7 +652,7 @@ export default function ProposalDocBuilder() {
                                                                             onClick={(e) => { e.stopPropagation(); moveSheet(page.id, sheetIdx, 'up'); }}
                                                                             disabled={sheetIdx === 0}
                                                                             className={cn(
-                                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                                "p-0.5 rounded-sm transition-colors disabled:opacity-30",
                                                                                 sheetActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                                                             )}
                                                                             title="Subir"
@@ -663,7 +663,7 @@ export default function ProposalDocBuilder() {
                                                                             onClick={(e) => { e.stopPropagation(); moveSheet(page.id, sheetIdx, 'down'); }}
                                                                             disabled={sheetIdx === children.length - 1}
                                                                             className={cn(
-                                                                                "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                                                "p-0.5 rounded-sm transition-colors disabled:opacity-30",
                                                                                 sheetActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                                                             )}
                                                                             title="Bajar"

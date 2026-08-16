@@ -138,7 +138,7 @@ export default function ProposalCalculations() {
                         <div className="flex items-center space-x-4 mt-1">
                             <p className="text-slate-500 text-sm font-medium">Modelación de Escenarios y Proyecciones Financieras</p>
                             {trm && (
-                                <div className="flex items-center space-x-4 bg-emerald-50 px-6 py-4 rounded-[2rem] border-2 border-emerald-200 shadow-xl ml-6">
+                                <div className="flex items-center space-x-4 bg-emerald-50 px-6 py-4 rounded-4xl border-2 border-emerald-200 shadow-xl ml-6">
                                     <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
                                     <div className="flex flex-col justify-center">
                                         <div className="flex items-center space-x-2 mb-1">
@@ -148,7 +148,7 @@ export default function ProposalCalculations() {
                                             <span className="text-[10px] font-black text-emerald-600 bg-white px-2 py-0.5 rounded-lg border border-emerald-100 uppercase tracking-tighter">TRM USD/COP</span>
                                         </div>
                                         <div className="flex items-center space-x-1.5">
-                                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-[0.1em]">
+                                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
                                                 Vigencia Oficial:
                                             </span>
                                             <span className="text-[11px] font-bold text-indigo-600">
@@ -160,7 +160,7 @@ export default function ProposalCalculations() {
                                     <button 
                                         onClick={loadData}
                                         disabled={loading}
-                                        className="p-3 bg-white hover:bg-emerald-100 text-emerald-600 rounded-2xl border border-emerald-100 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                                        className="p-3 bg-white hover:bg-emerald-100 text-emerald-600 rounded-2xl border border-emerald-100 shadow-xs transition-all active:scale-95 disabled:opacity-50"
                                         title="Actualizar TRM"
                                     >
                                         <RotateCcw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -197,7 +197,7 @@ export default function ProposalCalculations() {
                         </div>
                     </div>
                 </div>
-                <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm text-right ring-1 ring-slate-100">
+                <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-xs text-right ring-1 ring-slate-100">
                     <span className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Propuesta No.</span>
                     <p className="text-2xl font-mono font-black text-indigo-600 leading-tight">{proposal.proposalCode}</p>
                 </div>

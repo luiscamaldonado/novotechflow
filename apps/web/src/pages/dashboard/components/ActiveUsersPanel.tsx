@@ -18,7 +18,7 @@ export default function ActiveUsersPanel() {
   const { activeUsers, isLoading } = useActiveUsers();
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center h-9 w-9 rounded-xl bg-emerald-50">
@@ -29,7 +29,7 @@ export default function ActiveUsersPanel() {
             <p className="text-xs text-gray-500">Usuarios trabajando ahora mismo</p>
           </div>
         </div>
-        <span className="inline-flex items-center justify-center min-w-[2rem] h-8 px-2 rounded-lg bg-emerald-600 text-white text-sm font-bold">
+        <span className="inline-flex items-center justify-center min-w-8 h-8 px-2 rounded-lg bg-emerald-600 text-white text-sm font-bold">
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : activeUsers.length}
         </span>
       </div>

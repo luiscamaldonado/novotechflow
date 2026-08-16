@@ -301,7 +301,7 @@ export default function DefaultPagesAdmin() {
 
                     <button
                         onClick={() => setShowPreview(true)}
-                        className="flex items-center space-x-3 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest"
+                        className="flex items-center space-x-3 px-6 py-3 bg-linear-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest"
                     >
                         <Eye className="h-4 w-4" />
                         <span>Vista Previa PDF</span>
@@ -333,7 +333,7 @@ export default function DefaultPagesAdmin() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Sidebar — Templates list */}
                 <div className="lg:col-span-3 space-y-4">
-                    <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+                    <div className="bg-white rounded-4xl p-6 shadow-xs border border-slate-100">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Plantillas</h3>
                             <button
@@ -382,7 +382,7 @@ export default function DefaultPagesAdmin() {
                                                     onClick={(e) => { e.stopPropagation(); moveTemplate(idx, 'up'); }}
                                                     disabled={idx === 0}
                                                     className={cn(
-                                                        "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                        "p-0.5 rounded-sm transition-colors disabled:opacity-30",
                                                         isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                                     )}
                                                     title="Subir"
@@ -393,7 +393,7 @@ export default function DefaultPagesAdmin() {
                                                     onClick={(e) => { e.stopPropagation(); moveTemplate(idx, 'down'); }}
                                                     disabled={idx === templates.length - 1}
                                                     className={cn(
-                                                        "p-0.5 rounded transition-colors disabled:opacity-30",
+                                                        "p-0.5 rounded-sm transition-colors disabled:opacity-30",
                                                         isActive ? "text-indigo-200 hover:bg-indigo-500" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                                                     )}
                                                     title="Bajar"
@@ -544,7 +544,7 @@ function TemplateEditor({
                                         if (e.key === 'Escape') setEditingTitle(null);
                                     }}
                                     autoFocus
-                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 outline-none max-w-md"
+                                    className="text-xl font-black text-slate-900 tracking-tight bg-white border-2 border-indigo-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-indigo-400 outline-hidden max-w-md"
                                 />
                             ) : (
                                 <button

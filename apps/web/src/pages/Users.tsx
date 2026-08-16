@@ -239,7 +239,7 @@ export default function Users() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+                        className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden"
                     >
                         <div className="bg-gray-50/50 p-6 border-b border-gray-100 flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-gray-900">Crear Nuevo Usuario</h3>
@@ -364,7 +364,7 @@ export default function Users() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+                        className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden"
                     >
                         <div className="bg-gray-50/50 p-6 border-b border-gray-100 flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-gray-900">Editar Usuario: {editingUser.name}</h3>
@@ -499,7 +499,7 @@ export default function Users() {
                         key="users-list"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+                        className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden"
                     >
                         <div className="overflow-x-auto min-h-[400px]">
                             {isLoading ? (
@@ -522,7 +522,7 @@ export default function Users() {
                                             <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center space-x-3">
-                                                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-novo-primary/20 to-novo-accent/20 text-novo-primary flex items-center justify-center font-bold text-xs uppercase">
+                                                        <div className="w-9 h-9 rounded-full bg-linear-to-tr from-novo-primary/20 to-novo-accent/20 text-novo-primary flex items-center justify-center font-bold text-xs uppercase">
                                                             {u.name.charAt(0)}
                                                         </div>
                                                         <div>

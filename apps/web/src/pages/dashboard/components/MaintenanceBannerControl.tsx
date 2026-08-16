@@ -46,7 +46,7 @@ export default function MaintenanceBannerControl() {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs">
       <div className="flex items-center gap-2 mb-3">
         <div className="flex items-center justify-center h-9 w-9 rounded-xl bg-amber-50">
           <Megaphone className="h-5 w-5 text-amber-600" />
@@ -72,7 +72,7 @@ export default function MaintenanceBannerControl() {
             type="checkbox"
             checked={active}
             onChange={(e) => setActive(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+            className="h-4 w-4 rounded-sm border-gray-300 text-amber-600 focus:ring-amber-500"
           />
           <span className="text-sm text-gray-700">Mostrar banner</span>
         </label>

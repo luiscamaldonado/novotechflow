@@ -49,7 +49,7 @@ function SectionView({ section, sheets, sheetHeadings, proposalVars, ownerSignat
                                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             }}
                             placeholder={'T\u00edtulo de la secci\u00f3n...'}
-                            className="w-full max-w-md text-xl font-black text-slate-900 tracking-tight bg-transparent border-2 border-transparent hover:border-indigo-100 focus:bg-white focus:border-indigo-200 rounded-xl px-3 py-1 outline-none transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="w-full max-w-md text-xl font-black text-slate-900 tracking-tight bg-transparent border-2 border-transparent hover:border-indigo-100 focus:bg-white focus:border-indigo-200 rounded-xl px-3 py-1 outline-hidden transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         />
                         <div className="flex items-center space-x-2 mt-1 px-3">
                             <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-600">

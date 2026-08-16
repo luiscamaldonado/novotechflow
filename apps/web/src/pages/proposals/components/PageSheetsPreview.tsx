@@ -28,7 +28,7 @@ export default function PageSheetsPreview({ page, proposalVars, ownerSignatureUr
             <div ref={measureRef} style={{ position: 'fixed', top: -9999, left: -9999, width: PAGE_GEOMETRY.WIDTH_PX, pointerEvents: 'none' }} />
 
             {!isContentPage(page) ? (
-                <div className="bg-white rounded-[2rem] p-8 text-center border-2 border-dashed border-slate-100">
+                <div className="bg-white rounded-4xl p-8 text-center border-2 border-dashed border-slate-100">
                     <Eye className="h-10 w-10 mx-auto text-slate-200 mb-3" />
                     <p className="text-sm text-slate-400 font-medium max-w-xs mx-auto">
                         Las hojas de portada e índice se ven en la Vista Previa PDF.

@@ -122,14 +122,14 @@ export default function ClientsAdmin() {
                         <Download className="h-4 w-4" />
                         <span>Exportar</span>
                     </button>
-                    <button onClick={handleOpenCreate} className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest">
+                    <button onClick={handleOpenCreate} className="flex items-center space-x-2 px-6 py-3 bg-linear-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 transition-all font-black text-[10px] uppercase tracking-widest">
                         <Plus className="h-4 w-4" /><span>Agregar Cliente</span>
                     </button>
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-4xl p-6 shadow-xs border border-slate-100">
                 <div className="flex items-center flex-wrap gap-4">
                     <div className="relative flex-1 min-w-[250px]">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
@@ -160,7 +160,7 @@ export default function ClientsAdmin() {
                         </button>
                         <button
                             onClick={handleBulkDelete}
-                            className="flex items-center space-x-1 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-sm"
+                            className="flex items-center space-x-1 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-xs"
                         >
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>Eliminar seleccionados</span>
@@ -171,7 +171,7 @@ export default function ClientsAdmin() {
 
             {/* Table / Empty placeholder */}
             {!hasActiveSearch ? (
-                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 py-24 text-center">
+                <div className="bg-white rounded-4xl shadow-xs border border-slate-100 py-24 text-center">
                     <Search className="h-16 w-16 mx-auto text-slate-200 mb-4" />
                     <p className="text-base font-bold text-slate-400">Busca un cliente por nombre para empezar</p>
                     <p className="text-xs text-slate-300 mt-2">10,000+ clientes en la base de datos</p>
@@ -181,7 +181,7 @@ export default function ClientsAdmin() {
                     <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
                 </div>
             ) : (
-                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                <div className="bg-white rounded-4xl shadow-xs border border-slate-100 overflow-hidden">
                     {filtered.length === 0 ? (
                         <div className="py-20 text-center">
                             <PackageOpen className="h-16 w-16 mx-auto text-slate-100 mb-4" />
@@ -198,7 +198,7 @@ export default function ClientsAdmin() {
                                             checked={isAllSelected}
                                             ref={el => { if (el) el.indeterminate = isSomeSelected && !isAllSelected; }}
                                             onChange={handleToggleAll}
-                                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                            className="h-4 w-4 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                         />
                                     </th>
                                     <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre</th>
@@ -290,7 +290,7 @@ function ClientRow({ client, isSelected, onToggleSelect, onEdit, onToggle, onDel
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => onToggleSelect(client.id)}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="h-4 w-4 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
             </td>
             <td className="px-6 py-4 font-bold text-slate-700">{client.name}</td>

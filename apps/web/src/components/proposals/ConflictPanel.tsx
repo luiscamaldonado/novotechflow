@@ -16,9 +16,9 @@ export default function ConflictPanel({ state }: ConflictPanelProps) {
         <motion.div
             initial={{ opacity: 0, x: 15 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-1 h-fit"
+            className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden lg:col-span-1 h-fit"
         >
-            <div className="bg-gradient-to-br from-indigo-50 to-white p-6 border-b border-gray-100">
+            <div className="bg-linear-to-br from-indigo-50 to-white p-6 border-b border-gray-100">
                 <div className="flex items-center space-x-2 text-indigo-700 mb-1">
                     <AlertCircle className="h-5 w-5" />
                     <h3 className="text-sm font-bold tracking-wide uppercase">Cruce de Cuentas</h3>
@@ -82,7 +82,7 @@ function PanelBody({ state }: { state: ConflictSearchState }) {
                             <div className="flex flex-col space-y-1 mt-2 pt-2 border-t border-gray-200">
                                 <div className="text-xs flex items-center text-gray-500">
                                     <span className="font-medium mr-1">Comercial:</span>
-                                    <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
+                                    <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-sm text-[10px] uppercase font-bold tracking-wider">
                                         {item.user?.name || 'Desconocido'}
                                     </span>
                                 </div>

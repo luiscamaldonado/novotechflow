@@ -139,7 +139,7 @@ export default function PrefillModal({ onClose, onApply }: PrefillModalProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
         >
             <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -257,7 +257,7 @@ export default function PrefillModal({ onClose, onApply }: PrefillModalProps) {
                                         key={index}
                                         onClick={() => setSeleccionado(index)}
                                         className={cn(
-                                            'w-full text-left p-6 rounded-[2rem] border-2 transition-all',
+                                            'w-full text-left p-6 rounded-4xl border-2 transition-all',
                                             activo
                                                 ? 'bg-indigo-50/50 border-indigo-300'
                                                 : 'bg-white border-slate-100 hover:border-indigo-200',
@@ -265,7 +265,7 @@ export default function PrefillModal({ onClose, onApply }: PrefillModalProps) {
                                     >
                                         <div className="flex items-start justify-between mb-4">
                                             <div className="flex items-center space-x-4">
-                                                <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-50">
+                                                <div className="bg-white p-3 rounded-2xl shadow-xs border border-slate-50">
                                                     <Cpu className="h-6 w-6 text-indigo-600" />
                                                 </div>
                                                 <div>

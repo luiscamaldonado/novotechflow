@@ -204,7 +204,7 @@ export default function Dashboard() {
                         <>
                             <button
                                 onClick={openNewProjectionModal}
-                                className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-violet-600/25"
+                                className="flex items-center space-x-2 bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-violet-600/25"
                             >
                                 <Receipt className="h-5 w-5" />
                                 <span>Proyección de Facturación</span>
@@ -297,7 +297,7 @@ export default function Dashboard() {
             {showFilters && (
                 <div className="space-y-4">
                     {/* Status filters row */}
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4 animate-in slide-in-from-top-2">
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-5 space-y-4 animate-in slide-in-from-top-2">
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Estado</label>
                             <div className="flex flex-wrap gap-2">
@@ -347,7 +347,7 @@ export default function Dashboard() {
             )}
 
             {/* Proposals Table */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
                         {filtered.length} Registro{filtered.length !== 1 ? 's' : ''}

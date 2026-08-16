@@ -21,13 +21,13 @@ export default function ProjectionModal({
     onClose,
 }: ProjectionModalProps) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs" onClick={onClose}>
             <div
                 className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Modal Header */}
-                <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-4 flex items-center justify-between">
+                <div className="bg-linear-to-r from-violet-600 to-purple-600 px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                         <Receipt className="h-5 w-5 text-white/80" />
                         <h3 className="text-lg font-bold text-white">
@@ -150,7 +150,7 @@ export default function ProjectionModal({
                     <button
                         onClick={onSave}
                         disabled={savingProjection || !projForm.clientName.trim() || !projForm.subtotal}
-                        className="flex items-center space-x-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-violet-600/25"
+                        className="flex items-center space-x-2 bg-linear-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-violet-600/25"
                     >
                         {savingProjection ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

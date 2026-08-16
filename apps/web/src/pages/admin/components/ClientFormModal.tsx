@@ -40,7 +40,7 @@ export default function ClientFormModal({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs"
             onClick={onClose}
         >
             <motion.div
@@ -81,7 +81,7 @@ export default function ClientFormModal({
                         <button
                             type="submit"
                             disabled={!isValid || isSaving}
-                            className="flex items-center space-x-2 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl shadow-lg shadow-indigo-200 font-black text-[10px] uppercase tracking-widest disabled:opacity-60 transition-all"
+                            className="flex items-center space-x-2 px-6 py-2.5 bg-linear-to-r from-indigo-600 to-violet-600 text-white rounded-xl shadow-lg shadow-indigo-200 font-black text-[10px] uppercase tracking-widest disabled:opacity-60 transition-all"
                         >
                             {isSaving && <Loader2 className="h-3 w-3 animate-spin" />}
                             <span>{isEditing ? 'Guardar' : 'Crear'}</span>
