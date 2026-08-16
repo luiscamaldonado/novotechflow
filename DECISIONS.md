@@ -3911,3 +3911,46 @@ Ediciones de §6: 1e455c9.
 
 - Replicar las dos reglas en la skill novotechflow y corregir de paso el dato obsoleto de la API externa ("sin mergear"; está en producción desde ADR-081). Lo hace Luis a mano en claude.ai.
 - Re-subir INSTRUCTIVO_CLAUDE.md y DECISIONS.md del disco a los attachments del proyecto Team tras el push.
+
+## ADR-093 — Advisories del audit: override quirúrgico de js-yaml y riesgo aceptado de uuid
+
+**Fecha:** 2026-08-16
+**Estado:** Aceptado
+
+### Contexto
+
+Apertura del frente de actualizaciones de dependencias. El audit fresco del 2026-08-16 (pnpm 10.33.4, árbol idéntico al del 2026-08-14: el lockfile no cambiaba desde `1f048dd`) arrojó 2 advisories, ambos transitivos de segundo nivel en dependencias de producción. El baseline "28 de axios/follow-redirects + 3 de postcss" que arrastraba el traspaso provenía del diagnóstico del 2026-07-24 y contaba findings (rutas del grafo), no advisories únicos; el barrido de minors del 2026-08-12 (`63c976e`) ya lo había limpiado.
+
+Los dos advisories reales:
+
+- `js-yaml@5.2.1` (high, GHSA-pm4m-ph32-ghv5, CVE-2026-73643): DoS por parseo exponencial de flow collections en `load()`/`loadAll()`; parcheado en 5.2.2. Llega por pin exacto de `@nestjs/swagger@11.4.6` (el pin vulnerable entró en 11.4.6; de 11.4.0 a 11.4.4 era 4.1.1 y en 11.4.5 era 4.3.0). No hay versión publicada del padre que admita la parcheada: 11.4.6 es `latest` y la alpha de la major 12 vuelve a 4.1.1.
+- `uuid@8.3.2` (moderate, GHSA-w5hq-g745-h8pq, CVE-2026-41907): escritura sin bounds check en `v3()`/`v5()`/`v6()` cuando se les pasa `buf` externo; parcheado en 11.1.1 para el rango `<11.1.1`. Llega por `exceljs@4.4.0` (`^8.3.0`), dependencia de `api` y `web`; ninguna versión publicada de exceljs admite uuid >= 11.1.1.
+
+Verificación de alcanzabilidad sobre el código instalado: `@nestjs/swagger` solo invoca `jsyaml.dump()` (una vez, en el handler de `yamlDocumentUrl`) — el parseo vulnerable no se alcanza, y además Swagger está gated por `SWAGGER_ENABLED` default off (ADR-071). `exceljs` solo invoca `v4()` sin argumentos (2 llamadas en `cf-rule-ext-xform.js`); `v3`/`v5`/`v6` ni se importan, ni en `lib/` (Node) ni en el bundle browser.
+
+### Decisión
+
+Vías distintas según alcanzabilidad y costo, ambas en el bloque `pnpm` del package.json raíz (preservando `onlyBuiltDependencies`):
+
+1. **js-yaml: override quirúrgico scoped a la arista** — `"overrides": { "@nestjs/swagger>js-yaml": "5.2.2" }`. Es un patch sobre lo que swagger testeó, elimina el código vulnerable del árbol en vez de ignorarlo, y no toca las js-yaml 4.3.1 y 3.15.1 de las cadenas dev (`@nestjs/cli`, jest/ts-jest).
+2. **uuid: riesgo aceptado y documentado** — `"auditConfig": { "ignoreGhsas": ["GHSA-w5hq-g745-h8pq"] }`. La alternativa (forzar un salto de 3 majors de uuid dentro de exceljs, corazón del export Excel de cotizaciones) es riesgo de runtime real a cambio de silenciar funciones que el grafo ni importa.
+
+### Consecuencias
+
+- `pnpm audit` en verde (exit 0): high 0; el moderate de uuid se reporta como `1 moderate (1 ignored)` — pnpm 10.33.4 lo excluye de la lista y del gate pero lo cuenta en el resumen; `advisories` sale `{}` y `muted` queda `[]` (en esta versión el ignore no se refleja ahí). `uuid@8.3.2` sigue instalado.
+- El ignore es global por GHSA: si otra dependencia futura trajera un uuid vulnerable por la misma GHSA en una ruta que sí use `v3`/`v5`/`v6`, el audit no lo mostraría. Condición de revisión al tocar el grafo de exceljs o incorporar nuevos consumidores de uuid.
+- Patrón nuevo: el bloque `pnpm` de la raíz gobierna resolución (overrides) y política de audit (auditConfig).
+- Lockfile: `js-yaml@5.2.1 → 5.2.2` en la arista de swagger (+7/−4 líneas); gates de tipos verdes en web y api; 6/6 unit tests del api.
+
+### Archivos
+
+package.json (raíz), pnpm-lock.yaml.
+
+### Commits
+
+- `eadbfb1` — fix(deps): override js-yaml 5.2.2 and ignore uuid advisory in audit config.
+
+### Pendientes
+
+- Retirar el override cuando `@nestjs/swagger` declare js-yaml >= 5.2.2 (o al migrar a la major 12, que hoy vuelve a la línea 4.x, fuera del rango afectado).
+- Re-evaluar el ignore de uuid si exceljs publica una versión con uuid >= 11.1.1 o si entra otro consumidor de uuid al grafo.
