@@ -3,7 +3,10 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import type { SupplierCompany, SupplierContact } from '../generated/prisma/client';
+import type {
+  SupplierCompany,
+  SupplierContact,
+} from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSupplierCompanyDto } from './dto/create-supplier-company.dto';
 import { CreateSupplierContactDto } from './dto/create-supplier-contact.dto';

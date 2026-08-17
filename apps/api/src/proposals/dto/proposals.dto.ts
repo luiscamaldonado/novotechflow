@@ -15,7 +15,11 @@ import {
   IsUUID,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ItemType, ProposalStatus, AcquisitionType } from '../../generated/prisma/client';
+import {
+  ItemType,
+  ProposalStatus,
+  AcquisitionType,
+} from '../../generated/prisma/client';
 
 /**
  * DTO para la creación de una nueva propuesta.
