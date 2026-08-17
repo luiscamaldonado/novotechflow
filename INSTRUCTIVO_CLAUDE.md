@@ -107,6 +107,20 @@ docs: ADR-0XX <descripcion corta>
 - Se hace con `str_replace` **puntual** vía Claude Code. **Nunca se reescribe el archivo entero** ni se tocan otras entradas.
 - Mismo cuidado de encoding (UTF-8 real, sin BOM) y misma verificación de mojibake (4.4) antes de commitear.
 
+### 4.7 Merges que tocan DECISIONS.md — guardia anti-pérdida
+
+Origen: en el merge `0a42cf5` (2026-08-10) la resolución de conflictos de `DECISIONS.md` tomó la región de master y dejó caer los bloques ADR-052 y ADR-053 de la rama; la pérdida pasó inadvertida hasta el 2026-08-17 (recuperados en ADR-097).
+
+Regla: al resolver cualquier conflicto de merge que toque `DECISIONS.md`, antes de commitear el merge, Claude Code verifica que el conjunto de encabezados del resultado sea la **unión** de los dos lados:
+
+```powershell
+git show <lado-A>:DECISIONS.md | Select-String "^## ADR-"
+git show <lado-B>:DECISIONS.md | Select-String "^## ADR-"
+Select-String -Path DECISIONS.md -Pattern "^## ADR-" -Encoding UTF8
+```
+
+Ningún `## ADR-` presente en cualquiera de los dos padres puede faltar en el resultado; las renumeraciones por colisión se registran explícitamente con su mapeo (precedente: ADR-079/081). Si falta alguno, el merge NO se commitea: se reporta y se re-resuelve.
+
 ---
 
 ## 5. Flujo de una feature
