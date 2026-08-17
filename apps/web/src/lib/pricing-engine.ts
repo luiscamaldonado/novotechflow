@@ -6,8 +6,6 @@
 import { calculateScenarioTotals } from '@repo/pricing-engine';
 import type { ProposalSummary } from './types';
 
-export * from '@repo/pricing-engine';
-
 type CurrencyCode = 'COP' | 'USD';
 
 export interface MinSubtotalResult {
