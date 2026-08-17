@@ -4042,3 +4042,39 @@ Salto directo a 7.9.1 con pins exactos en lockstep (`prisma`, `@prisma/client`, 
 - Revalidar la carga de `prisma.config.ts` en el runner si `typescript` deja de viajar en el árbol prod (fallback: migrar el config a `.mjs`).
 - Actualizar a mano en claude.ai las instrucciones del proyecto y la skill novotechflow: gate de tipos del api (`tsconfig.json`, no `tsconfig.build.json`, ADR-071), comandos y workarounds de la era v7. Lo hace Luis.
 - Re-subir INSTRUCTIVO_CLAUDE.md y DECISIONS.md del disco a los attachments del proyecto tras el push.
+
+## ADR-096 — Retiro del star re-export muerto del barrel de pricing; los paquetes workspace permanecen CJS
+
+**Fecha:** 2026-08-17
+**Estado:** Aceptado
+
+### Contexto
+
+Al correr `pnpm dev`, Rolldown (Vite 8, ADR-089) emitía: "Unable to interop `export * from \"@repo/pricing-engine\"` in apps/web/src/lib/pricing-engine.ts, this may lose module exports". Causa raíz, verificada en reconocimiento de solo lectura del 2026-08-17: `@repo/pricing-engine` y `@repo/item-display` (ADR-052/067) son CJS reales — package.json sin `type`, `exports` con solo `types` + `default` al mismo `dist/index.js`, y `module: NodeNext` del tsconfig base resolviendo a CommonJS justamente por la ausencia de `type` — y un `export *` de un módulo CJS no puede expandirse estáticamente (las exports CJS son asignaciones en runtime), a diferencia de los imports named, que pasan sin aviso. El warning es dev-only: `pnpm --filter web build` termina exit 0 sin rastro de "interop" (en build Rolldown enlaza el grafo completo y enumera las exports; en dev el módulo se transforma aislado, con los paquetes además en `optimizeDeps.include`). En el bundle de producción ambos paquetes quedan envueltos en el helper `__commonJS` del rolldown-runtime y se consumen por acceso a propiedad — correctos pero no tree-shakeables (~3 kB de pricing-engine entran completos).
+
+El hallazgo decisor: el `export *` de la línea 9 no tenía consumidores. El único importador del barrel en todo apps/web (`useDashboard.ts:4`) usa `getDashboardAmount` y `MinSubtotalResult`, ambos locales del archivo; los 13 consumos restantes de los dos paquetes en web y api son named imports directos a `@repo/*` (más un `import type` y dos re-exports named de item-display en `lib/itemDescription.ts` y `lib/constants.ts`). Era código muerto que además era el único disparador del warning.
+
+### Decisión
+
+Eliminar el `export * from '@repo/pricing-engine'` del barrel. `apps/web/src/lib/pricing-engine.ts` queda en lo que su cabecera declara: helpers de pricing web-only (`computeMinSubtotal`, `getDashboardAmount`) que consumen el paquete por import named, como todos los demás sitios. El patrón de ADR-052 se ratifica: el paquete es la fuente canónica y se consume por named imports directos.
+
+Alternativa evaluada y descartada — migrar los paquetes a ESM (`type: module` o condición `import` en `exports`): compra hoy ~3 kB de tree-shaking a cambio de riesgo de runtime real sobre la api CJS (`require()` de los paquetes en `external-proposals.service.js`, único punto de contacto; Node >= 22.13.0 soporta require(esm) pero sin red de tests que respalde el cambio de formato), sobre un paquete sin suite de tests propia (deuda registrada en ADR-088) cuyo riesgo de regresión ya obligó a tratar Prisma como proyecto aparte, con el acople rígido del Dockerfile del api (runner planta los paquetes copiando exclusivamente package.json + dist) y el build de paquetes duplicado en cuatro sitios (dos Dockerfiles, ci.yml, pr-check.yml). No-hacer explícito con condición de reevaluación: reconsiderar ESM cuando `packages/pricing-engine` gane su suite de tests, momento natural para tocar su formato.
+
+### Consecuencias
+
+- El warning de interop desaparece de `pnpm dev` (verificación: próximo arranque de dev de Luis; el build de prod ya era silencioso).
+- Cero cambios funcionales: tsc en web y api, lint de ambos y build de web en verde; ningún consumidor dependía de los símbolos re-exportados.
+- Los paquetes permanecen CJS; el envoltorio `__commonJS` y la ausencia de tree-shaking (~3 kB) se aceptan como costo conocido.
+- api, Dockerfiles y CI intactos.
+
+### Archivos
+
+`apps/web/src/lib/pricing-engine.ts`.
+
+### Commits
+
+- `5f11cb2` — refactor(web): drop dead star re-export of @repo/pricing-engine from pricing barrel
+
+### Pendientes
+
+- Migración ESM de `@repo/pricing-engine` y `@repo/item-display`: pospuesta; reevaluar al crear la suite de tests del pricing-engine.
