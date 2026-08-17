@@ -4,7 +4,7 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'eslint.config.mjs'],
+    ignores: ['dist/**', 'eslint.config.mjs', 'src/generated/**'],
   },
   ...tseslint.configs.recommended,
   eslintPluginPrettierRecommended,
