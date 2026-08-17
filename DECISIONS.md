@@ -4078,3 +4078,189 @@ Alternativa evaluada y descartada — migrar los paquetes a ESM (`type: module` 
 ### Pendientes
 
 - Migración ESM de `@repo/pricing-engine` y `@repo/item-display`: pospuesta; reevaluar al crear la suite de tests del pricing-engine.
+
+## ADR-097 — Recuperación documental de ADR-052 y ADR-053, perdidos en una resolución de merge
+
+**Fecha:** 2026-08-17
+**Estado:** Aceptado
+
+### Contexto
+
+La bitácora salta de ADR-051 a ADR-054. La investigación forense del 2026-08-17 (git log -S sobre el historial completo) estableció que no es un hueco de numeración: ADR-052 y ADR-053 existieron. Nacieron en la rama feature/external-api (0254690, 2026-06-22, y b463cac, 2026-06-23); master, avanzando en paralelo, quemó los números al saltar de 051 a 054 (49b6bbb, 2026-06-26); y la resolución del merge de master hacia la rama (0a42cf5, 2026-08-10) tomó la región de master en DECISIONS.md y dejó caer ambos bloques. La pérdida quedó enmascarada porque el commit siguiente (db80dc6) reemitió las decisiones restantes de la rama como ADR-078 a 081, y el merge final a master (ce4715e) consolidó el archivo sin ellos. No fue un borrado deliberado: fue pérdida en resolución de conflicto. El código de ambos llegó completo a master — d58ef48, 78e470d, 71536ab —; solo se perdió la prosa.
+
+El costo documental es material. De las 9 decisiones sustantivas del bloque 052, 6 no están cubiertas por ningún heading vigente y 3 solo parcialmente; del 053, 6 sin cubrir y 4 parciales. El hueco más serio es de seguridad: el diseño del auth scoped de `/external` — `EXTERNAL_JWT_SECRET` separado con validación en boot, estrategia Passport `jwt-external` propia, payload reducido `{ sub, email }`, y el rechazo razonado de la variante de un solo secreto con claim de scope — no existía en ningún ADR vigente pese a correr en producción desde el 2026-08-11. Además, cuatro menciones a ADR-052 (en ADR-079, ADR-089 y dos en ADR-096) eran referencias colgantes, y la confusión ya tuvo costo operativo: ADR-096 se redactó citando un ADR ausente del documento.
+
+### Decisión
+
+Reproducir ambos bloques dentro de este ADR, verbatim desde su fuente canónica: el blob 496feba:DECISIONS.md (hash git 0abf5cd14fe9c1cd3997e8ec60e2ff04e93e5857), última versión que los contuvo, byte-idéntica a la prosa de sus commits de origen. Única transformación aplicada: todos los headings degradados un nivel (nivel 2 a nivel 3, nivel 3 a nivel 4), para que la lectura del último ADR en disco (INSTRUCTIVO §4.1, que resuelve al último heading de nivel 2) siga apuntando a este ADR-097 y nunca a los bloques reproducidos. Fechas y estados internos se conservan tal cual: describen junio de 2026, no el presente.
+
+Los números 052 y 053 quedan retirados de forma permanente: no se reciclan ni se renumeran, en línea con la política de no renumerar retroactivamente. Toda mención a ADR-052 o ADR-053 en esta bitácora refiere al contenido reproducido aquí.
+
+Alternativas descartadas: no reparar (deja sin rastro documental la decisión estructural del paquete compartido y el diseño de seguridad de `/external`, con referencias colgantes que ya confundieron la operación); appendear los bloques con sus headings originales de nivel 2 (el protocolo §4.1 leería ADR-053 como último y el próximo ADR colisionaría en 054); y reescribirlos como ADR nuevos con fecha de hoy (pierde la evidencia de qué se decidió, cuándo y con qué razonamiento, que es el valor de una bitácora).
+
+### Vigencia de lo reproducido
+
+El contenido describe el árbol vigente, con dos decisiones puntuales del 052 superadas después y ya documentadas: build.commonjsOptions desapareció con Vite 8 (ADR-089) y el export * del residuo se retiró en ADR-096. El propio texto del 052 registra que ese shim nació sin consumidores — los 7 imports se reapuntaron al paquete en el mismo commit —, lo que ADR-096 verificó de forma independiente ocho semanas después.
+
+El bloque siguiente reproduce ADR-052 completo (headings degradados un nivel):
+
+### ADR-052 — Extracción del pricing-engine a package compartido `@repo/pricing-engine` para consumo por web y api
+
+**Fecha:** 2026-06-22
+**Estado:** Implementada y verificada en runtime, en la rama `feature/external-api` (sin commitear al redactar este ADR; el commit del refactor y el push los hace Luis). Primer paso (Fase 1) de la feature de API externa de lectura.
+
+#### Contexto
+
+La feature de API externa (otra aplicación web que, con login de NovoTechFlow, lee las propuestas ganadas del usuario con el valor de venta de cada item por escenario) exige que `apps/api` (NestJS) calcule el valor de venta del lado del servidor. El diagnóstico confirmó que el precio de venta automático **no se persiste**: se recomputa siempre en el frontend con `pricing-engine.ts` (costo + margen + TRM); en la DB solo viven `unitPriceOverride` y `marginPctOverride`. No hay un precio final guardado que la API pueda devolver directamente.
+
+Como el valor de venta debe entregarse en vivo y calculado (no los insumos crudos), la API tiene que ejecutar la misma lógica financiera. Esa lógica vive en `apps/web/src/lib/pricing-engine.ts`, y CONVENTIONS.md §J la fija como fuente única: ningún archivo puede implementar cálculos financieros por fuera del pricing-engine, y replicarlos es un bug. `apps/api` no puede importar de `apps/web/src`. Las alternativas (replicar el cálculo en el backend, o empujarlo a la otra app) violan §J o arriesgan que la otra app muestre un precio distinto al de NovoTechFlow — el riesgo asimétrico "precio bajo = catastrófico" que el proyecto cuida.
+
+La única vía que respeta §J es extraer el pricing-engine a un package compartido del monorepo que web y api consuman: centralizar, no replicar.
+
+#### Decisión
+
+1. **Package nuevo `@repo/pricing-engine`** en `packages/pricing-engine/`, siguiendo el patrón de workspace del monorepo (name `@repo/*`, `workspace:*`, tsconfig que extiende `@repo/typescript-config/base.json`).
+
+2. **Desvío del molde de `@repo/ui`: este package lleva build.** `@repo/ui` se consume como fuente `.tsx` cruda sin build porque solo lo usa web (vía Vite). `@repo/pricing-engine` también lo consumirá `apps/api` (NestJS), que compila con `tsc` a `dist/` y corre en Node sin bundler: necesita JS emitido + `.d.ts`. El package tiene script `build` (`tsc`) con `main`/`types`/`exports` apuntando a `dist/`.
+
+3. **Emit CommonJS** para que NestJS lo consuma vía `require`. Se logra heredando `module/moduleResolution: NodeNext` de `base.json` (sin override) más `package.json` **sin** `"type": "module"`: NodeNext resuelve el archivo como CJS y emite `require`/`exports`. Verificado en el `index.js` emitido (`"use strict"`, `Object.defineProperty(exports, "__esModule")`, `exports.xxx =`). Se descartó fijar `module: CommonJS` + `moduleResolution: Node` explícitos porque `Node` (= `node10`) está deprecado y TypeScript 6 lo eleva a error duro (TS5107); heredar NodeNext da el mismo emit CJS sin la deuda hacia TS 7.0.
+
+4. **Reparto del archivo original.** Las 16 funciones puras (operan solo sobre `PricingItem`/`PricingScenarioItem` y primitivos) van al package. `computeMinSubtotal` y `getDashboardAmount` **se quedan en `apps/web`** porque dependen de `ProposalSummary` (tipo del dominio web) y son consumo exclusivo del dashboard; el backend no las necesita. El archivo `apps/web/src/lib/pricing-engine.ts` queda como residuo que re-exporta todo el package (`export * from '@repo/pricing-engine'`, para no romper a los consumidores que importan tipos/constantes desde la ruta antigua) y conserva esas dos funciones más `CurrencyCode` y `MinSubtotalResult`. De los consumidores, 7 reapuntan a `@repo/pricing-engine`; `useDashboard.ts` sigue importando del residuo (usa `getDashboardAmount`/`MinSubtotalResult`).
+
+5. **Integración con Vite (frontend ESM consumiendo package CJS).** `apps/web` es ESM (`"type": "module"`); el package emite CJS. En dev, Vite servía el `dist` CJS como ESM nativo y fallaba (`does not provide an export named 'calculateScenarioTotals'`). Se resuelve declarando el package en `optimizeDeps.include` (prebundle de esbuild en dev, expone los named exports) y en `build.commonjsOptions.include` con regex del package + `node_modules` (conversión CJS→ESM de Rollup en prod, necesaria porque el package es un symlink del workspace y el plugin commonjs por defecto solo procesa `node_modules`). Se mantiene un solo artefacto CJS — el que NestJS requiere en Fase 2.
+
+#### Consecuencias
+
+- El cálculo financiero queda centralizado en `@repo/pricing-engine`, fuente única que web y api consumen. §J se respeta: no se replica en ningún lado. El dashboard de web queda idéntico (las dos funciones que se quedaron no se movieron).
+- `apps/api` puede consumir el package compilado en Fase 2 sin tocar nada más del lado del engine.
+- Web compila (`tsc --noEmit` exit 0) y corre idéntico (login y carga de cálculos verificados en browser tras regenerar el prebundle de Vite).
+- Turborepo encadena el build del package antes que el de web automáticamente vía `dependsOn ["^build"]` (web ya declara el package como dependencia); no se tocó `turbo.json`.
+- Lección de toolchain registrada: `tsc --noEmit` valida tipos contra el `.d.ts` y pasa en verde, pero no captura la incompatibilidad de carga CJS/ESM en runtime de Vite — esta apareció solo al cargar la app en el browser. La verificación funcional en browser es la red de seguridad para extracciones que cruzan la frontera de módulos.
+
+#### Archivos
+
+- `packages/pricing-engine/package.json` (nuevo) — name `@repo/pricing-engine`, build con tsc, exports a `dist/`, sin `"type": "module"` (emit CJS)
+- `packages/pricing-engine/tsconfig.json` (nuevo) — extiende `base.json`, hereda NodeNext, `outDir: dist` / `rootDir: src`
+- `packages/pricing-engine/src/index.ts` (nuevo) — las 16 funciones puras (constantes, `convertCost`, interfaces `PricingItem`/`PricingScenarioItem`/`ScenarioTotals`/`ItemDisplayValues`, 13 funciones de cálculo) copiadas verbatim del original
+- `apps/web/package.json` — declara `@repo/pricing-engine: workspace:*`
+- `apps/web/src/lib/pricing-engine.ts` — reescrito como residuo: `export *` del package + `computeMinSubtotal`/`getDashboardAmount`/`CurrencyCode`/`MinSubtotalResult`
+- `apps/web/vite.config.ts` — `optimizeDeps.include` y `build.commonjsOptions.include` para el package CJS
+- 7 consumidores reapuntados a `@repo/pricing-engine`: `lib/exportExcel.ts`, `components/proposals/ScenarioTotalsCards.tsx`, `pages/proposals/components/ScenarioItemRow.tsx`, `pages/proposals/ProposalCalculations.tsx` (2 imports), `hooks/useScenarios.ts`, `pages/proposals/ProposalItemsBuilder.tsx`, `hooks/useProposalScenarios.ts`
+
+#### Commits
+
+- Pendiente — `refactor: extract pricing-engine to @repo/pricing-engine package` (extracción + residuo + reapunte de imports + integración Vite, en un commit atómico; lo deja Claude Code, lo pushea Luis)
+
+#### Pendientes
+
+- **Commit del refactor** (lo hace Claude Code tras este ADR) y **push a `master`** (lo hace Luis tras verificar que no hay usuarios en producción). El push dispara `migrate deploy` en Railway, aunque esta fase no incluye migración.
+- **Fase 2 — módulo `/external` en `apps/api`:** auth scoped con `EXTERNAL_JWT_SECRET` separado (login 2FA externo + estrategia + guard propios), endpoints solo-GET filtrados por `req.user.sub` (ownership §K), consumo de `@repo/pricing-engine` para calcular el valor de venta, sumar el origen de la otra app a `CORS_ORIGIN`. ADR propio al cerrarse.
+- **Verificación numérica en browser** (dashboard y totales de escenario idénticos al estado pre-refactor): pendiente de confirmación explícita de Luis antes del merge a `master`.
+
+El bloque siguiente reproduce ADR-053 completo (headings degradados un nivel):
+
+### ADR-053 — Módulo /external en apps/api: API de lectura para app de requisiciones, con auth scoped (EXTERNAL_JWT_SECRET) y reuso del 2FA interno
+
+**Fecha:** 2026-06-22
+**Estado:** Implementada y verificada en runtime, en la rama `feature/external-api` (sin pushear; commits locales del módulo de auth, del endpoint de propuestas y del ADR pendientes de push). Segunda parte (Fase 2) de la feature de API externa, que se apoya en ADR-052 (extracción del pricing-engine como package compartido).
+
+#### Contexto
+
+Un desarrollador externo (Felipe) está construyendo otra aplicación web que, autenticada con las mismas credenciales de NovoTechFlow, debe leer las propuestas en estado GANADA del usuario logueado para disparar requisiciones (órdenes de compra) y armar la facturación. La app no la maneja un sistema impersonal: la usa un comercial humano, así que el login tiene que pasar por el mismo flujo 2FA que la app principal, no un esquema de API key.
+
+ADR-052 resolvió la pieza de cálculo: extraer las 16 funciones puras del pricing-engine a `@repo/pricing-engine` (CommonJS) para que web y api consuman la misma lógica. Quedó como pendiente explícito el módulo `/external` en `apps/api` que materialice el contrato de lectura. Este ADR documenta esa segunda parte.
+
+Tres restricciones definieron el diseño. Primera, la app de Felipe vive en otro dominio: hay que evitar que un token comprometido en esa superficie abra los endpoints internos del backend. Segunda, los valores de venta no están persistidos en la DB — se recomputan siempre en el frontend con `pricing-engine`; cualquier API que los entregue tiene que ejecutar el mismo cálculo, sin replicar la lógica (CONVENTIONS §J). Tercera, la otra app necesita el dato crudo de requisición (qué item, qué proveedor, qué costo) más el valor de venta calculado: no totales, no precios "de catálogo", sino los efectivos para esa propuesta en ese escenario.
+
+#### Decisión
+
+1. **Módulo `/external` separado en `apps/api/src/external/`**, sin tocar el `AuthModule` interno en su comportamiento (el único cambio al interno fue sumar `EmailVerificationService` al array `exports` de `AuthModule`, para que el módulo externo pueda inyectarlo y reusar la verificación del código 2FA; no se modificó ninguna lógica del auth existente).
+
+2. **Auth scoped con secreto separado.** El módulo registra su propio `JwtModule.register({ secret: EXTERNAL_JWT_SECRET })` y su propia estrategia Passport `'jwt-external'` con guard `ExternalJwtAuthGuard`. El secreto externo se valida en boot con IIFE sin fallback, igual que `JWT_SECRET`. Razón: si la app externa o el token se comprometen, el secreto interno nunca estuvo expuesto a esa superficie; el token externo no abre la API interna por construcción (la estrategia interna lo rechaza al verificar la firma con `JWT_SECRET`). Se descartó la variante de un único secreto con claim de `scope` porque obliga a tocar la validación interna y deja una sola superficie de compromiso. El payload del token externo es reducido: `{ sub, email }` — sin `role`, sin `nomenclature`. El TTL se igualó al interno (12h).
+
+3. **Reuso del 2FA interno, no atajo.** `ExternalAuthService` inyecta `AuthService` y `EmailVerificationService` y reusa `validateUser` (credenciales + bcrypt), `login` (dispara el código por email) y `emailVerificationService.verifyCode`. Lo que **no** reusa es `verifyAndLogin` interno, porque ese firma con el `jwtService` interno (secreto `JWT_SECRET`); en su lugar implementa su propio `verifyAndLogin` que firma con el `jwtService` del `JwtModule` externo (secreto `EXTERNAL_JWT_SECRET`) sobre el payload reducido. Endpoints: `POST /external/login`, `POST /external/verify-code`, `POST /external/resend-code`, con los mismos rate limits que el auth interno (5/min en login y verify, 3/min en resend). Se descartó explícitamente el atajo de "API key sin 2FA" sugerido en una iteración: la app la usa un humano y debe loguearse como en NovoTechFlow.
+
+4. **Ownership absoluto por `userId` del token, sin excepción de admin.** El `findAll` interno aplica `accessFilter = user.role === 'ADMIN' ? {} : { userId: user.id }`, lo que abre el alcance a admins. En `/external` el filtro es **siempre** `where: { userId, status: GANADA, deletedAt: null }`, sin distinción de rol: la app externa es del usuario para sus datos, el rol no abre el alcance. Esto refuerza la garantía IDOR (CONVENTIONS §K) sobre la nueva superficie.
+
+5. **Endpoint único `GET /external/proposals`** protegido por `ExternalJwtAuthGuard`. Read-only. No reusa el `findAll` interno (que carece de filtro por status, ordering en `scenarioItems`, y aplica la excepción de admin que acá no aplica); el service externo arma su consulta propia con el include modelado sobre `getScenariosByProposalId` (que sí ordena por `sortOrder`), agregando `orderBy` también a `children`. El tipo del payload de la consulta vive en `external-proposals.types.ts` con `Prisma.ProposalGetPayload` derivado del mismo objeto `include` usado en el `findMany` (mediante `satisfies Prisma.ProposalInclude`), garantizando que include y tipo nunca se desincronicen.
+
+6. **Cálculo server-side vía `@repo/pricing-engine`.** El service mapea cada `ScenarioItem` raíz al shape `PricingScenarioItem` que el package espera (con casteo explícito de `Prisma.Decimal` a `number`), llama `calculateItemDisplayValues(si, allItems, currency, conversionTrm)` y toma su `unitPrice` como `unitSalePrice` del DTO de salida. Los hijos no se calculan (el package no produce `unitPrice` para hijos: su costo alimenta el costo del padre vía `calculateChildrenCostPerUnit`). Para satisfacer el tipo `PricingScenarioItem` recursivo a partir del include finito de Prisma se introdujo una función hoja `childToPricingScenarioItem` con `children: []`, fiel al dominio: los hijos son hojas. Los items diluidos (`isDiluted: true`) reciben del package `unitPrice = 0` por diseño y se entregan así en el DTO; su costo real sí va para la requisición.
+
+7. **DTO de salida con whitelist explícita, exponiendo base + overrides sin aplanar.** Una iteración temprana exponía solo los campos base del `ProposalItem` (margen, costo), lo que generaba una inconsistencia visible al consumidor: el `unitSalePrice` reflejaba el override del `ScenarioItem` (calculado correctamente por el package) pero el `marginPct` reportado era el base del item. La prueba contra una propuesta real lo destapó (`marginPct: 20` reportado vs precio implícito de margen efectivo 10, por un `marginPctOverride: 10` en el `ScenarioItem`). Se decidió exponer ambos: los campos base del item (`unitCost`, `marginPct`) y los tres overrides del escenario (`marginPctOverride`, `unitCostOverride`, `unitPriceOverride`), todos como `number | null`. La app consumidora ve la foto completa y decide qué usar; el `unitSalePrice` ya refleja la resolución correcta. Los hijos exponen su `unitCostOverride` por la misma razón (su costo va a la OC). Se descartó "aplanar" a valores efectivos: pierde información que la app puede necesitar.
+
+8. **Sin totales en el payload.** Ni totales de línea (`unitPrice × quantity`) ni de escenario (gravado, IVA, total). La app puede calcularlos a partir de los unitarios y las cantidades efectivamente ordenadas, que pueden no coincidir con las de la propuesta. Entregar totales masticados confunde (qué incluye, qué no) y no aporta a requisición/facturación.
+
+9. **Sin `manualAmount` ni imágenes ni páginas/bloques del documento.** El `manualAmount` solo aplica a propuestas sin escenarios reales con cálculo; para una ganada que va a requisición es ruido. Imágenes y páginas/bloques no aportan a la requisición y engordarían el payload.
+
+10. **CORS local sumando el origen de la app externa.** Se agregó `http://localhost:8080` (origen local de la app de Felipe) a `CORS_ORIGIN` del `.env` de `apps/api`, junto a `http://localhost:5173` (web). Cambio de `.env` local, no versionado. Para producción quedará pendiente sumar el origen público de la app externa a `CORS_ORIGIN` de Railway cuando se despliegue.
+
+11. **`EXTERNAL_JWT_SECRET` en `.env` local y documentado en `.env.example`.** Hex de 64 chars distinto de `JWT_SECRET`, generado localmente. El `.env.example` documenta la variable como requerida.
+
+12. **`apps/api` consume `@repo/pricing-engine` como dependencia de workspace.** Se sumó `"@repo/pricing-engine": "workspace:*"` a `apps/api/package.json`. El consumo es directo (el package emite CommonJS, NestJS lo `require` sin interop). El smoke test con `tsc --noEmit` confirmó la resolución de tipos sin tocar tsconfig.
+
+#### Consecuencias
+
+- La feature queda funcionalmente completa en `feature/external-api`: auth scoped con 2FA, endpoint de propuestas ganadas con valor de venta calculado server-side, DTO completo y coherente, CORS local listo para que Felipe pruebe desde su `http://localhost:8080`. La app externa puede integrarse sin que tocar nada del flujo interno de NovoTechFlow.
+- §J se respeta: el cálculo financiero sigue siendo único — vive en `@repo/pricing-engine` y lo consumen web (vía residuo) y api (directo). No hay replicación.
+- §K se refuerza: la nueva superficie de lectura aplica ownership absoluto por `userId` del token, sin excepción de admin, más estricta que el endpoint interno equivalente.
+- Lección de toolchain registrada (segunda en esta feature, complementa la de ADR-052): la prueba funcional contra datos reales destapa contratos engañosos que `tsc` no ve. Reportar campos base del item sin sus overrides del escenario compilaba en verde y devolvía un `unitSalePrice` correcto, pero con un `marginPct` que no coincidía con el precio. La verificación numérica contra una propuesta concreta es la red que cierra el ciclo.
+- Lección de modelo de trabajo: en una iteración intermedia, Claude Code propuso "saltarse el 2FA externo y usar una API key", contradiciendo un requisito explícito. El flujo decisión-primero (ADR-051) lo atajó: la sugerencia se descartó en el chat antes de tocar código. La regla quedó reforzada — Claude Code ejecuta, no decide alcance.
+- Para producción quedará pendiente: sumar el origen público de la app externa a `CORS_ORIGIN` de Railway, generar y configurar `EXTERNAL_JWT_SECRET` en Railway, y desplegar el branch tras el merge. Ninguno aplica ahora.
+
+#### Archivos
+
+- `apps/api/package.json` — declara `"@repo/pricing-engine": "workspace:*"`
+- `apps/api/.env.example` — documenta `EXTERNAL_JWT_SECRET` requerido
+- `apps/api/.env` (local, no versionado) — `EXTERNAL_JWT_SECRET` generado + `http://localhost:8080` agregado a `CORS_ORIGIN`
+- `apps/api/src/auth/auth.module.ts` — `EmailVerificationService` agregado al array `exports` (única modificación al auth interno)
+- `apps/api/src/app.module.ts` — `ExternalModule` agregado al array `imports`
+- `apps/api/src/external/external.module.ts` (nuevo) — registra `JwtModule.register` con `EXTERNAL_JWT_SECRET`, `PassportModule`, `AuthModule`, `UsersModule`, `PrismaModule`, la estrategia `ExternalJwtStrategy`, los services `ExternalAuthService` y `ExternalProposalsService`, y el `ExternalController`
+- `apps/api/src/external/external-jwt.strategy.ts` (nuevo) — estrategia Passport `'jwt-external'`, lee `EXTERNAL_JWT_SECRET`, `validate()` confirma usuario activo contra DB y devuelve `ExternalAuthUser { id, email }`
+- `apps/api/src/external/external-jwt-auth.guard.ts` (nuevo) — `AuthGuard('jwt-external')`
+- `apps/api/src/external/external-auth.service.ts` (nuevo) — reusa `AuthService.validateUser`, `AuthService.login`, `AuthService.resendCode`, `EmailVerificationService.verifyCode`; firma el token externo con el `JwtService` del módulo y payload reducido
+- `apps/api/src/external/external.controller.ts` (nuevo) — `POST /external/login`, `POST /external/verify-code`, `POST /external/resend-code`, `GET /external/proposals` (este último protegido por `ExternalJwtAuthGuard`)
+- `apps/api/src/external/dto/external-auth.dto.ts` (nuevo) — DTOs `ExternalLoginDto`, `ExternalVerifyCodeDto`, `ExternalResendCodeDto` con `class-validator`; tipos `ExternalJwtPayload`, `ExternalAuthUser`, `ExternalVerificationPendingResponse`, `ExternalLoginResponse`
+- `apps/api/src/external/external-proposals.types.ts` (nuevo) — `externalProposalInclude` (Prisma include con `satisfies Prisma.ProposalInclude`) y `ExternalProposalWithRelations` derivado con `Prisma.ProposalGetPayload`
+- `apps/api/src/external/dto/external-proposals.dto.ts` (nuevo) — interfaces `ExternalProposalOut`, `ExternalScenarioOut`, `ExternalItemOut`, `ExternalChildItemOut` (DTO de salida con base + overrides + `unitSalePrice` para raíz; sin `unitSalePrice` en hijos)
+- `apps/api/src/external/external-proposals.service.ts` (nuevo) — `getWonProposals(userId)`: findMany con filtro `userId + GANADA + deletedAt: null`, mapeo Prisma→pricing-engine con cast de `Decimal`, cálculo de `unitSalePrice` por item raíz, armado del DTO de salida
+- `pnpm-lock.yaml` — link de workspace de `@repo/pricing-engine` para `apps/api`
+
+#### Commits
+
+- `78e470d` — `feat(api): add external read-only API auth module with scoped JWT` (módulo `/external` completo del auth: dto, estrategia, guard, service, controller, module; declara `@repo/pricing-engine` en api; documenta `EXTERNAL_JWT_SECRET` en `.env.example`; suma `EmailVerificationService` a exports de `AuthModule`)
+- `71536ab` — `feat(api): add GET /external/proposals returning won proposals with sale prices` (tipos del include, DTO de salida, service con consulta + mapeo + cálculo, cableado del service en el módulo y del endpoint en el controller)
+- Pendiente — commit de este ADR-053 (`docs: ADR-053 external read-only API module with scoped JWT`)
+
+#### Pendientes
+
+- **Push a `master`** (lo hace Luis tras confirmar que no hay usuarios en producción) — incluye los cuatro commits del branch (`0254690`, `d58ef48`, `78e470d`, `71536ab`) más el commit de este ADR.
+- **Verificación numérica adicional en browser** comparando el `unitSalePrice` devuelto por `GET /external/proposals` contra la app principal para una muestra más amplia de propuestas (la verificación inicial cubrió una propuesta con `marginPctOverride`; conviene cubrir también casos con `unitPriceOverride`, items diluidos y items con hijos antes del merge a `master`).
+- **Túnel ngrok** para exponer `apps/api` local con una URL pública temporal y entregársela a Felipe junto al documento de contrato de la API. No es código del repo: queda como tarea operativa.
+- **Documento de contrato de la API** para Felipe (endpoints, flujo 2FA, formato del token, payload completo de `GET /external/proposals`, header `ngrok-skip-browser-warning`). Documentación operativa, fuera del repo.
+- **Configuración de producción para `/external`** al desplegar: agregar `EXTERNAL_JWT_SECRET` (hex 64 chars distinto del de local) a Railway, sumar el origen público de la app de Felipe a `CORS_ORIGIN` de Railway, y validar el flujo extremo a extremo en producción tras el push.
+- **Limpieza de duplicado de `RESEND_API_KEY` y `RESEND_FROM`** en el `.env` local detectada durante el paso 4 (no afecta funcionalidad: Node usa la última definición). Tarea menor de higiene, no bloquea nada.
+
+### Consecuencias
+
+- Las menciones a ADR-052 en ADR-079, ADR-089 y ADR-096 dejan de ser colgantes; ADR-053 queda documentado por primera vez en master.
+- El diseño de auth de `/external` tiene ahora rastro en la bitácora.
+- El protocolo §4.1 queda intacto: el último heading de nivel 2 del archivo es este ADR-097.
+- Drift registrado sin corregir aquí: el título de CONVENTIONS §J sigue nombrando lib/pricing-engine.ts, la ruta pre-extracción; nunca se actualizó tras ADR-052.
+
+### Archivos
+
+DECISIONS.md.
+
+### Commits
+
+Los commits cuya prosa se recupera, todos en master vía ce4715e:
+
+- `d58ef48` — refactor: extract pricing-engine to @repo/pricing-engine package (implementación del 052)
+- `78e470d` — feat(api): add external read-only API auth module with scoped JWT (053)
+- `71536ab` — feat(api): add GET /external/proposals returning won proposals with sale prices (053)
+- `0254690` y `b463cac` — los commits de docs que introdujeron los ADR originales en la rama.
+
+### Pendientes
+
+- Actualizar CONVENTIONS §J para nombrar @repo/pricing-engine como fuente canónica del cálculo (edición quirúrgica vía Claude Code, commit aparte).
+- Guardia anti-pérdida para el protocolo de merge (INSTRUCTIVO §4): al resolver conflictos en DECISIONS.md, verificar que el conjunto de headings del resultado sea la unión de los dos lados antes de commitear el merge.
