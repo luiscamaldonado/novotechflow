@@ -50,12 +50,9 @@ backups/
 *.csv
 
 
-# Database dumps
-# Database dumps (but not Prisma migrations)`n*.dump.sql
-*.csv
+# Database dumps (but not Prisma migrations)
+*.dump.sql
 
 # User uploads (track defaults only)
 uploads/*
 !uploads/defaults/
-
-backups/
