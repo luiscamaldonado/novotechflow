@@ -32,6 +32,9 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm exec prisma generate
         working-directory: apps/api
+        env:
+          # prisma.config.ts exige DATABASE_URL al cargarse; generate no toca la base
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
       - name: Build shared packages
         run: pnpm --filter @repo/item-display --filter @repo/pricing-engine build
