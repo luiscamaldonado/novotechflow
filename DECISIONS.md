@@ -4310,3 +4310,53 @@ Sin commits de código. Pushes citados como evidencia: `c94c2cb` (rebuilds tripl
 
 - Validación positiva con el próximo push que toque `apps/**` o `packages/**` o los archivos raíz vigilados.
 - Evaluar config-as-code (`.railway/railway.ts` + `railway config apply`) para versionar los patterns y el invariante de gemelos, cuando amerite.
+
+## ADR-099 — Cohorte G: majors fuera de cohorte y lockstep de Node 22 a 24
+
+**Fecha:** 2026-08-18
+**Estado:** Aceptado
+
+### Contexto
+
+Cerrada la Cohorte F (ADR-095), quedaban en cola cuatro majors fuera de cohorte: framer-motion 13, lucide-react 1.x, @types/supertest 7 y @types/node. Se abordaron con el método de F: reconocimiento de solo lectura del repo (superficie de uso real por paquete), cruce contra changelogs oficiales, bumps atómicos con gates por commit y cierre documental. El reconocimiento arrojó una superficie mínima: framer-motion importa únicamente `motion` y `AnimatePresence` en 24 archivos (prop `layout` sin `layoutId`, `AnimatePresence` con `mode="popLayout"`/`"wait"`, cero hooks, cero gestos, cero `variants`); lucide-react importa 92 especificadores únicos (91 íconos + el tipo `LucideIcon`), ninguno de marca; supertest tiene un único consumidor (`apps/api/test/app.e2e-spec.ts`, default import, sin anotaciones de tipo del paquete); y `@types/node@22.20.1` era ya el último de la línea 22.
+
+El cuarto bump destapó la decisión real de la cohorte: `@types/node` se alinea al runtime, nunca por delante, así que la pregunta no era "¿@types/node 26?" sino "¿en qué Node corre el proyecto?". Calendario oficial (nodejs/Release): la línea 22 está en Maintenance LTS con EOL 2027-04-30 (~8 meses); la 24 es Active LTS con EOL 2028-04-30; la 26 es Current y no entra en LTS hasta 2026-10-28 — pinnear un Current en producción se descartó. Quedarse en 22 disolvía el bump en no-op pero obligaba a una mini-cohorte forzada en Q1 2027; subir a 24 aprovechaba el andamiaje de guardias ya montado (test de imagen de ADR-095) con costo marginal.
+
+### Decisión
+
+Cuatro bumps en orden de riesgo creciente, un commit atómico con gates por cada uno:
+
+1. **@types/supertest 6.0.3 → 7.2.1** (api, dev): alineación con supertest 7.2.2 ya en uso. Riesgo nulo confirmado; el lock solo movió esa entrada, sin duplicar `@types/superagent`.
+2. **lucide-react 0.577.0 → 1.32.0** (web): el breaking de v1 es la remoción de los íconos de marca (Chromium, Codepen, Facebook, Figma, Github, Slack, etc.); ninguno en uso, verificado empíricamente contra 1.32.0 instalado — los 92 especificadores del repo existen todos. v1 además elimina el build UMD (irrelevante: Vite consume ESM) y pone `aria-hidden="true"` por defecto en los íconos (cambio conductual de accesibilidad, no de build).
+3. **framer-motion 12.43.0 → 13.1.0** (web): el único breaking de 13.0 es la remoción de `@emotion/is-prop-valid` como peer opcional, que solo afecta CSS-in-JS (styled-components/Emotion) — cero superficie en este repo (Tailwind puro). Confirmación empírica: el bundle de producción construido con la 12 contenía el stub de error del import opcional (`Could not resolve "@emotion/is-prop-valid"...`); tras el bump el stub desapareció de `dist/` por completo. `motion-dom` y `motion-utils` acompañaron a la línea 13. Nota: río arriba el paquete se llama ahora `motion`; `framer-motion` sigue publicándose en lockstep y migrar el nombre queda fuera de alcance.
+4. **Lockstep Node 22 → 24** en un solo commit: `node:24-alpine` en los cuatro stages con Node (builder, prod-deps y runner del api; builder del web — el runner nginx no cambia), `node-version: 24` en los tres `setup-node` de CI, `engines.node >=24.0.0` en la raíz y `@types/node ^24.13.3` en web y api. Única dependencia transitiva movida: `undici-types` 6.21.0 → 7.18.2. El Node local se actualizó a 24.19.0 vía nvm-windows (1.1.11, ya instalado; la 22.22.2 queda instalada como rollback inmediato con `nvm use`, recordando que los globals de nvm son por versión: pnpm se reinstala global bajo la versión activa).
+
+Guardia de ADR-095 ejecutada antes del push por cambio de runtime: ambas imágenes construidas desde `git archive` del HEAD (1274b75) con `--no-cache`. API: base `node:24-alpine` (digest d32cdf61…), `prisma generate` en verde con su placeholder de `DATABASE_URL` scoped al RUN, cero descarga de engines, `migrate deploy` no-op (35 migraciones, ninguna pendiente), Nest con 94 rutas mapeadas y sonda 200. Web: builder en el mismo digest, runner nginx, sonda 200 con las cabeceras de seguridad de `nginx.conf` presentes. Node dentro del contenedor: v24.19.0, idéntico al local.
+
+### Consecuencias
+
+- Producción, CI y local corren la misma línea Node 24 (v24.19.0 en los tres planos, mismo digest de imagen validado en local y en Railway). Runway de LTS hasta 2028-04-30; la paridad local-producción de ADR-041 queda restaurada tras el salto.
+- Post-push verificado: CI (run 32174890830) en verde con `node: v24.19.0` en ambos jobs; deployments SUCCESS de los tres servicios en 1274b75; sondas 200 en api y web.
+- **La validación positiva pendiente de ADR-098 queda cerrada.** Los tres servicios construyeron para este push porque `package.json` raíz y `pnpm-lock.yaml` — vigilados por los tres — cambiaron: comportamiento exactamente esperado, no regresión a los rebuilds triples (aquel problema era construir sin que nada vigilado cambiara). `.github/workflows/**` no está vigilado y correctamente no participó.
+- **Hallazgo operativo:** `RESEND_API_KEY` es fail-fast en el arranque del api (`apps/api/src/auth/email-verification.service.ts`, desde 5525b5d, 2026-04-13) y no figuraba en el set documentado. El set mínimo de env para cualquier arranque local del api es: `DATABASE_URL`, `JWT_SECRET`, `EXTERNAL_JWT_SECRET`, `CORS_ORIGIN`, `GEMINI_API_KEY` y `RESEND_API_KEY` (dummies válidos salvo `DATABASE_URL`).
+- `aria-hidden="true"` por defecto en lucide v1: pendiente de cola fría auditar botones cuyo único contenido accesible sea un ícono (a11y, no build). Verificación visual de trazos de íconos v1 hecha por Luis en local.
+- Residuo menor: directorios `.pnpm/motion-*@12.*` sin referencias en el lock; un `pnpm store prune` eventual los limpia.
+
+### Archivos
+
+- `apps/api/package.json`, `apps/web/package.json` (rangos y @types/node), `package.json` raíz (engines), `pnpm-lock.yaml`
+- `apps/api/Dockerfile` (3 stages a node:24-alpine), `apps/web/Dockerfile` (builder a node:24-alpine)
+- `.github/workflows/ci.yml`, `.github/workflows/pr-check.yml` (node-version 24)
+- DECISIONS.md (este ADR)
+
+### Commits
+
+- b3dc2d2 — @types/supertest 6.0.3 → 7.2.1
+- a285197 — lucide-react 0.577.0 → 1.32.0
+- 148db8e — framer-motion 12.43.0 → 13.1.0
+- 1274b75 — lockstep Node 22 → 24 (Dockerfiles, CI, engines, @types/node)
+
+### Pendientes
+
+- Cola fría: imagen del api en 1.08 GB dominada por node_modules hoisted del stage de producción — candidato a adelgazamiento (tarea siguiente, con recon propio).
+- Cola fría: auditoría a11y de botones con ícono como único contenido (`aria-hidden` por defecto de lucide v1).
