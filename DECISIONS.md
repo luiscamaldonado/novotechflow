@@ -4360,3 +4360,45 @@ Guardia de ADR-095 ejecutada antes del push por cambio de runtime: ambas imágen
 
 - Cola fría: imagen del api en 1.08 GB dominada por node_modules hoisted del stage de producción — candidato a adelgazamiento (tarea siguiente, con recon propio).
 - Cola fría: auditoría a11y de botones con ícono como único contenido (`aria-hidden` por defecto de lucide v1).
+
+## ADR-100 — Imagen de producción del api: pnpm deploy, poda del CLI de Prisma y query compilers solo-PostgreSQL
+
+**Fecha:** 2026-08-18
+**Estado:** Aceptado
+
+### Contexto
+
+El test de imagen de la Cohorte G (ADR-099) dejó medida la imagen del api: 1.08 GB en disco, 834.8 MB de filesystem real, dominados por un node_modules de 662.3 MB. El reconocimiento por capas atribuyó el peso a cuatro bloques: el subárbol del CLI de Prisma (~229 MB, presente solo para ejecutar `migrate deploy` en el arranque), polizones del frontend materializados por el hoisting del workspace (~119 MB: lucide-react, jspdf, tiptap y la cadena React), los query compilers WASM de motores que el proyecto no usa dentro de `@prisma/client/runtime` (~57 MB: sqlserver, cockroachdb, mysql y sqlite, duplicados en .js/.mjs y fast/small), y ~175 MB de base node:24-alpine (incluidos 5.5 MB de yarn que nada invoca). La causa raíz de los polizones: el stage prod-deps instalaba con `pnpm install --frozen-lockfile --filter api... --prod --config.node-linker=hoisted` desde la raíz del workspace, y el hoisting materializa el universo de producción del monorepo completo, no el árbol del api. Un hallazgo del recon inverso corrigió una atribución: react-dom, @radix-ui y @visx no eran fuga del web — entran por `@prisma/studio-core`, dependencia del CLI `prisma`.
+
+### Decisión
+
+Rediseño del Dockerfile del api en un solo commit, con smoke iterativo autorizado únicamente sobre la lista de podas (restaurar el ítem que rompa):
+
+1. **prod-deps reemplazado por un stage `deploy`** que parte del builder y corre `pnpm --filter api deploy --prod --legacy --config.node-linker=hoisted /deployed`. El flag `--legacy` fue obligatorio (pnpm 10 exige `inject-workspace-packages=true` para deploy sin él, y tocar la configuración del workspace quedó fuera de alcance); `node-linker=hoisted` es necesario para que las podas por rm operen sobre directorios reales y no symlinks. El deploy trae `@repo/item-display` y `@repo/pricing-engine` resueltos con su dist, lo que eliminó las dos inyecciones manuales de `@repo/*` que el runner hacía por COPY. Solo por el deploy desaparecieron los polizones del web (662.3 → 498.5 MB antes de podar).
+2. **Podas en el stage deploy, antes del COPY al runner** — podar después del COPY solo crea whiteouts: el du interno baja pero los bytes viajan igual en el pull. Aplicadas: query compilers no-PostgreSQL (32 archivos, ~55 MB; el cliente generado solo carga `query_compiler_fast_bg.postgresql.*`), `@electric-sql` (25.3 MB), `typescript` (23.6 MB — exonerado el temor de ADR-095: `prisma.config.ts` lo carga el jiti/c12 embebido en `@prisma/config`), `elkjs` + `@visx` (11.9 MB), el cierre UI de studio-core (react, react-dom, scheduler, @radix-ui, d3-*, internmap, ~12 MB) y `dist/ui` de `@prisma/studio-core` (28.7 MB de UI React que el CLI jamás carga: solo usa `dist/data/bff/index.cjs`, con guardia `test -f` en el propio stage). En el runner: rm del yarn de la base (whiteout asumido, ~10 MB de pull no recuperables).
+3. **Podas revertidas por fallo empírico** (require-time del CLI en `migrate deploy`): `@prisma/studio-core` completo (su cli.js requiere `studio-core/data/bff` al arrancar), `@prisma/dev` (requiere `internal/state`) y `effect` (dep de `@prisma/config`). `happy-dom` resultó innecesaria: el propio deploy no la trae. `mysql2` (928 KB) y ~7 MB de chunks sueltos de studio-core quedaron fuera de alcance por no pagar su verificación.
+
+Resultado: **834.8 → 568.3 MB de filesystem (−31.9%)**, node_modules **662.3 → 379.6 MB (−42.7%)**, tamaño Docker 1.08 GB → 704 MB. Guardia de ADR-095 ejecutada: build desde `git archive` del HEAD con `--no-cache`, con paridad exacta contra el smoke del working tree (568.3/379.6 MB idénticos), migrate deploy no-op, 94 rutas, sonda 200, Node v24.19.0 en contenedor.
+
+### Consecuencias
+
+- El push (docs de ADR-099 + este Dockerfile) coincidió con el incidente de Railway "Deployments are slow to progress" (18-ago 21:45 UTC): ambos api construyeron y pushearon imagen correctamente y fallaron después, en el arranque del contenedor, con deploy logs vacíos y `configErrors: ["Failed to connect before the deadline"]`. Producción nunca cayó (siguió sirviendo 1274b75). El redeploy manual post-incidente cerró en SUCCESS: novotechflow rebuildeó con caché total y reemitió el `containerimage.digest` idéntico (sha256:664d1237…) al del intento fallido — misma imagen byte a byte —; api-external reutilizó la imagen ya pusheada sin rebuild (build log de 2 líneas).
+- Evidencia adicional de ADR-098 (filtrado selectivo): novotechflow y api-external construyeron (apps/api/** vigilado por ambos) y web quedó SKIPPED con `skippedReason: "No changes to watched files"` — tercera validación, primera de filtrado parcial.
+- Trampas de lectura del CLI de Railway, documentadas para no reincidir: (1) `configErrors` persiste en el meta de deployments SUCCESS como artefacto del intento fallido — el veredicto real es `status`; (2) el campo `imageDigest` del meta es un identificador del registro interno de Railway, único por deployment, NO comparable con el `containerimage.digest` OCI de los build logs; los deployments FAILED ni siquiera lo traen.
+- api-external no corre `migrate deploy`: su startCommand (`node dist/src/main-external.js`) sobrescribe el CMD. Solo el api principal migra — correcto y verificado.
+- Cada bump futuro de Prisma re-verifica las podas del CLI en el test de imagen: la separabilidad de studio-core/dev/effect y la carga exclusiva del compiler postgresql son internals no contractuales.
+- Los tags locales de prueba (`novotechflow-api:node24-test`, `slim-test`, `slim-archive-test`) quedan liberables tras este cierre.
+
+### Archivos
+
+- `apps/api/Dockerfile` (stage deploy nuevo, podas, runner sin inyecciones manuales de @repo/*)
+- DECISIONS.md (este ADR)
+
+### Commits
+
+- 02ac06b — chore(api): imagen de produccion via pnpm deploy + poda de CLI prisma y query compilers no-pg
+
+### Pendientes
+
+- **Pinning del árbol desplegado:** el build de Railway avisa `A pnpm-lock.yaml file exists. The current configuration prohibits to read or write a lockfile` — `pnpm deploy --legacy` re-resuelve desde los rangos del package.json en vez del lock, perdiendo el pinning que daba el `--frozen-lockfile` del viejo prod-deps. Alternativa a evaluar con recon propio: `inject-workspace-packages=true` en el workspace + deploy sin `--legacy` (recupera el lockfile, cambia el layout local de los @repo/* en todo el monorepo).
+- Cola fría: auditoría a11y de íconos (arrastrada de ADR-099).
