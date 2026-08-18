@@ -4264,3 +4264,49 @@ Los commits cuya prosa se recupera, todos en master vía ce4715e:
 
 - Actualizar CONVENTIONS §J para nombrar @repo/pricing-engine como fuente canónica del cálculo (edición quirúrgica vía Claude Code, commit aparte).
 - Guardia anti-pérdida para el protocolo de merge (INSTRUCTIVO §4): al resolver conflictos en DECISIONS.md, verificar que el conjunto de headings del resultado sea la unión de los dos lados antes de commitear el merge.
+
+## ADR-098 — Watch paths por servicio en Railway: fin de los rebuilds triples por push
+
+**Fecha:** 2026-08-18
+**Estado:** Aceptado
+
+### Contexto
+
+Los tres servicios de Railway (web, novotechflow, api-external) apuntan al mismo repo y rama con rootDirectory vacío y, hasta esta decisión, `watchPatterns: []`: cualquier push a master reconstruía y redesplegaba los tres, tocara lo que tocara. Evidencia dura del desperdicio: el push de `c94c2cb` (2026-08-17, solo `DECISIONS.md` + un archivo de apps/web) rebuildeo los tres; los imageDigest de novotechflow y api-external quedaron bit-idénticos a los del deploy anterior — dos builds completos y dos redeploys para producir la misma imagen, con el `prisma migrate deploy` del arranque de novotechflow re-ejecutándose (no-op) contra la base de producción en cada commit de docs.
+
+El reconocimiento de solo lectura estableció además: no existe config-as-code (`railway.json`/`railway.toml`/`.railway/railway.ts` — cero hits; toda la configuración vive en el dashboard); los watch paths se leen por `railway status --json` (`serviceManifest.build.watchPatterns`) y se escriben por MCP `update_service` (parámetro tipado `watch_patterns`), CLI dot-path o dashboard; novotechflow y api-external comparten `apps/api/Dockerfile` y difieren únicamente en el startCommand (`node dist/src/main-external.js`, override de ADR-081); y el conjunto de rutas que cada build consume incluye cuatro archivos raíz fáciles de olvidar (`package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.dockerignore`) además de `packages/**` y el `apps/<x>/**` propio.
+
+### Decisión
+
+Watch patterns por servicio, escritos vía MCP `update_service`:
+
+- web: `apps/web/**`, `packages/**`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.dockerignore`
+- novotechflow y api-external (idénticos): `apps/api/**`, `packages/**`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.dockerignore`
+
+Tres criterios de diseño. Primero, archivos raíz sin ancla (`package.json`, no `/package.json`): la semántica exacta de anclaje de Railway no es observable sin experimentar, y el riesgo es asimétrico — un patrón laxo produce a lo sumo un build de más (el status quo previo), un ancla no soportada produce imagen vieja tras un cambio real, que es el fallo peligroso. El falso positivo residual (el `package.json` de una app disparando al otro servicio) queda absorbido porque esos cambios casi siempre mueven el lockfile, único y compartido. Segundo, los gemelos novotechflow/api-external llevan conjuntos idénticos como invariante: comparten Dockerfile e imagen; si divergieran, un cambio en apps/api rebuildearía uno y dejaría al otro con una imagen vieja — skew entre dos APIs que comparten schema de DB y lógica de pricing. Sin config-as-code no hay tooling que fuerce la igualdad: queda documentada aquí y es verificable por `status --json`. Tercero, exclusiones conscientes: los `.md` de gobernanza, `.github/**`, `turbo.json`, `scripts/`, `backups/` no participan en ninguna imagen y quedan fuera a propósito.
+
+La escritura se ejecutó con verificación de no-regresión: pre-flight del schema del MCP (todos los parámetros opcionales con default null — patch parcial, no replace), confirmación empírica tras el primer servicio, y el startCommand de api-external verificado intacto antes, inmediatamente después de su escritura y en la lectura final. Cambiar watch patterns no disparó redeploys (no altera la imagen corriente).
+
+Alternativas descartadas: `railway environment edit --service-config` (formato dot-path dudoso para arrays); config-as-code `.railway/railway.ts` + `config apply` (exigiría crear y versionar el archivo; queda como evolución natural si se quiere el invariante de gemelos bajo control de versiones); dashboard manual (válido, pero el MCP deja la operación dentro del flujo aprobación-por-operación del proyecto).
+
+### Consecuencias
+
+- Validación negativa ejecutada y PASÓ: el push de `71b736c` (solo `CONVENTIONS.md` + `INSTRUCTIVO_CLAUDE.md`) produjo en los tres servicios un registro `SKIPPED` con `skippedReason: "No changes to watched files"` — confirmación textual de Railway de que evaluó y filtró — con cero builds, cero redeploys y las tres imágenes de producción intactas en `c94c2cb`, estable en tres rondas de observación espaciadas 60 s. Railway deja rastro auditable del filtrado en vez de silencio.
+- Validación positiva pendiente: el próximo push que toque rutas vigiladas debe rebuildear exactamente los servicios correctos. Hasta entonces, mantener el hábito de `railway deployment list` tras cada push.
+- Los patterns viven solo en Railway, sin fuente versionada. Al crear un servicio nuevo o clonar entorno, hay que recordarlos a mano. La igualdad de gemelos se re-verifica por `status --json` ante cualquier duda.
+- `VITE_API_URL` se hornea en build-time (ARG del Dockerfile de web): su rotación redeploya por el flujo de cambio-de-variable de Railway, no por watch paths.
+- El MCP local de Railway quedó confirmado operativo (lectura por `get_service_config`, escritura por `update_service`): el pendiente opcional de cablearlo, arrastrado desde el traspaso, muere aquí.
+- Colateral de seguridad registrado: `railway environment config --json` vuelca todos los secretos del entorno en claro (segunda vía de leak del CLI tras `variable list`). Protocolo: volcar a archivo sin imprimir, extraer por script solo campos de build/deploy, borrar el volcado. El MCP `get_service_config` es la vía segura (reporta counts, no valores).
+
+### Archivos
+
+Ninguno del repo: la configuración vive en Railway. DECISIONS.md (este ADR).
+
+### Commits
+
+Sin commits de código. Pushes citados como evidencia: `c94c2cb` (rebuilds triples con imágenes bit-idénticas, motivación) y `71b736c` (prueba negativa, SKIPPED en los tres servicios). Este ADR viaja en su propio commit de docs.
+
+### Pendientes
+
+- Validación positiva con el próximo push que toque `apps/**` o `packages/**` o los archivos raíz vigilados.
+- Evaluar config-as-code (`.railway/railway.ts` + `railway config apply`) para versionar los patterns y el invariante de gemelos, cuando amerite.
