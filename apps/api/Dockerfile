@@ -17,9 +17,10 @@ RUN cd apps/api && pnpm build
 
 # Stage 2: Deploy (arbol prod autocontenido del api; reemplaza el node_modules hoisted del workspace)
 FROM builder AS deploy
-# pnpm 10 exige --legacy (o injectWorkspacePackages en el workspace); hoisted = directorios reales,
-# mismo layout que consumia el runner, y hace efectivos los rm -rf de abajo (isolated solo borraria symlinks)
-RUN pnpm --filter api deploy --prod --legacy --config.node-linker=hoisted /deployed
+# Sin --legacy (habilitado por injectWorkspacePackages en el workspace): el arbol sale del lockfile
+# en vez de re-resolverse desde el registry. hoisted = directorios reales, mismo layout que consumia
+# el runner, y hace efectivos los rm -rf de abajo (isolated solo borraria symlinks)
+RUN pnpm --filter api deploy --prod --config.node-linker=hoisted /deployed
 # El deploy debe traer los @repo/* resueltos con su dist, el bin de prisma, y dejar fuera las deps del web
 # (react-dom no se chequea aqui: entra legitimamente como dep de @prisma/studio-core y cae con su poda)
 RUN test -f /deployed/node_modules/@repo/item-display/dist/index.js \

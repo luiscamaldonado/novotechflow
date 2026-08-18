@@ -1,3 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Habilita `pnpm deploy` sin --legacy, que respeta el lockfile en vez de re-resolver
+# desde el registry. No altera el linking local: los @repo/* siguen siendo symlinks al fuente.
+injectWorkspacePackages: true
