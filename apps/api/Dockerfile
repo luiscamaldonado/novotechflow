@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 ENV LANG=C.UTF-8
 RUN apk add --no-cache openssl
 WORKDIR /app
@@ -16,7 +16,7 @@ RUN cd apps/api && DATABASE_URL="postgresql://build:build@localhost:5432/build" 
 RUN cd apps/api && pnpm build
 
 # Stage 2: Production dependencies (prod-only tree from lockfile, hoisted)
-FROM node:22-alpine AS prod-deps
+FROM node:24-alpine AS prod-deps
 ENV LANG=C.UTF-8
 RUN apk add --no-cache openssl
 WORKDIR /app
@@ -29,7 +29,7 @@ COPY --from=builder /app/packages/pricing-engine/dist packages/pricing-engine/di
 RUN pnpm install --frozen-lockfile --filter api... --prod --config.node-linker=hoisted
 
 # Stage 3: Production
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 ENV LANG=C.UTF-8
 RUN apk add --no-cache openssl
 WORKDIR /app
