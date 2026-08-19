@@ -268,7 +268,7 @@ export default function ScenarioItemRow({
             <td className="px-8 py-6 text-right">
                 <div className="flex items-center justify-end gap-1">
                     {!isReadOnly && (canMoveUp || canMoveDown) && (
-                        <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex flex-col opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                             <button
                                 onClick={onMoveUp}
                                 className="p-0.5 rounded-sm transition-colors text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"

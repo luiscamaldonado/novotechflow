@@ -92,7 +92,7 @@ export default function ScenarioSidebar({
                                         onClick={(e) => { e.stopPropagation(); moveScenario(index, -1); }}
                                         disabled={isReadOnly || index === 0}
                                         className={cn(
-                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                                             activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-500"
                                         )}
                                         title="Subir escenario"
@@ -103,7 +103,7 @@ export default function ScenarioSidebar({
                                         onClick={(e) => { e.stopPropagation(); moveScenario(index, 1); }}
                                         disabled={isReadOnly || index === scenarios.length - 1}
                                         className={cn(
-                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                                             activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-500"
                                         )}
                                         title="Bajar escenario"
@@ -114,7 +114,7 @@ export default function ScenarioSidebar({
                                         onClick={(e) => { e.stopPropagation(); cloneScenario(s.id); }}
                                         disabled={isReadOnly}
                                         className={cn(
-                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                                             activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-500"
                                         )}
                                         title="Clonar escenario"
@@ -125,7 +125,7 @@ export default function ScenarioSidebar({
                                         onClick={(e) => { e.stopPropagation(); deleteScenario(s.id); }}
                                         disabled={isReadOnly}
                                         className={cn(
-                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                                             activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                         )}
                                         title="Eliminar escenario"

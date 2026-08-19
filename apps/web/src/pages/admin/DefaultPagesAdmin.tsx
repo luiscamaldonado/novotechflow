@@ -377,7 +377,7 @@ export default function DefaultPagesAdmin() {
                                             </div>
                                         </div>
                                         <div className="flex items-center shrink-0 gap-0.5">
-                                            <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex flex-col opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); moveTemplate(idx, 'up'); }}
                                                     disabled={idx === 0}
@@ -404,7 +404,7 @@ export default function DefaultPagesAdmin() {
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDelete(tpl.id); }}
                                                 className={cn(
-                                                    "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                                    "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                                                     isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                                 )}
                                                 title="Eliminar plantilla"

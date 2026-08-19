@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@custom-variant hover (&:hover);
+
 @plugin 'tailwind-scrollbar' {
   nocompatible: true;
 }

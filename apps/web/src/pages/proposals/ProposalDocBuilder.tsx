@@ -485,7 +485,7 @@ export default function ProposalDocBuilder() {
                                             </div>
                                             <div className="flex items-center shrink-0 gap-0.5">
                                                 {!isReadOnly && (
-                                                    <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <div className="flex flex-col opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); moveTopLevel(idx, 'up'); }}
                                                             disabled={idx === 0 || page.isLocked || topLevel[idx - 1].page.isLocked}
@@ -514,7 +514,7 @@ export default function ProposalDocBuilder() {
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); startRename(page); }}
                                                         className={cn(
-                                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                                                             isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-indigo-50 text-slate-400 hover:text-indigo-600"
                                                         )}
                                                         title="Renombrar"
@@ -526,7 +526,7 @@ export default function ProposalDocBuilder() {
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
                                                         className={cn(
-                                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
+                                                            "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                                                             isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                                         )}
                                                         title="Eliminar página"
@@ -649,7 +649,7 @@ export default function ProposalDocBuilder() {
                                                             </div>
                                                             <div className="flex items-center shrink-0 gap-0.5">
                                                                 {!isReadOnly && (
-                                                                    <div className="flex flex-col opacity-0 group-hover/sheet:opacity-100 transition-opacity">
+                                                                    <div className="flex flex-col opacity-0 group-hover/sheet:opacity-100 focus-within:opacity-100 transition-opacity">
                                                                         <button
                                                                             onClick={(e) => { e.stopPropagation(); moveSheet(page.id, sheetIdx, 'up'); }}
                                                                             disabled={sheetIdx === 0}
@@ -678,7 +678,7 @@ export default function ProposalDocBuilder() {
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); deletePage(sheet.id); }}
                                                                         className={cn(
-                                                                            "p-1 rounded-lg opacity-0 group-hover/sheet:opacity-100 transition-opacity",
+                                                                            "p-1 rounded-lg opacity-0 group-hover/sheet:opacity-100 focus-visible:opacity-100 transition-opacity",
                                                                             sheetActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                                                         )}
                                                                         title="Eliminar hoja"
