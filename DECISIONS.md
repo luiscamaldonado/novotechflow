@@ -4476,3 +4476,45 @@ Validar el retiro retroactivamente con la auditoría completa y cerrar ambos pen
 
 - `c0ff90a` (2026-08-17) — chore(web): retirar bloque compat de border-color y borrar App.css huerfano (cola fria ADR-094).
 - El commit docs de este ADR.
+
+## ADR-103 — Auditoría a11y de íconos lucide v1 y regresión hover de Tailwind v4: aria-label en 23 controles, restauración de la semántica v3 de hover y disparadores de foco
+
+**Fecha:** 2026-08-19
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-099 dejó en cola fría auditar los controles cuyo único contenido accesible fuera un ícono, tras el `aria-hidden="true"` por defecto de lucide-react v1. El reconocimiento del 2026-08-19 confirmó primero el mecanismo real en 1.32.0: el default solo aplica si el ícono no recibe children ni props `aria-*`, `role` o `title` (`hasA11yProp`), y el spread del consumidor va después, así que cualquier prop propia gana. El inventario sobre los 78 `.tsx` de `apps/web/src` (escáner JSX con balanceo real, 239 elementos interactivos, 325 usos de íconos): 23 controles ícono-solo sin nombre accesible en 17 archivos (9 cierres de modal/panel, 7 destructivos con `Trash2`, 5 toggles, 1 crear, 1 limpiar); 52 con nombre vía `title` y 1 vía `aria-label`; 141 decorativos junto a texto, correctamente servidos por el default.
+
+La verificación en navegador del fix destapó una regresión independiente: en emulación táctil, los botones de fila (subir/bajar/renombrar/eliminar de páginas, hojas, escenarios y plantillas) no aparecían. Diagnóstico con dos causas concurrentes del mismo síntoma: (1) el gate `!isReadOnly` de d569c65 (comportamiento de diseño, distinguible por el ReadOnlyBanner en pantalla), y (2) la real: en tailwindcss 4.3.3 la variante `hover` — única entre las de interacción — se envuelve en `@media (hover: hover)`, y `group-hover` hereda la envoltura por composición. En el CSS de producción, 105 de 105 reglas derivadas de hover vivían dentro de esa media query mientras `.opacity-0` quedaba incondicional: en cualquier entorno que reporte `hover: none` (emulación táctil, pantallas táctiles), los 12 controles con `opacity-0 group-hover:opacity-100` eran permanentemente invisibles — aunque enfocables con Tab y, tras el fix de aria-label, anunciados por voz sin verse. Regresión latente en producción desde la migración a v4 (ADR-094, 2026-08-16); la verificación visual de entonces se hizo con mouse, donde el defecto es invisible por definición. Un diagnóstico intermedio la había descartado por un falso negativo de tooling: grep de `@media (hover: hover)` con espacio contra CSS minificado que emite `(hover:hover)` sin espacio — corregido con un walker de llaves que rastrea anidamiento real.
+
+### Decisión
+
+Tres cambios en dos commits:
+
+1. **aria-label en los 23 controles** (al `<button>`, nunca al ícono), en español, más `title` idéntico en los 7 destructivos — sus botones hermanos ya mostraban tooltip. Valores como string literal JSX con UTF-8 real (los atributos JSX no procesan escapes `\u`). Sin retrofit de los 52 con `title` (nombre válido, aunque el mecanismo más débil del accname); sin tocar decorativos. Re-escaneo post-fix: 0 controles ícono-solo sin nombre, total de elementos interactivos invariante.
+2. **Restauración de la semántica v3 de hover**: `@custom-variant hover (&:hover);` en `apps/web/src/index.css` tras el `@import`. Verificado en el CSS generado: 0 bloques `@media (hover:hover)` (antes 2, con 105 reglas), selectores idénticos, solo desaparece la envoltura. Trade-off aceptado: es global (349 ocurrencias de `hover:`) y devuelve el sticky hover en táctil (~46 `hover:bg-*` quedan pegados tras el tap) — cosmético, frente a la pérdida funcional de controles inalcanzables en táctil en un producto B2B.
+3. **Disparadores de foco en los 12 controles visibles-solo-por-hover**: `focus-within:opacity-100` en los 4 wrappers y `focus-visible:opacity-100` en los 8 botones individuales (ProposalDocBuilder, ScenarioSidebar, DefaultPagesAdmin, ScenarioItemRow), siempre en la parte base incondicional del literal. `focus-within`/`focus-visible` nunca se envuelven en media query en v4, verificado en el código del paquete. Cierra el hueco de teclado que la restauración de hover no toca. Excluido ProposalItemsBuilder.tsx:304 (adorno decorativo, no control).
+
+Verificación en navegador (Luis): emulación táctil con botones visibles, Tab materializa los controles al enfocarlos, mouse con comportamiento de siempre, tooltips de los destructivos presentes. Sin regresiones.
+
+### Consecuencias
+
+- El pendiente a11y de ADR-099 queda cerrado. La regresión hover de ADR-094 queda cerrada.
+- Criterios para código nuevo: todo control cuyo único contenido visible sea un ícono lleva `aria-label` en el control (`title` como refuerzo visual, no como única vía de nombre); los íconos lucide no llevan props a11y propias; todo control visible-solo-por-hover lleva disparador de foco (`focus-within:` en wrappers, `focus-visible:` en botones).
+- La semántica de `hover:` en este proyecto es la de v3 (sin gate de capacidad de hover) por el `@custom-variant` de index.css: cualquier razonamiento futuro sobre variantes hover debe partir de ahí, no del default v4.
+- Lección de tooling contra CSS minificado: los greps con espacios producen falsos negativos (`(hover:hover)` sin espacio); verificar envolturas de at-rules exige parseo de anidamiento, no búsqueda de líneas.
+- Pendiente nuevo de cola fría (deuda de semántica, no de nombre): 7 contenedores clickeables no-button sin `role`/`tabIndex`/manejador de teclado — selección de plantilla en DefaultPagesAdmin, selección de página/hoja y propuestas virtuales en ProposalDocBuilder (4), selección de escenario en ScenarioSidebar, selección de cliente en ClientAutocomplete. Todos tienen texto visible; falta rol y foco. Tocan componentes con animación (motion.div): exigen recon propio. Patrón correcto de referencia en la propia app: NotificationPanel.tsx (li con role="button", tabIndex y onKeyDown).
+- Consecuencia aceptada y vigilable: sticky hover en táctil real. Si a futuro molesta, la vía no es retirar el `@custom-variant` (reabriría esta regresión) sino refinar la variante con un selector que combine hover real y táctil.
+
+### Archivos
+
+- 17 archivos bajo `apps/web/src` (23 `aria-label` + 7 `title`).
+- `apps/web/src/index.css` (`@custom-variant`) y 4 `.tsx` (12 disparadores de foco).
+- DECISIONS.md (este ADR).
+
+### Commits
+
+- `4474534` — fix(web): aria-label en 23 controles icono-solo y title en los destructivos (a11y ADR-099).
+- `a7b49cd` — fix(web): restaurar semantica v3 de hover y agregar disparador de foco a controles ocultos por hover.
+- El commit docs de este ADR.
