@@ -59,6 +59,7 @@ export default function ScenarioSidebar({
                         <button 
                             onClick={() => setIsCreatingScenario(true)}
                             className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all scale-90"
+                            aria-label="Crear escenario"
                         >
                             <Plus className="h-4 w-4" />
                         </button>
@@ -127,6 +128,8 @@ export default function ScenarioSidebar({
                                             "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
                                             activeScenarioId === s.id ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                         )}
+                                        title="Eliminar escenario"
+                                        aria-label="Eliminar escenario"
                                     >
                                         <Trash2 className="h-3.5 w-3.5" />
                                     </button>

@@ -30,6 +30,7 @@ export default function AppLayout() {
                         <button
                             onClick={() => setSidebarOpen(true)}
                             className="lg:hidden p-2 mr-4 text-gray-500 hover:text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-novo-primary rounded-lg"
+                            aria-label="Abrir menú"
                         >
                             <Menu className="h-6 w-6" />
                         </button>

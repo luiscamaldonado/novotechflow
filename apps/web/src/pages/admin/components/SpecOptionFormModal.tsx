@@ -72,6 +72,7 @@ export default function SpecOptionFormModal({
                     <button
                         onClick={onClose}
                         className="p-2 hover:bg-slate-200 rounded-xl transition-colors"
+                        aria-label="Cerrar"
                     >
                         <X className="h-4 w-4 text-slate-500" />
                     </button>

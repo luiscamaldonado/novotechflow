@@ -117,6 +117,7 @@ function SupplierPicker({
                         type="button"
                         onClick={() => setOpen(!open)}
                         className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-300 transition-colors"
+                        aria-label="Desplegar lista de proveedores"
                     >
                         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
                     </button>

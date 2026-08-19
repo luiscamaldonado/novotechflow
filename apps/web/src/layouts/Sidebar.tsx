@@ -72,7 +72,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                     <div className="flex items-center space-x-3">
                         <img src="/novotechflow.png" alt="NovoTechFlow" className="h-8 object-contain drop-shadow-[0_0_8px_rgba(113,58,236,0.5)]" />
                     </div>
-                    <button onClick={() => setIsOpen(false)} className="lg:hidden text-gray-400 hover:text-white">
+                    <button onClick={() => setIsOpen(false)} className="lg:hidden text-gray-400 hover:text-white" aria-label="Cerrar menú">
                         <X className="h-6 w-6" />
                     </button>
                 </div>

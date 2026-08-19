@@ -372,6 +372,7 @@ export default function PdfPreviewModal({ pages, onClose, proposalVars, processe
                     <button
                         onClick={onClose}
                         className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
+                        aria-label="Cerrar vista previa"
                     >
                         <X className="h-5 w-5" />
                     </button>

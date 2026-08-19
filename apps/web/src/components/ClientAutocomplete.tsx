@@ -171,6 +171,7 @@ export function ClientAutocomplete({
           <button
             onClick={handleClear}
             className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white"
+            aria-label="Limpiar cliente"
           >
             <X className="h-4 w-4" />
           </button>

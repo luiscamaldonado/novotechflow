@@ -286,7 +286,7 @@ export default function Dashboard() {
                         {hasActiveFilters && <span className="h-2 w-2 bg-indigo-500 rounded-full" />}
                     </button>
                     {hasActiveFilters && (
-                        <button onClick={clearFilters} className="p-2.5 text-gray-400 hover:text-red-500 transition-colors">
+                        <button onClick={clearFilters} className="p-2.5 text-gray-400 hover:text-red-500 transition-colors" aria-label="Limpiar filtros">
                             <X className="h-4 w-4" />
                         </button>
                     )}

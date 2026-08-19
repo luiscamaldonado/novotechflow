@@ -243,7 +243,7 @@ export default function Users() {
                     >
                         <div className="bg-gray-50/50 p-6 border-b border-gray-100 flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-gray-900">Crear Nuevo Usuario</h3>
-                            <button onClick={() => setIsCreating(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <button onClick={() => setIsCreating(false)} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Cerrar panel de creación">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
@@ -368,7 +368,7 @@ export default function Users() {
                     >
                         <div className="bg-gray-50/50 p-6 border-b border-gray-100 flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-gray-900">Editar Usuario: {editingUser.name}</h3>
-                            <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Cerrar panel de edición">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
@@ -592,6 +592,8 @@ export default function Users() {
                                                         <button
                                                             onClick={() => handleDeleteUser(u.id, u.name)}
                                                             className="p-2 text-gray-400 hover:text-red-500 bg-white hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all"
+                                                            title="Eliminar usuario"
+                                                            aria-label="Eliminar usuario"
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </button>

@@ -52,6 +52,7 @@ export default function PriceWarningModal({ scenarioWarnings, onClose }: PriceWa
                     <button
                         onClick={onClose}
                         className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all shrink-0"
+                        aria-label="Cerrar aviso"
                     >
                         <X className="h-5 w-5" />
                     </button>

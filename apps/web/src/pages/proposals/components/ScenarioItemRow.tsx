@@ -93,6 +93,7 @@ export default function ScenarioItemRow({
                             "p-1 rounded-lg transition-all",
                             isExpanded ? "bg-indigo-100 text-indigo-600" : "text-slate-300 hover:text-indigo-400 hover:bg-indigo-50"
                         )}
+                        aria-label="Expandir o colapsar ítem"
                     >
                         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")} />
                     </button>
@@ -288,6 +289,8 @@ export default function ScenarioItemRow({
                         <button 
                             onClick={() => removeItemFromScenario(si.id!)}
                             className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                            title="Quitar ítem del escenario"
+                            aria-label="Quitar ítem del escenario"
                         >
                             <Trash2 className="h-4 w-4" />
                         </button>
@@ -370,6 +373,8 @@ export default function ScenarioItemRow({
                                                     <button
                                                         onClick={() => removeChildItem(si.id!, child.id!)}
                                                         className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                                                        title="Quitar ítem hijo"
+                                                        aria-label="Quitar ítem hijo"
                                                     >
                                                         <Trash2 className="h-3 w-3" />
                                                     </button>

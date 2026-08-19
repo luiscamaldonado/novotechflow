@@ -529,6 +529,8 @@ export default function ProposalDocBuilder() {
                                                             "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
                                                             isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                                         )}
+                                                        title="Eliminar página"
+                                                        aria-label="Eliminar página"
                                                     >
                                                         <Trash2 className="h-3.5 w-3.5" />
                                                     </button>
@@ -679,6 +681,8 @@ export default function ProposalDocBuilder() {
                                                                             "p-1 rounded-lg opacity-0 group-hover/sheet:opacity-100 transition-opacity",
                                                                             sheetActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                                                         )}
+                                                                        title="Eliminar hoja"
+                                                                        aria-label="Eliminar hoja"
                                                                     >
                                                                         <Trash2 className="h-3 w-3" />
                                                                     </button>

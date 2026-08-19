@@ -81,6 +81,7 @@ function CityCombobox({ value, onChange, disabled = false, required = false }: C
                         type="button"
                         onClick={() => setOpen(!open)}
                         className="p-0.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                        aria-label="Desplegar lista de ciudades"
                     >
                         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
                     </button>

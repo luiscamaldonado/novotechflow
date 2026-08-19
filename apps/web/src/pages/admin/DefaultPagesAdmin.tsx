@@ -407,6 +407,8 @@ export default function DefaultPagesAdmin() {
                                                     "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity",
                                                     isActive ? "hover:bg-indigo-500 text-indigo-200" : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                                 )}
+                                                title="Eliminar plantilla"
+                                                aria-label="Eliminar plantilla"
                                             >
                                                 <Trash2 className="h-3.5 w-3.5" />
                                             </button>

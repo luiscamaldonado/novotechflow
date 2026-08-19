@@ -34,7 +34,7 @@ export default function ProjectionModal({
                             {editingProjection ? 'Editar Proyección' : 'Nueva Proyección de Facturación'}
                         </h3>
                     </div>
-                    <button onClick={onClose} className="text-white/70 hover:text-white transition-colors">
+                    <button onClick={onClose} className="text-white/70 hover:text-white transition-colors" aria-label="Cerrar">
                         <X className="h-5 w-5" />
                     </button>
                 </div>

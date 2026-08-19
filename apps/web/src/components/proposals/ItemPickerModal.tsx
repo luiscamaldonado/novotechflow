@@ -39,6 +39,7 @@ export default function ItemPickerModal({ isOpen, onClose, proposalItems, scenar
                             <button 
                                 onClick={onClose}
                                 className="p-4 rounded-2xl hover:bg-white transition-colors text-slate-400"
+                                aria-label="Cerrar"
                             >
                                 <ChevronRight className="h-6 w-6 rotate-90" />
                             </button>
