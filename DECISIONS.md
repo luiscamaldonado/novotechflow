@@ -4518,3 +4518,50 @@ Verificación en navegador (Luis): emulación táctil con botones visibles, Tab 
 - `4474534` — fix(web): aria-label en 23 controles icono-solo y title en los destructivos (a11y ADR-099).
 - `a7b49cd` — fix(web): restaurar semantica v3 de hover y agregar disparador de foco a controles ocultos por hover.
 - El commit docs de este ADR.
+
+## ADR-104 — Poda residual de la imagen del api (mysql2 y restos de studio-core): lista y diferida al próximo bump de Prisma
+
+**Fecha:** 2026-08-19
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-100 dejó fuera de alcance mysql2 (~928 KB) y ~7 MB de chunks sueltos de @prisma/studio-core "por no pagar su verificación". El reconocimiento de solo lectura del 2026-08-19 redimensionó y resolvió la seguridad de ambos:
+
+- **mysql2** es dependencia dura (no optional) de prisma@7.9.1, materializada necesariamente por el pnpm deploy. Su única carga es dinámica y perezosa (`await import("mysql2/promise")`) dentro del mapa de executors que consume exclusivamente el comando `prisma studio`, y solo con protocolo mysql — doble guarda: el CMD del contenedor corre `migrate deploy && node dist/src/main.js`, nunca `studio`, y el datasource es postgresql. Arrastra 8 dependencias exclusivas (aws-ssl-profiles, long, lru.min, denque, seq-queue, generate-function, sqlstring, named-placeholders); iconv-lite NO es exclusiva (compartida con cheerio y @inquirer/external-editor) y debe quedarse. Subárbol total: ~1.4 MB.
+- **Restos de studio-core** (13.7 MB tras la poda de dist/ui de ADR-100): metafiles de esbuild (5.25 MB de JSON que ningún runtime abre), el grafo ESM completo (chunk-*.js y los .js de dist/data, 1.8 MB) y los .cjs de subpaths no requeridos (index, mysql-core, postgres-core, pglite, sqlite-core, sqljs; 6.2 MB). Separación estructural verificada: cli.js de prisma es CJS y hace exactamente cuatro requires estáticos (data/bff, data/mysql2, data/node-sqlite, data/postgresjs); studio-core declara type module, así que la condición require resuelve siempre a los .cjs; los 10 .cjs de dist/data son bundles autocontenidos sin un solo token require, y los chunks solo son referenciados por archivos .js (ESM) — grafo inalcanzable desde la ruta CJS. Prueba de carga real: los cuatro subpaths requeridos funcionan desde una copia podada de 156 KB (solo los 4 .cjs + package.json), sin mysql2 en el árbol.
+
+Total podable: **14.44 MB** (2.54% del filesystem de 568.3 MB; 3.80% del node_modules) — el doble del estimado de ADR-100, por las metafiles y las deps exclusivas de mysql2 no contabilizadas entonces.
+
+### Decisión
+
+**Podar, pero diferido: la poda entra con el próximo bump de Prisma, no en corrida dedicada.** La guardia completa de ADR-095 (build desde git archive con --no-cache, arranque con migrate deploy contra la base real, sonda, paridad) exige la base de producción y una persona en el loop — media sesión por un 2.54% no paga. ADR-100 y ADR-101 ya fijaron que cada bump de Prisma re-verifica las podas del CLI en el test de imagen: ejecutar ahí tiene costo marginal de verificación cero, y la evidencia de seguridad ya está reunida.
+
+Fix listo para ese momento — dos RUN en el stage deploy del Dockerfile del api, uno por ítem para restauración individual si el smoke falla:
+
+    RUN rm -rf /deployed/node_modules/mysql2 \
+               /deployed/node_modules/aws-ssl-profiles /deployed/node_modules/denque \
+               /deployed/node_modules/generate-function /deployed/node_modules/long \
+               /deployed/node_modules/lru.min /deployed/node_modules/named-placeholders \
+               /deployed/node_modules/seq-queue /deployed/node_modules/sqlstring
+    RUN cd /deployed/node_modules/@prisma/studio-core/dist \
+     && rm -f metafile-cjs.json metafile-esm.json chunk-*.js \
+     && rm -rf data/index.cjs data/index.js data/mysql-core data/postgres-core data/pglite data/sqlite-core data/sqljs \
+     && find data -name '*.js' -delete \
+     && test -f data/bff/index.cjs && test -f data/mysql2/index.cjs \
+     && test -f data/node-sqlite/index.cjs && test -f data/postgresjs/index.cjs
+
+### Consecuencias
+
+- El pendiente de ADR-100 se reetiqueta: de "no paga su verificación" a "poda lista, a ejecutar en la próxima corrida de la guardia" (próximo bump de Prisma).
+- En ese bump, la evidencia de separabilidad debe re-verificarse antes de aplicar: la carga perezosa de mysql2, los cuatro requires de cli.js y la estructura CJS/ESM de studio-core son internals no contractuales que una versión nueva puede mover.
+- iconv-lite queda explícitamente fuera de la lista de poda por ser dependencia compartida.
+
+### Archivos
+
+- Ninguno del repo en este cierre; el Dockerfile del api se tocará en el bump que ejecute la poda.
+- DECISIONS.md (este ADR).
+
+### Commits
+
+- El commit docs de este ADR.
