@@ -4402,3 +4402,42 @@ Resultado: **834.8 → 568.3 MB de filesystem (−31.9%)**, node_modules **662.3
 
 - **Pinning del árbol desplegado:** el build de Railway avisa `A pnpm-lock.yaml file exists. The current configuration prohibits to read or write a lockfile` — `pnpm deploy --legacy` re-resuelve desde los rangos del package.json en vez del lock, perdiendo el pinning que daba el `--frozen-lockfile` del viejo prod-deps. Alternativa a evaluar con recon propio: `inject-workspace-packages=true` en el workspace + deploy sin `--legacy` (recupera el lockfile, cambia el layout local de los @repo/* en todo el monorepo).
 - Cola fría: auditoría a11y de íconos (arrastrada de ADR-099).
+
+## ADR-101 — Pinning del árbol desplegado: injectWorkspacePackages y retiro de --legacy
+
+**Fecha:** 2026-08-19
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-100 dejó como pendiente el aviso del build de Railway: `pnpm deploy --legacy` prohibía leer el lockfile. El reconocimiento empírico (copia del repo por git archive, fuera del working tree) lo confirmó y lo cuantificó: `--legacy` re-resuelve desde el registry (`downloaded 6` en su progreso) y la producción desplegada desde 02ac06b traía 6 paquetes por delante del lock — @nestjs/swagger 11.4.7 vs 11.4.6, @types/pg 8.23.1 vs 8.21.0, content-type 2.1.0, dayjs 1.11.23, libphonenumber-js 1.13.11 y swagger-ui-dist 5.32.13 —, un conjunto determinista contra el estado del registry pero creciente en el tiempo dentro de los rangos caret. El pinning que daba el `--frozen-lockfile` del viejo prod-deps estaba roto de facto desde 02ac06b.
+
+El mismo recon desarmó el riesgo que ADR-100 atribuía a la alternativa: con `injectWorkspacePackages: true`, en este monorepo el layout local NO cambia — los @repo/* siguen siendo symlinks al paquete fuente (cero entradas file+ en el virtual store), el ciclo editar→build→correr sobrevive sin re-install (verificado por inodo compartido entre packages/pricing-engine/dist y apps/api/node_modules), y el lock gana exactamente una línea en su bloque settings, sin mover ninguna versión. El flag actúa aquí solo como compuerta del deploy. Los tres árboles desplegados (legacy, injected, injected-limpio) pesan lo mismo (~506 MB); trampa de medición documentada: `du -sh a b c` en una sola invocación deduplica hard links entre argumentos — medir árboles pnpm de a uno.
+
+### Decisión
+
+Tres archivos en un commit atómico: `injectWorkspacePackages: true` en pnpm-workspace.yaml, la línea correspondiente en el bloque settings de pnpm-lock.yaml, y el retiro de `--legacy` del RUN de pnpm deploy en apps/api/Dockerfile. La atomicidad no es estética: cambiar el flag sin actualizar el lock produce `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` en cualquier install con `--frozen-lockfile` — el CI habría fallado si el lock no viajara en el mismo commit. La transición local exige un único `pnpm install --no-frozen-lockfile` que registra el setting.
+
+Verificación en tres planos: gates completos; smoke desde working tree y guardia ADR-095 desde git archive con paridad exacta (568.3 MB / 379.6 MB, sin regresión de ADR-100) y la prueba dura del pinning dentro del contenedor — los 6 paquetes drifteados de vuelta a sus versiones del lock, con la firma `resolved 0, reused 437, downloaded 0` en el progreso del deploy y cero avisos de lockfile; y producción, donde el build del web con `--frozen-lockfile` aceptó el setting sin fricción, cerrando el riesgo de CI.
+
+### Consecuencias
+
+- Las imágenes de producción del api vuelven a estar pinneadas por el lockfile; el drift de 6 paquetes se revirtió al activar e427f3a (los "retrocesos" de versión son el pinning restaurándose).
+- El push coincidió con la reaparición del incidente de Railway "Deployments are slow to progress" (18-19 ago), esta vez con el plano de control también degradado (CLI colgado, OAuth 500, MCP Unauthorized). Producción nunca se afectó (plano de datos intacto). Lecciones operativas para el CLI de Railway, sumadas a las trampas de ADR-100: (1) deployments REMOVED con build log vacío y sin imageDigest son víctimas de incidente de plataforma, no cancelaciones humanas — los tres REMOVED de e427f3a nunca construyeron; (2) `railway redeploy` a secas re-despliega el último deployment *desplegable* (con imagen), no la última entrada de la lista — sobre un REMOVED sin imagen cae al deployment activo anterior (así se gastó un ciclo re-desplegando 02ac06b); la vía correcta para construir el HEAD de la rama es `railway redeploy --from-source`; (3) durante incidentes del plano de control, las sondas HTTP a producción siguen siendo el termómetro fiable.
+- Quinta validación de watch paths (ADR-098): pnpm-workspace.yaml y pnpm-lock.yaml, vigilados por los tres servicios, dispararon los tres builds.
+- El pendiente de pinning de ADR-100 queda cerrado. Guardia heredada: los bumps de Prisma re-verifican las podas del CLI (ADR-100) en el test de imagen; el deploy sin --legacy queda cubierto por la misma corrida.
+
+### Archivos
+
+- pnpm-workspace.yaml (injectWorkspacePackages: true)
+- pnpm-lock.yaml (settings, una línea)
+- apps/api/Dockerfile (RUN de deploy sin --legacy)
+- DECISIONS.md (este ADR)
+
+### Commits
+
+- e427f3a — chore: pinning del deploy restaurado via injectWorkspacePackages, sin --legacy
+
+### Pendientes
+
+- Ninguno propio. Cola fría del proyecto sin cambios: border-color + App.css (ADR-094), auditoría a11y de íconos (ADR-099), mysql2 y chunks residuales de studio-core (ADR-100).
