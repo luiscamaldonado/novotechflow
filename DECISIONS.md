@@ -4441,3 +4441,38 @@ Verificación en tres planos: gates completos; smoke desde working tree y guardi
 ### Pendientes
 
 - Ninguno propio. Cola fría del proyecto sin cambios: border-color + App.css (ADR-094), auditoría a11y de íconos (ADR-099), mysql2 y chunks residuales de studio-core (ADR-100).
+
+## ADR-102 — Cierre retroactivo de los pendientes de ADR-094: retiro del bloque compat de border-color y borrado de App.css
+
+**Fecha:** 2026-08-19
+**Estado:** Aceptado
+
+### Contexto
+
+ADR-094 conservó el bloque de compatibilidad de border-color que insertó la tool de upgrade de Tailwind v4 (`border-color: var(--color-gray-200, currentcolor)` sobre `*`, `::after`, `::before`, `::backdrop`, `::file-selector-button` en `apps/web/src/index.css`) y dejó dos pendientes: retirarlo previa auditoría de los elementos que dependieran del default, y borrar `apps/web/src/App.css` (CSS huérfano del starter de Vite). El 2026-08-17, el commit `c0ff90a` ejecutó ambos retiros sin la auditoría previa que el pendiente exigía y sin cierre documental; el commit llegó a `origin/master` y producción corre sin el bloque desde el push de ADR-101, sin regresiones visuales reportadas. El reconocimiento de solo lectura del 2026-08-19 aportó la auditoría a posteriori.
+
+### Decisión
+
+Validar el retiro retroactivamente con la auditoría completa y cerrar ambos pendientes de ADR-094. Resultados de la auditoría sobre `apps/web/src` (133 archivos, todos los literales de string, no solo `className`):
+
+- **341 literales** con utilidad de ancho de borde o divide, en 69 archivos; **cero dependen del default**. Los 34 sospechosos iniciales resultaron cubiertos por: color en el mismo literal, objetos de configuración interpolados con color en todas sus entradas (`STATUS_CONFIG`, `ACQUISITION_CONFIG`, `PAGE_TYPE_STYLES`, `SEVERITY_STYLES`, `CARD_THEMES`, `SECTION_THEMES`, `SPEC_CHIP_COLOR_BY_FIELD` con fallback), ambas ramas de ternarios/`cn()`, o `style={{ borderColor }}` inline (`CodeDigitInputs.tsx`).
+- `divide-y`: 7 usos, todos con `divide-{color}` en el mismo literal. Cero desajustes de lado (ancho en un lado, color en otro). Cero `<hr>` en el código fuente. Los 8 `type="file"` sin utilidades de borde ni `file:border-*`.
+- HTML inyectado por tiptap (`generateHTML` → `dangerouslySetInnerHTML`): puede producir `<hr>`, pero ambos destinos son contenedores `.prose` y @tailwindcss/typography define `border-color: var(--tw-prose-hr)` propio. Cubierto.
+- `App.css`: cero referencias en todo `apps/web` (código, `index.html`, `vite.config.ts`); solo prosa histórica en DECISIONS.md y copias en `backups/`. Borrado correcto.
+- Confirmación en el CSS compilado post-retiro: la regla compat no aparece; el preflight v4 emite `border: 0 solid` sin color, y la única aparición de `var(--color-gray-200)` es la utilidad `.border-gray-200`.
+
+### Consecuencias
+
+- Los dos pendientes de ADR-094 quedan cerrados. Las menciones de cola fría en ADR-094 §Pendientes y ADR-101 §Pendientes quedan superadas por este ADR (DECISIONS.md es append-only; no se editan entradas anteriores).
+- Riesgo residual documentado: el preflight de v4 no define border-color, así que cualquier utilidad de ancho de borde nueva sin color explícito en su estado base, o un `<hr>` futuro fuera de un contenedor `.prose`, renderiza con `currentcolor`. Regla práctica vigente: toda utilidad de ancho de borde o divide lleva color explícito en el mismo literal.
+- Lección de método: el retiro se ejecutó antes de la auditoría que lo condicionaba; el resultado fue benigno (0/341), pero el orden correcto — auditar antes de retirar un shim — se mantiene como protocolo para futuros retiros de bloques de compatibilidad.
+
+### Archivos
+
+- `apps/web/src/index.css` (bloque compat retirado) y `apps/web/src/App.css` (eliminado) — ambos en `c0ff90a`.
+- DECISIONS.md (este ADR).
+
+### Commits
+
+- `c0ff90a` (2026-08-17) — chore(web): retirar bloque compat de border-color y borrar App.css huerfano (cola fria ADR-094).
+- El commit docs de este ADR.
