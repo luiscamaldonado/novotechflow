@@ -409,17 +409,17 @@ novotechflow/
 - Hook de negocio nuevo → `hooks/use<Nombre>.ts`
 - Tipo nuevo compartido → `lib/types.ts`
 - Constante nueva → `lib/constants.ts`
-- Función de cálculo pura → `lib/pricing-engine.ts` (si es financiera) o nuevo archivo en `lib/`
+- Función de cálculo pura → `packages/pricing-engine/src/index.ts` (si es financiera, §J) o nuevo archivo en `lib/`
 - DTO nuevo del backend → `src/<modulo>/dto/`
 - Servicio nuevo del backend → `src/<modulo>/<nombre>.service.ts`
 
 ---
 
-### J. PRICING ENGINE (`lib/pricing-engine.ts`)
+### J. PRICING ENGINE (`@repo/pricing-engine`)
 
-Fuente única de verdad para TODOS los cálculos financieros del proyecto. Contiene 17 funciones puras sin dependencias de React.
+Fuente única de verdad para TODOS los cálculos financieros del proyecto: el paquete compartido `packages/pricing-engine` (`@repo/pricing-engine`; ADR-052, recuperado en ADR-097), funciones puras sin dependencias de React, consumido por `apps/web` y `apps/api`. `apps/web/src/lib/pricing-engine.ts` NO es el engine: es un barrel de helpers exclusivos de web (`computeMinSubtotal`, `getDashboardAmount`) que consume el paquete por named imports, como cualquier otro archivo (ADR-096).
 
-**Regla absoluta:** NINGÚN archivo del proyecto debe implementar cálculos de landed cost, dilución, margen o precio unitario por fuera del pricing-engine. Si necesitas un cálculo financiero nuevo, agrégalo aquí.
+**Regla absoluta:** NINGÚN archivo del proyecto debe implementar cálculos de landed cost, dilución, margen o precio unitario por fuera del pricing-engine. Si necesitas un cálculo financiero nuevo, agrégalo al paquete (`packages/pricing-engine/src/index.ts`).
 
 Funciones principales:
 - `calculateParentLandedCost` — costo aterrizado del item padre
@@ -435,7 +435,7 @@ Funciones principales:
 - `calculateItemDisplayValues` — valores completos para un item
 - `calculateScenarioTotals` — totales de escenario (gravado, no gravado, IVA, total, margen global)
 
-Consumidores: `useScenarios.ts`, `ProposalCalculations.tsx`, `Dashboard.tsx` (via useDashboard), `exportExcel.ts`, `ScenarioTotalsCards.tsx`
+Consumidores: en `apps/web`, named imports directos de `@repo/pricing-engine` (hooks de escenarios, builder, cálculos, export a Excel) más el barrel web-only de `lib/pricing-engine.ts`; en `apps/api`, `src/external/external-proposals.service.ts` (cálculo server-side, ADR-053).
 
 ---
 
