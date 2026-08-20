@@ -4565,3 +4565,45 @@ Fix listo para ese momento — dos RUN en el stage deploy del Dockerfile del api
 ### Commits
 
 - El commit docs de este ADR.
+
+## ADR-105 — Adopción del plugin Claude Security: primer escaneo multiagente, fixes F1/F10 de la verificación por código y triage por exposición externa
+
+**Fecha:** 2026-08-20
+**Estado:** Aceptado
+
+### Contexto
+
+Se adoptó el plugin oficial claude-security v0.10.1 (marketplace claude-plugins-official, beta pública desde 2026-07-22) como capa de escaneo profundo bajo demanda, complementaria a los scanners deterministas existentes. La operativa real difiere de la doc en tres puntos que quedan registrados: (1) el prerequisito `python3` en Windows lo interceptaba el alias de Microsoft Store — se apagaron los alias de ejecución de aplicaciones y se copió `python.exe` → `python3.exe` en `%LOCALAPPDATA%\Programs\Python\Python313` (Python 3.13.12); (2) la instalación no interactiva la corre Claude Code (`claude plugin install claude-security@claude-plugins-official`, scope user), pero los slash commands interactivos los teclea Luis — el escaneo es una sesión interactiva conducida por él, una excepción acotada al modelo de dos roles, con el triage de hallazgos de vuelta en el chat; (3) los comandos reales de v0.10.1 son `/claude-security:scan` y `/claude-security:claude-security` (el menú que la doc llama `/claude-security`).
+
+Corridas del 2026-08-20, en sesión Opus (Fable se re-rutea a Opus por los clasificadores de ciber; documentado y esperado):
+- **Repo entero, effort medium:** 730 agentes, ~4.6M tokens, 77 minutos; el panel de verificación se cayó por límite de sesión y el reporte quedó `unverified` con 0 hallazgos. Ese cero no describe el código: el directorio (`CLAUDE-SECURITY-20260820-001809`) se borró para que nadie lo lea como salud.
+- **apps/api, effort medium (168 archivos):** completó. 45 investigadores sobre la matriz componente × categoría, 122 candidatos crudos, 64 deduplicados; 20 recibieron panel completo de 3 votantes → 12 confirmados (2 HIGH, 10 MEDIUM) y 8 rechazados como falsos positivos; 25 candidatos (F21–F45) quedaron sin adjudicar por límite, así que el sello de la corrida es `unverified` como conjunto aunque cada hallazgo reportado pasó su panel. Revisión escaneada: `152b5cd23439`. Directorio: `CLAUDE-SECURITY-20260820-020506` (no trackeado; trae su propio `.gitignore`).
+
+Criterio de triage fijado por Luis: prioridad a lo explotable por un atacante externo sin credenciales; los hallazgos de autorización interna entre roles no son prioridad. Con ese lente, la única puerta externa es la cadena de verificación por código — `/auth/verify-code` entrega un JWT de 12h a cambio de 6 dígitos — compuesta por F1 (código generado con `Math.random()`, PRNG con estado recuperable), F9 (rate limit llaveado en el header `X-Real-IP` que escribe el cliente) y F10 (tope de 3 intentos con carrera lee-luego-escribe: reproducida por los verificadores contra un Postgres desechable, 28 intentos colados contra un tope de 9). F2/F8 (XSS almacenado desde `content` de bloques hasta `dangerouslySetInnerHTML`) baja de prioridad: las propuestas se comparten como PDF construido, nunca como link, así que el sumidero solo corre autenticado dentro de la propia app.
+
+### Decisión
+
+1. **F1 y F10 se parchearon con los patches user-guided del plugin, con diff revisado en el chat antes de aplicar.** F1: `crypto.randomInt(100000, 1000000)` — mismo dominio de 6 dígitos, cota superior exclusiva, `crypto` ya importado en el archivo (commit `e35c407`). F10: el intento se consume atómicamente con un `updateMany` condicional (`used: false`, `attempts < MAX_ATTEMPTS`) antes de comparar el código; `count === 0` es presupuesto agotado; Postgres re-evalúa el WHERE tras tomar el lock de fila, así que el UPDATE condicional es el tope; el mensaje de intentos restantes se relee de la base en vez de derivarse de la lectura rancia, y el fallback `?? MAX_ATTEMPTS` falla cerrado (commit `5932de5`). Efecto colateral aceptado: un código correcto también consume un intento antes de compararse — no observable, el registro se marca `used` de inmediato. Ningún spec ejerce `email-verification.service.ts`: los gates por commit (tsc web+api, lint, suite api) pasaron, y la validación funcional fue la verificación del flujo completo de login en navegador por Luis (CONVENTIONS §H): escalera de mensajes 2/1/0 intacta, quemado al cuarto intento, login exitoso con código nuevo.
+
+2. **F9 no se parchea a ciegas: va por el protocolo de diagnóstico (§10).** `X-Real-IP` no es un descuido — existe por ADR-071 (detrás del edge de Railway `req.ip` rota entre peticiones y el límite nunca se alcanzaba). Revertir a `req.ip` cerraría el spoofing reabriendo el bug que ADR-071 arregló. El fix correcto es `trust proxy` con el número exacto de saltos del edge de Railway, que es un dato empírico de producción a medir antes de tocar nada.
+
+3. **Riesgos aceptados y pendientes, explícitos:** el código se guarda como sha256 pelado de 6 dígitos (sin KDF); la comparación de hash no es de tiempo constante; F11 (cuerpos de 50 MB bufferados antes de auth y throttle — DoS externo, no intrusión) en cola; F4 y F12 (zip bomb, throw en callback de multer) en cola; F3, F5, F6 y F7 (autorización interna entre roles) despriorizados por criterio de negocio; F2/F8 despriorizado por el modelo de compartición por PDF; 25 candidatos de apps/api sin adjudicar; `apps/web` y `packages/` (incluido pricing-engine) sin escanear.
+
+4. **Política operativa del plugin:** los reportes nunca se commitean (son un mapa de debilidades del sistema); un reporte cuyo panel se cayó se borra; los escaneos van acotados por superficie a effort medium — el repo entero a medium no cabe en una ventana de límite del plan; la sesión de escaneo se abre en Opus; los patches se piden siempre user-guided por ID (nunca auto-scan-then-fix ni "solo HIGH" sin revisar qué incluyen), con un commit por patch y gates completos.
+
+### Consecuencias
+
+- Queda abierta una cohorte de seguridad: diagnóstico de F9 (saltos del edge → `trust proxy`), F11, F4, F12, endurecimiento del hash del código (KDF + comparación constante), re-adjudicación de F21–F45, y escaneo de `apps/web` + `packages/` en otra ventana de uso.
+- La operativa del plugin (comandos reales, quién teclea qué, política de reportes y patches) se instrumenta en INSTRUCTIVO_CLAUDE.md en un cierre documental aparte.
+- El modelo de dos roles gana una excepción explícita y acotada: sesiones interactivas de plugins conducidas por Luis, con las decisiones (alcance, triage, qué se parchea) siempre en el chat.
+
+### Archivos
+
+- apps/api/src/auth/email-verification.service.ts (F1 y F10).
+- DECISIONS.md (este ADR).
+
+### Commits
+
+- e35c407 — fix(auth): generate verification codes with crypto.randomInt instead of Math.random
+- 5932de5 — fix(auth): consume verification attempt atomically before code comparison
+- El commit docs de este ADR.
