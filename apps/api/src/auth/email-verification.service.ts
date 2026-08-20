@@ -6,8 +6,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { Resend } from 'resend';
 import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 const CODE_LENGTH = 6;
+const BCRYPT_ROUNDS = 10;
 const CODE_EXPIRATION_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
 const RESEND_WINDOW_MS = 15 * 60 * 1000;
@@ -24,7 +26,7 @@ export class EmailVerificationService {
   }
 
   /**
-   * Generates a 6-digit code, hashes it, stores it in DB,
+   * Generates a 6-digit code, hashes it with bcrypt, stores it in DB,
    * invalidates any previous codes for this user, and sends it via email.
    */
   async sendVerificationCode(
@@ -42,7 +44,10 @@ export class EmailVerificationService {
       .randomInt(Math.pow(10, CODE_LENGTH - 1), Math.pow(10, CODE_LENGTH))
       .toString();
 
-    const hashedCode = crypto.createHash('sha256').update(code).digest('hex');
+    // bcrypt y no sha256 pelado: el espacio del codigo es 10^6, asi que un
+    // sha256 sin KDF se invierte al instante con la base en la mano. El costo
+    // de bcrypt lo hace inviable, y su compare es de tiempo constante.
+    const hashedCode = await bcrypt.hash(code, BCRYPT_ROUNDS);
 
     await this.prisma.verificationCode.create({
       data: {
@@ -107,9 +112,7 @@ export class EmailVerificationService {
       );
     }
 
-    const hashedInput = crypto.createHash('sha256').update(code).digest('hex');
-
-    if (hashedInput !== record.code) {
+    if (!(await bcrypt.compare(code, record.code))) {
       // The attempt was already consumed above; read the counter back so the
       // message is not derived from the stale `record` read.
       const current = await this.prisma.verificationCode.findUnique({
