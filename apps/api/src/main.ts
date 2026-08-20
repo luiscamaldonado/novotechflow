@@ -18,6 +18,55 @@ async function bootstrap() {
   // 1 y no true: con true, una XFF forjada decide req.ip si el edge appendea (anexo trust proxy en docs/diagnostico-2026-07-24-deps-bundle.md)
   app.set('trust proxy', 1);
 
+  // TEMPORARY [PROXY-PROBE-F9] instrumentacion de diagnostico, se revierte en el commit siguiente.
+  let probeF9Count = 0;
+  app.use(
+    (
+      req: {
+        method?: string;
+        originalUrl?: string;
+        headers?: Record<string, string | string[] | undefined>;
+        ip?: string;
+        ips?: string[];
+        socket?: { remoteAddress?: string };
+      },
+      _res: unknown,
+      next: () => void,
+    ) => {
+      const tag = req.headers?.['x-probe-tag'];
+      if (tag && probeF9Count < 60) {
+        probeF9Count++;
+        const h = (name: string) =>
+          req.headers && name in req.headers
+            ? JSON.stringify(req.headers[name])
+            : '<ausente>';
+        const extra = Object.keys(req.headers ?? {})
+          .filter(
+            (k) =>
+              k.startsWith('x-forwarded') ||
+              k.startsWith('x-envoy') ||
+              k === 'forwarded' ||
+              k === 'cf-connecting-ip' ||
+              k === 'true-client-ip' ||
+              k === 'x-client-ip',
+          )
+          .map((k) => `${k}=${JSON.stringify(req.headers?.[k])}`)
+          .join(' ');
+        console.log(
+          `[PROXY-PROBE-F9] ${probeF9Count} tag=${JSON.stringify(tag)} ` +
+            `${req.method} ${req.originalUrl} ` +
+            `xff=${h('x-forwarded-for')} ` +
+            `x-real-ip=${h('x-real-ip')} ` +
+            `req.ip=${JSON.stringify(req.ip)} ` +
+            `req.ips=${JSON.stringify(req.ips)} ` +
+            `socket=${JSON.stringify(req.socket?.remoteAddress)} ` +
+            `otros=[${extra}]`,
+        );
+      }
+      next();
+    },
+  );
+
   app.use(compression());
 
   app.use(json({ limit: '50mb' }));
