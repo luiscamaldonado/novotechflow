@@ -4607,3 +4607,64 @@ Criterio de triage fijado por Luis: prioridad a lo explotable por un atacante ex
 - e35c407 — fix(auth): generate verification codes with crypto.randomInt instead of Math.random
 - 5932de5 — fix(auth): consume verification attempt atomically before code comparison
 - El commit docs de este ADR.
+
+## ADR-106 — F9 cerrado midiendo el edge de Railway: la clave del rate limiting pasa de un header del cliente a req.ip posicional con trust proxy 2
+
+**Fecha:** 2026-08-20
+**Estado:** Aceptada
+
+### Contexto
+
+El ADR-105 dejó F9 abierto y explícitamente vetado para parcheo a ciegas: el rate limiting se llaveaba con `X-Real-IP`, un header que escribe el cliente, pero ese header no era un descuido sino la solución del ADR-071 al bug de que `req.ip` con `trust proxy 1` resolvía el salto interno del edge, que rota entre peticiones y dejaba cada contador en 1. Revertir a `req.ip` sin más habría reabierto el bug. El dato que faltaba era empírico: cuántos saltos mete el edge y qué hace con las cabeceras que manda el cliente.
+
+Diagnóstico previo (solo lectura) que reencuadró el problema: `trust proxy` gobierna únicamente `req.ip`/`req.ips`, y el guard leía `req.headers['x-real-ip']` crudo con `req.ip` solo como fallback que en producción nunca se alcanzaba. Es decir, `app.set('trust proxy', 1)` era una línea inerte para el rate limiting, y ajustar su número no habría cambiado nada por sí solo. El fix apuntado en el ADR-105 era necesario pero insuficiente: hacían falta las dos piezas juntas.
+
+**Medición en producción (2026-08-20).** Sonda temporal `[PROXY-PROBE-F9]` en el bootstrap de `apps/api`, gateada por un header marcador `X-Probe-Tag` en vez de por las primeras N peticiones — así los health checks y el tráfico real no consumen slots ni generan ruido, mejora sobre la sonda de julio (`292a126`). Nueve peticiones en tres escenarios, tres por escenario:
+
+- **Limpio.** `X-Forwarded-For` = `"181.71.137.142, 152.233.23.19x"`, es decir **exactamente 2 saltos**: la IP pública real del cliente (verificada contra ipify) y el salto interno del edge, que **rota entre `152.233.23.193` y `152.233.23.194` en peticiones consecutivas**, con el socket variando entre seis `100.64.0.x` distintos. `req.ip` con `trust proxy 1` devolvía ese salto rotante: el bug del ADR-071 reproducido con datos nuevos 26 días después.
+- **`X-Real-IP` forjado** (`203.0.113.7/8/9`, RFC 5737): el proceso vio `x-real-ip="181.71.137.142"` en las tres. **El edge sobrescribe el header forjado.**
+- **`X-Forwarded-For` forjado**, incluida una lista de dos entradas: la XFF vista fue idéntica a la del escenario limpio. **El edge descarta la XFF del cliente y escribe la suya; no acumula.** Ninguna dirección forjada apareció en ninguna de las nueve líneas.
+
+**Consecuencia del hallazgo sobre el reporte del escáner: F9 no era explotable.** En su premisa —que el header viaja del cliente al proceso— el hallazgo es un falso positivo, y es el caso literal de la regla que el ADR-105 fijó: el escáner no lee los ADR y señaló como defecto una solución deliberada a otro problema. La verificación adversarial que lo demuestra es la que el ADR-071 nunca hizo: su sonda observó tráfico legítimo, así que la afirmación "el edge la reemplaza si el cliente la forja" del comentario del guard era correcta pero no estaba verificada.
+
+### Decisión
+
+**1. Se endurece igual, y el motivo no es la vulnerabilidad sino de qué depende la defensa.** Con `X-Real-IP` la seguridad del rate limiting descansaba en que el edge de Railway sanee un header propietario: una propiedad no contractual del proveedor, que puede cambiar sin aviso y que el propio ADR-071 registró como problemática con rutas CDN. Con `req.ip` y el número exacto de saltos la defensa pasa a ser **posicional**: una entrada forjada queda siempre a la izquierda del truncado y nunca gana, sobrescriba o appendee el edge. Los modos de fallo del cambio son sobre-limitar o quedar como estaba; nunca entregar la evasión. Es el mismo criterio con el que el ADR-071 eligió `1` sobre `true`, aplicado ahora con el número medido.
+
+**2. `trust proxy` de 1 a 2 y `getTracker` a `req.ip`, en un solo commit** (`765e7c5`). Por separado dejan un estado intermedio roto: `trust proxy 2` solo no hace nada mientras el guard lea el header, y el guard con `req.ip` sin `trust proxy 2` reintroduce el bug del ADR-071. El fallback del guard pasa a `req.socket.remoteAddress`: si la XFF faltara, todos comparten tracker y se sobre-limita, en vez de dejar de contar. Falla cerrado.
+
+**3. El `2` se validó antes de escribirlo, no después.** Se ejercitó el getter `req.ip` del Express 5.2.1 realmente instalado, alimentado con la XFF medida. La fila de control es la que da valor a la tabla: con `trust=1` el getter devuelve `152.233.23.194`, idéntico a lo que la sonda registró en producción, lo que confirma que la simulación reproduce el entorno. Sobre esa base, con `trust=2` el mismo XFF da la IP real; con una y con dos entradas forjadas a la izquierda, sigue dando la IP real; sin XFF cae al socket; con un tercer salto imprevisto degrada a sobre-limitación, no a evasión; y con `true` la forjada gana — que es por lo que no se usa `true`.
+
+**4. `RealIpThrottlerGuard` se conserva pese a quedar casi equivalente al `getTracker` por defecto de `@nestjs/throttler`.** Eliminarlo obligaría a tocar los dos módulos y perdería el fallback explícito y la documentación de la decisión en el sitio donde importa. El nombre queda desalineado con su contenido y se acepta a cambio de no mover el registro del `APP_GUARD` en ambos servicios.
+
+### Consecuencias
+
+- **Queda cerrado el pendiente que el ADR-071 dejó abierto desde julio** ("verificar el throttler en producción", nunca ejecutado), y con más de lo que pedía. Tres tandas de seis peticiones a rutas con `@Throttle` de límite 5, con la sonda todavía viva: **control** (401 con `x-ratelimit-remaining` bajando 4→0 y **429 en la sexta** con `retry-after: 60`); **adversarial** (las mismas seis peticiones con `X-Real-IP` y `X-Forwarded-For` forjados y **distintos en cada una**, `203.0.113.11`–`.16`: escalera **idéntica**, variar los headers ya no estrena contador); y **`api-external`** por su dominio propio (misma escalera con 429 en la sexta). En las doce líneas de la sonda `req.ip="181.71.137.142"` mientras el salto interno seguía rotando entre `.193` y `.194`: el tracker dejó de contaminarse con la rotación.
+- El servicio `api-external` recibió el `2` por inferencia (mismo edge) y **quedó verificado conductualmente** por la tanda 3. Su modo de fallo si la topología hubiera diferido era sobre-limitar a un socio, no evasión.
+- El perfil de 429 para usuarios legítimos no cambia: `req.ip` y `X-Real-IP` resuelven a la misma dirección, así que quienes comparten NAT siguen compartiendo tracker exactamente igual que antes.
+- **Riesgo aceptado: el `2` está atado a la topología actual del edge de Railway.** Si el proveedor añadiera un salto, el efecto es sobre-limitación (todos los clientes caerían al mismo salto interno compartido), no evasión — degradación segura, pero degradación. Señal de alarma a vigilar: 429 masivos sin pico de tráfico.
+- **Riesgo aceptado: ningún spec ejercita el guard.** La suite de la api (6 suites, 6 tests) pasa sin tocarlo; el respaldo del comportamiento es la medición de producción de este ADR y la tabla del punto 3, no la suite. Igual que en el ADR-105 con `email-verification.service.ts`, la validación funcional es empírica.
+- Corrección de registro sobre el ADR-105: su punto 2 apuntaba el fix de F9 como "`trust proxy` con el número exacto de saltos". Es la mitad del fix; sin devolver el `getTracker` a `req.ip` ese ajuste no habría cambiado el comportamiento en producción. Queda corregido desde aquí, `DECISIONS.md` es append-only.
+- Corrección de registro sobre el ADR-071: los números de línea de `app.module.ts` que cita (35/36/38) ya no corresponden a los del disco (37 y 42). Nada que editar; se anota para quien siga esas referencias.
+- **El patrón de sonda del ADR-071 sale reforzado y mejorado**: instrumentación desplegada a propósito, gateada por header marcador en vez de por contador de arranque, y revertida con `git revert` en el commit siguiente. Entra y sale en su par, nunca queda. Además rindió doble: sirvió para medir la topología y después para verificar el fix con evidencia directa (`req.ip` observado) en vez de solo inferida por el 429.
+- La regla operativa que sale de aquí —**la identidad del cliente para rate limiting sale de `req.ip` con `trust proxy` calibrado y medido, nunca de un header crudo**— se propaga a `CONVENTIONS.md` §K en un cierre documental aparte.
+
+### Archivos
+
+- `apps/api/src/common/guards/real-ip-throttler.guard.ts` — `getTracker()` sobre `req.ip` con fallback a `req.socket.remoteAddress`
+- `apps/api/src/main.ts` — `trust proxy` 1 → 2; sonda temporal insertada y revertida
+- `apps/api/src/main-external.ts` — `trust proxy` 1 → 2
+- `DECISIONS.md` — este ADR
+
+### Commits
+
+- `dfa0d1d` chore(api): TEMPORARY [PROXY-PROBE-F9] log edge proxy headers gated by x-probe-tag
+- `765e7c5` fix(api): key rate limiting on req.ip with trust proxy 2 so forged headers cannot reset counters
+- `941bf23` Revert "chore(api): TEMPORARY [PROXY-PROBE-F9] log edge proxy headers gated by x-probe-tag"
+- El commit docs de este ADR
+
+### Pendientes
+
+- Propagación de la regla a `CONVENTIONS.md` §K (rate limiting): commit aparte de este ADR.
+- **Cohorte de seguridad abierta del ADR-105, siguiente en orden:** F11 (cuerpos de 50 MB bufferados antes de auth y throttle), endurecimiento del hash del código de verificación (KDF + comparación de tiempo constante), F4 y F12 (zip bomb, throw en callback de multer), re-adjudicación de los candidatos F21–F45 de `apps/api`, y escaneo de `apps/web` + `packages/` (incluido `pricing-engine`), nunca escaneados.
+- Sin cobertura de tests: `RealIpThrottlerGuard` sigue sin spec. Candidato natural si alguna vez se toca el guard otra vez.
