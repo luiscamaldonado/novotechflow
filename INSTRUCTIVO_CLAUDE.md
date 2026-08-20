@@ -153,6 +153,7 @@ Claude Code corre en el entorno de Luis (Windows + PowerShell) y **sí puede bus
 - **Indicar siempre si el prompt es para una sesión NUEVA o la MISMA** de Claude Code (y por qué).
 - **Indicar siempre la rama, en TODO prompt**, sea sesión nueva o la misma. La rama va **dentro del prompt** como paso 0: verificar `git branch --show-current`, hacer checkout si no coincide, y detenerse y reportar si el working tree tiene cambios sin commitear ajenos a la tarea.
 - **Modelo y esfuerzo: se fijan al abrir la sesión, nunca dentro del prompt.** Claude Code no arranca si el pegado empieza con slash commands, así que el modelo y el esfuerzo no van en el texto del prompt. Se fijan con el flag de arranque o con slashes en su propio Enter (ver subsección). El prompt se pega limpio. El chat anuncia los cuatro datos **encima del bloque**: `Modelo: <x> · Effort: <y> · Sesión: NUEVA|MISMA · Rama: <rama>` (effort omitido si es el default del modelo).
+- **Slash commands interactivos: los teclea Luis, no van en un prompt.** Los comandos de plugins que abren menús y piden confirmaciones (`/claude-security:claude-security`, `/config`, `/plugin`, `/reload-plugins`) no caben en un prompt de Claude Code, y su equivalente no interactivo (p. ej. `claude plugin install`) sí lo corre Claude Code. Cuando una tarea exige una sesión interactiva conducida por Luis, Claude lo dice explícito y le indica qué teclear paso a paso, con las decisiones (alcance, selección, triage) siempre de vuelta en el chat. Ver §11.
 
 ### Selección de modelo y esfuerzo (por prompt)
 
@@ -326,6 +327,56 @@ Para buscar bugs que nadie reportó:
 - **Una pasada = un invariante.** Sesión NUEVA, solo lectura. Ejemplos: "ningún consumidor del pricing-engine calcula por fuera", "un REPORTER no puede mutar nada por ninguna ruta", "todo timer/polling se limpia al desmontar".
 - **Hallazgo = archivo:línea + escenario que lo dispara + severidad.** Sin escenario reproducible es hipótesis y se marca como tal.
 - Hallazgos a `docs/audits/`. **Demostrar antes de arreglar** (test o script que lo reproduce). Fixes después, por cohortes, con gate por commit (lint + `tsc` + navegador + push de Luis).
+
+---
+
+## 11. Escaneo de seguridad — plugin Claude Security
+
+Plugin oficial `claude-security` (marketplace `claude-plugins-official`), instalado en scope user. Es la capa de escaneo profundo bajo demanda; no reemplaza a los scanners deterministas ni al gate de tipos. Adoptado en ADR-105.
+
+### 11.1 Quién teclea qué
+
+El escaneo es la **excepción acotada al modelo de dos roles**: es una sesión interactiva conducida por Luis, no un prompt ejecutado por Claude Code.
+
+- **Claude Code corre lo no interactivo:** `claude plugin install claude-security@claude-plugins-official`, `claude plugin list`, `claude plugin marketplace list`, y toda la verificación posterior (leer el reporte, `git apply --check`, aplicar patches, gates, commits).
+- **Luis teclea lo interactivo:** `/claude-security:claude-security` (el menú de tres trabajos: escanear codebase, escanear cambios, sugerir patches) y `/claude-security:scan`. Los nombres son los reales de v0.10.1; la documentación los llama `/claude-security` a secas.
+- **Claude decide en el chat:** alcance del escaneo, triage de hallazgos, qué se parchea y en qué orden. Claude Code nunca elige qué parchear ni aplica un patch por iniciativa propia.
+
+### 11.2 Prerequisito de Windows
+
+El plugin exige `python3` 3.9.6+ en el PATH. En Windows el alias de ejecución de Microsoft Store intercepta ese nombre y no es Python. Se resuelve una sola vez: apagar los alias `python.exe` y `python3.exe` en Configuración → Aplicaciones → Configuración avanzada de aplicaciones → Alias de ejecución de aplicaciones, y copiar `python.exe` a `python3.exe` en la carpeta de instalación real. Requiere terminal (y sesión de Claude Code) nueva para que el cambio se vea.
+
+También hace falta `Dynamic workflows` encendido en `/config`.
+
+### 11.3 Alcance y costo
+
+Un escaneo consume la ventana de límite del plan y no tiene pausa ni checkpoint: si se corta, se pierde la pasada completa.
+
+- **La sesión se abre en Opus.** Fable se re-rutea a Opus por los clasificadores de ciber (§10.3); pagar Fable para terminar en Opus no tiene sentido.
+- **Acotar por superficie, effort medium.** El repo entero a medium no cabe: 730 agentes, ~4.6M tokens, 77 minutos y el panel se cayó por límite (ADR-105). `apps/api` a medium sí completa.
+- **No bajar el effort para que quepa.** Recortar de medium a low cambia decenas de investigadores por uno: se sacrifica justo la profundidad que justifica el costo del plugin. Preferible mirar menos código a fondo.
+
+### 11.4 Los reportes no se commitean
+
+Cada escaneo escribe `CLAUDE-SECURITY-<timestamp>/` con su propio `.gitignore`. **Se queda así.** Un reporte es un mapa de debilidades explotables del sistema; no entra al historial.
+
+Un reporte cuyo panel se cayó por límite **se borra**, aunque diga cero hallazgos — sobre todo si dice cero hallazgos: ese cero se lee como salud y no describe el código.
+
+Lo que sí queda en bitácora es el ADR: revisión escaneada (del archivo `CLAUDE-SECURITY-REVISION-<commit>.json`), conteo por severidad, qué se arregló, qué se aceptó y qué quedó sin adjudicar.
+
+### 11.5 Patches
+
+- **Siempre `User-guided`, seleccionando por ID.** Nunca `Auto-scan then fix` (re-corre el escaneo completo y parcha todo lo que sobreviva) ni `Solo HIGH` sin revisar qué incluye: la severidad genérica del escáner no es la prioridad del negocio.
+- **El diff se lee en el chat antes de aplicar.** `git apply --check` dice que el parche encaja, no que el cambio sea correcto.
+- **Un patch = un commit**, con los gates completos de §8. Si dos patches tocan el mismo archivo, van en orden con commit intermedio y se re-verifica el `--check` del segundo: el primero ya movió el árbol.
+- **Un patch nunca se fuerza.** Si no aplica limpio, se reporta y se para; no se usa `--3way` ni se edita a mano.
+- **Si ningún spec cubre el código parcheado**, los gates no validan comportamiento: hace falta verificación en navegador de Luis (CONVENTIONS §H) antes del push.
+
+### 11.6 El escáner no lee los ADR
+
+Un hallazgo puede señalar código que existe por una decisión registrada. Antes de parchear, se contrasta contra `DECISIONS.md`: si el "defecto" es una solución deliberada a otro problema, el patch automático lo revierte y reabre el bug original.
+
+Caso de referencia: F9 de ADR-105 señaló el rate limit llaveado en `X-Real-IP`; ese header está ahí por ADR-071, porque detrás del edge de Railway `req.ip` rota y el límite nunca se alcanzaba. El patch obvio habría reabierto ADR-071. Ese hallazgo salió del lote de patches y pasó al protocolo de diagnóstico (§10).
 
 ---
 
