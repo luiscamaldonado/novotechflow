@@ -37,10 +37,10 @@ export class EmailVerificationService {
       data: { used: true },
     });
 
-    const code = Math.floor(
-      Math.pow(10, CODE_LENGTH - 1) +
-        Math.random() * 9 * Math.pow(10, CODE_LENGTH - 1),
-    ).toString();
+    // Must be a CSPRNG: this code is the only secret exchanged for a JWT.
+    const code = crypto
+      .randomInt(Math.pow(10, CODE_LENGTH - 1), Math.pow(10, CODE_LENGTH))
+      .toString();
 
     const hashedCode = crypto.createHash('sha256').update(code).digest('hex');
 
