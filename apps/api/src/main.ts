@@ -20,8 +20,9 @@ async function bootstrap() {
 
   app.use(compression());
 
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  // 2mb y no 50mb: el cuerpo JSON legitimo mas grande medido en produccion (2026-08-16) es una propuesta completa con todos sus bloques = 0.035 MB; margen ~54x. Los bloques guardan las imagenes por referencia a image_assets, no inline. Las subidas de archivos van por multipart y las gobierna multer con sus propios topes, no este limite. Ver ADR de F11.
+  app.use(json({ limit: '2mb' }));
+  app.use(urlencoded({ extended: true, limit: '2mb' }));
 
   app.use(
     helmet({

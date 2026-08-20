@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { ExternalAppModule } from './external-app.module';
 
@@ -17,6 +18,10 @@ async function bootstrap() {
   app.set('trust proxy', 2);
 
   app.use(compression());
+
+  // Limite explicito y no el default de Express: los cuerpos de este servicio son credenciales y codigos, de cientos de bytes. Fijarlo evita que un `json()` anadido despues lo abra sin que nadie lo note. Ver ADR de F11.
+  app.use(json({ limit: '1mb' }));
+  app.use(urlencoded({ extended: true, limit: '1mb' }));
 
   app.use(
     helmet({
