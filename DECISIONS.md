@@ -4775,3 +4775,66 @@ El reconocimiento previo (solo lectura) fijó las tres decisiones sin necesidad 
 - **Cohorte de seguridad del ADR-105, lo que queda:** F4 y F12 (zip bomb en `spec-prefill/strategies/excel.strategy.ts`, throw en callback de multer en `proposals.controller.ts`), re-adjudicación de los candidatos F21–F45 de `apps/api`, y escaneo de `apps/web` + `packages/` (incluido `pricing-engine`, núcleo financiero), nunca escaneados.
 - Primer spec de `email-verification.service.ts`, que cubriría las cuatro decisiones acumuladas.
 - Revisar las dos bases de copia (`novotechflow_jun_copy`, `novotechflow_prod_copy`) en el Postgres local (ADR-107).
+
+## ADR-109 — Retiro de TRASPASO_NOVOTECHFLOW.md y rescate de sus pendientes vivos
+
+**Fecha:** 2026-08-20
+**Estado:** Cerrado (solo documentacion; sin cambios de codigo)
+
+### Contexto
+
+`TRASPASO_NOVOTECHFLOW.md` se escribio el 2026-08-14 como puente de la migracion de la cuenta personal al workspace Team: volco en un solo documento el estado, los pendientes y las lecciones que vivian en la memoria de Claude, para que un Claude sin historia previa pudiera continuar. Vivia como adjunto del proyecto en Claude.ai, no en el repo.
+
+Seis dias despues su premisa ya no se sostiene. La memoria del proyecto esta reconstruida hasta ADR-108, y el documento acumulo datos falsos: dice Prisma 5.10.2 (hoy 7.9.1, ADR-095), ultimo ADR 091 (hoy 108), ubica los calculos financieros en `apps/web/src/lib/pricing-engine.ts` (corregido en ADR-096: el engine es `packages/pricing-engine`), y describe el rate limiting llaveado en `X-Real-IP` como invariante (reemplazado en ADR-106 por `req.ip` con `trust proxy` calibrado a los saltos medidos del edge). Ni su seccion de "hechos estructurales" sobrevivio intacta.
+
+La causa es estructural, no de mantenimiento: un documento de estado que vive fuera del repo caduca con cada push y no tiene mecanismo que lo actualice. Las reglas se pueden duplicar en varias capas y sostener, porque cambian poco y se propagan en el cierre de cada ADR; el estado no.
+
+El 2026-08-20 se corrio una pasada de verificacion de solo lectura contra disco para adjudicar sus pendientes antes de retirarlo.
+
+### Decisión
+
+Retirar `TRASPASO_NOVOTECHFLOW.md` de los adjuntos del proyecto, tras rescatar lo perenne y registrar aqui lo que quedaba vivo.
+
+1. **Migrado al skill `novotechflow`** (Claude.ai, fuera de git): hechos estructurales del repo que no son obvios leyendolo, infraestructura y servicios externos, entorno de desarrollo, y las lecciones operativas vigentes que no estaban ya en `INSTRUCTIVO_CLAUDE.md` ni en `CONVENTIONS.md`. El mismo pase actualizo el skill con los criterios de seguridad de ADR-106, ADR-107 y ADR-108, que no tenia.
+2. **Registrado en este ADR:** los cuatro pendientes vivos sin registro previo, y la constancia de los que la verificacion cerro.
+3. **Instrucciones del proyecto (Claude.ai):** retirada la referencia al traspaso; agregada la regla de precedencia entre capas y un paso 4 de propagacion en el checklist de cierre.
+4. **Skill `depuracion-web` (Claude.ai):** corregido el gate de tipos del api, que seguia diciendo `apps/api/tsconfig.build.json` en contra de ADR-071. Era la unica copia de la regla sin la nota del porque; ahora las cinco copias la llevan.
+
+No se toca ningun archivo de codigo. Los artefactos 1, 3 y 4 viven en Claude.ai y no pasan por git; se dejan asentados aqui para que el historial explique por que el adjunto desaparecio.
+
+### Consecuencias
+
+- La bitacora de estado del proyecto queda en `DECISIONS.md` mas el disco, sin una cuarta copia sin mecanismo de actualizacion.
+- Las skills quedan como lo que declaran ser: orientacion de alta frecuencia, no fuente de verdad ni fotografia de estado.
+- Queda formalizada la regla de propagacion: una regla que vive en mas de un documento se actualiza en todos ellos en el mismo cierre. El caso que la motivo es el `tsconfig.build.json` del skill `depuracion-web`, que sobrevivio meses a ADR-071 porque se corrigio en cuatro lugares y se olvido el quinto.
+- Se pierde deliberadamente el mapa-resumen de ADR 071 a 091 que traia el traspaso. Era un indice congelado de `DECISIONS.md`; el archivo mismo lo reemplaza.
+
+### Archivos
+
+- `DECISIONS.md` (este ADR).
+- Fuera de git, en Claude.ai: skill `novotechflow`, skill `depuracion-web`, instrucciones del proyecto, adjunto `TRASPASO_NOVOTECHFLOW.md` (retirado).
+
+### Commits
+
+- `docs: ADR-109 retire traspaso doc and rescue open items`
+
+### Pendientes
+
+Vivos y sin registro previo, rescatados del traspaso (verificados contra disco el 2026-08-20):
+
+- **CI no dispara en feature branches.** `ci.yml` corre en `push` y `pull_request` a `master`; `pr-check.yml` solo en `pull_request` a `master`. Un push a una rama que no sea `master` no dispara nada. Ademas, un PR contra `master` dispara los dos workflows y duplica el mismo job de lint+typecheck. Sin registro en ningun ADR previo (nueve variantes de busqueda sin coincidencia).
+- **`deepmerge-ts` < 8.0.0, severidad high** (GHSA-ggr8-5vv4-36mx, stack exhaustion): transitiva de `prisma` -> `@prisma/config` -> `deepmerge-ts`, no dependencia directa. Se resuelve con el proximo bump del CLI de Prisma o con un override. `pnpm audit` reporta ademas 1 moderate silenciado en `pnpm.auditConfig.ignoreGhsas` (ADR-093).
+- **Local verde no implica CI verde:** el typecheck local puede pasar apoyandose en artefactos `dist/` residuales que los runners limpios de CI no tienen.
+- **Bundle de `apps/web` con chunks > 500 kB** (TipTap, jsPDF, html2canvas-pro): candidatos a code-splitting o carga diferida. Arrastrado del traspaso, no verificado en esta pasada.
+
+Cerrados por la verificacion, para que no se reabran:
+
+- `start:prod` y el `CMD` del Dockerfile del api apuntan ambos a `dist/src/main.js`.
+- `express` es dependencia directa del api (`^5.2.1`); `json` y `urlencoded` se importan en `main.ts` y `main-external.ts` desde ADR-107.
+- gzip esta activo en `apps/web/nginx.conf` (cinco directivas a nivel `server`, heredadas por ambos `location`).
+- `html2canvas` a secas ya no existe en `apps/web`; solo `html2canvas-pro`, con un unico consumidor (`PdfPreviewModal.tsx`).
+- `@tiptap/extension-underline` no esta declarado ni importado (el mark llega por StarterKit; el `Underline` del toolbar es el icono de lucide). `@tiptap/pm` esta declarado sin imports propios porque es el peer de ProseMirror que exige TipTap 3: no es deuda.
+- La linea de metadata de ADR-048 ya esta en dos lineas fisicas adyacentes.
+- `manualAmount` si es editable despues de crear la propuesta, desde el builder (`ProposalItemsBuilder.tsx`), no solo en el formulario de creacion.
+- El seed local crea un unico usuario (`admin@novotechno.com` / `admin123` / ADM), que es exactamente lo que documenta `CONVENTIONS.md` §G.
+- El e2e sin gate en CI y el `app.close()` faltante ya estaban registrados (ADR-071, ADR-088, arrastrado a ADR-091). Hecho mecanico que faltaba documentar: el Jest del api usa `rootDir: "src"` y `testRegex: ".*\.spec\.ts$"`, y el spec e2e vive en `apps/api/test/`, fuera de ese rootDir; por eso `pnpm --filter api test` nunca lo ejecuta.
