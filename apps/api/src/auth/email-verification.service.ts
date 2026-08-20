@@ -83,7 +83,21 @@ export class EmailVerificationService {
       );
     }
 
-    if (record.attempts >= MAX_ATTEMPTS) {
+    // Consume one attempt atomically BEFORE comparing the code: the conditional
+    // UPDATE is the cap check, so concurrent requests cannot each get a free
+    // guess by reading the same stale `attempts` value. Postgres re-evaluates
+    // the WHERE after taking the row lock, so at most MAX_ATTEMPTS increments
+    // can succeed per code.
+    const consumed = await this.prisma.verificationCode.updateMany({
+      where: {
+        id: record.id,
+        used: false,
+        attempts: { lt: MAX_ATTEMPTS },
+      },
+      data: { attempts: { increment: 1 } },
+    });
+
+    if (consumed.count === 0) {
       await this.prisma.verificationCode.update({
         where: { id: record.id },
         data: { used: true },
@@ -96,12 +110,14 @@ export class EmailVerificationService {
     const hashedInput = crypto.createHash('sha256').update(code).digest('hex');
 
     if (hashedInput !== record.code) {
-      await this.prisma.verificationCode.update({
+      // The attempt was already consumed above; read the counter back so the
+      // message is not derived from the stale `record` read.
+      const current = await this.prisma.verificationCode.findUnique({
         where: { id: record.id },
-        data: { attempts: { increment: 1 } },
+        select: { attempts: true },
       });
 
-      const remaining = MAX_ATTEMPTS - 1 - record.attempts;
+      const remaining = MAX_ATTEMPTS - (current?.attempts ?? MAX_ATTEMPTS);
       throw new UnauthorizedException(
         remaining > 0
           ? `C\u00f3digo incorrecto. Te quedan ${remaining} intento(s).`
