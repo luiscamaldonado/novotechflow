@@ -4727,3 +4727,51 @@ El 50 MB tampoco era descuido: la hipótesis de trabajo era que sostenía las im
 
 - **Cohorte de seguridad del ADR-105, lo que queda:** endurecimiento del hash del código de verificación (KDF + comparación de tiempo constante), F4 y F12 (zip bomb en `excel.strategy.ts`, throw en callback de multer en `proposals.controller.ts`), re-adjudicación de los candidatos F21–F45 de `apps/api`, y escaneo de `apps/web` + `packages/` (incluido `pricing-engine`), nunca escaneados.
 - Revisar las dos bases de copia en el Postgres local.
+
+## ADR-108 — El código de verificación pasa a bcrypt: cierre de la puerta de entrada externa abierta en el ADR-105
+
+**Fecha:** 2026-08-20
+**Estado:** Aceptada
+
+### Contexto
+
+Último de los riesgos que el ADR-105 dejó explícitos sobre la cadena de verificación por email —la única puerta que entrega un JWT de 12 h a cambio de 6 dígitos— y cuarta pata tras F1 (CSPRNG), F10 (contador atómico) y F9 (llave del rate limiting, ADR-106). Dos debilidades en el mismo archivo, ninguna explotable por sí sola desde fuera:
+
+- **Hash sin KDF.** `crypto.createHash('sha256')` sobre un espacio de 10⁶, sin sal ni estiramiento: quien obtenga la base invierte cualquier código al instante. Es defensa en profundidad, no una puerta: quien llegó a leer `verification_codes` ya tiene la base entera, incluidos los hashes de contraseñas, y el código de 6 dígitos es lo menos valioso de ese botín.
+- **Comparación no de tiempo constante.** `hashedInput !== record.code` termina en el primer byte distinto. Teóricamente un canal lateral; en la práctica exige medir nanosegundos a través de internet, con el edge de Railway y la latencia de por medio, y con 3 intentos atómicos y el rate limit por IP real delante.
+
+El reconocimiento previo (solo lectura) fijó las tres decisiones sin necesidad de deliberación: `bcrypt@6.0.0` ya está en el proyecto y es el precedente para contraseñas (`users.service.ts:96` con 10 rondas, `auth.service.ts:35` con `bcrypt.compare`); el campo `code` es `VarChar(255)` y un hash bcrypt son 60 caracteres frente a los 64 del sha256 actual, así que no hay migración de esquema; y el servicio es compartido — `external-auth.service.ts:36` reutiliza el mismo `verifyCode`, de modo que el cambio cubre los dos servicios desplegados a la vez.
+
+### Decisión
+
+**1. bcrypt con 10 rondas, mismo esquema que las contraseñas.** Sin dependencia nueva y sin un segundo mecanismo que mantener. Se descartó `scrypt`/`pbkdf2` de `crypto` (no habrían requerido dependencia, pero habrían introducido un esquema distinto al que el proyecto ya usa) y `argon2` (dependencia nueva para un caso que el precedente ya cubre).
+
+**2. `bcrypt.compare` resuelve las dos debilidades con un solo cambio.** Es de tiempo constante por diseño, así que no hace falta un `timingSafeEqual` aparte. Efecto adicional: hoy el camino "código incorrecto" fallaba rápido y el correcto lento; con bcrypt ambos cuestan lo mismo y la señal de temporización que motivaba el hallazgo desaparece.
+
+**3. Sin transición ni código de compatibilidad para los códigos ya emitidos.** Viven 5 minutos. Se verificó empíricamente contra la librería instalada que `bcrypt.compare(code, sha256Hex)` **devuelve `false` sin lanzar**, así que un usuario a mitad del flujo durante el redespliegue recibe un 401 "Código incorrecto" —no un 500—, pide otro código y sigue. Escribir compatibilidad hacia atrás para una ventana de 5 minutos habría costado más que el problema que resuelve.
+
+**4. El orden del ADR-105 (F10) no se toca.** El `updateMany` condicional que consume el intento atómicamente sigue **antes** de la comparación, exactamente donde estaba: solo cambió **cómo** se compara, no **cuándo**. Ese orden es el tope de intentos, y moverlo reabriría la carrera.
+
+### Consecuencias
+
+- **La puerta de verificación por código queda cerrada en sus cuatro patas:** el código se genera con CSPRNG (ADR-105, F1), el intento se consume atómicamente antes de comparar (ADR-105, F10), el rate limit se llavea por `req.ip` posicional (ADR-106, F9) y el código se almacena con KDF y se compara en tiempo constante (este ADR). Era la única superficie que entregaba credenciales a un anónimo.
+- Verificación funcional en navegador por Luis (CONVENTIONS §H): login completo con código nuevo correcto. Es la validación real, porque **ningún spec ejercita `email-verification.service.ts`** — la suite de la api (6 suites, 6 tests) pasa sin entrar en este archivo, igual que en el ADR-105, el ADR-106 y el ADR-107. Cuarto cierre consecutivo cuyo respaldo es empírico y no de suite: el patrón ya no es anecdótico.
+- Costo en latencia: bcrypt con 10 rondas añade ~100 ms al emitir y al verificar un código. Irrelevante en un flujo de login que ya espera un correo, y es el mismo costo que el proyecto acepta en cada validación de contraseña.
+- **Riesgo aceptado, heredado y ahora acumulado:** `email-verification.service.ts` concentra cuatro decisiones de seguridad documentadas (F1, F10, el orden atómico y este hash) y sigue sin un solo test. Es el candidato natural del proyecto a primer spec de seguridad, y el argumento se refuerza con cada cambio que recibe.
+- El servicio `api-external` cambia con este commit sin haber sido nombrado en el hallazgo original: reutiliza el mismo `verifyCode` vía `external-auth.service.ts:36`. Recordatorio de que en este proyecto `auth-core` es superficie compartida y todo cambio ahí es doble.
+
+### Archivos
+
+- `apps/api/src/auth/email-verification.service.ts` — import de bcrypt, `BCRYPT_ROUNDS`, `bcrypt.hash` al emitir, `bcrypt.compare` al verificar; `crypto` permanece por `randomInt` (F1)
+- `DECISIONS.md` — este ADR
+
+### Commits
+
+- `9262bd7` fix(auth): hash verification codes with bcrypt instead of bare sha256
+- El commit docs de este ADR
+
+### Pendientes
+
+- **Cohorte de seguridad del ADR-105, lo que queda:** F4 y F12 (zip bomb en `spec-prefill/strategies/excel.strategy.ts`, throw en callback de multer en `proposals.controller.ts`), re-adjudicación de los candidatos F21–F45 de `apps/api`, y escaneo de `apps/web` + `packages/` (incluido `pricing-engine`, núcleo financiero), nunca escaneados.
+- Primer spec de `email-verification.service.ts`, que cubriría las cuatro decisiones acumuladas.
+- Revisar las dos bases de copia (`novotechflow_jun_copy`, `novotechflow_prod_copy`) en el Postgres local (ADR-107).
