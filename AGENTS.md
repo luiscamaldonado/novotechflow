@@ -152,6 +152,7 @@ Confirma explícitamente:
 - Usa HTTPS exclusivamente. Configura headers de seguridad (CSP, HSTS, etc.).
 - Todo secreto que se cambie por una sesión (códigos de verificación, tokens de un solo uso, nonces) se genera con un CSPRNG (`crypto.randomInt`, `crypto.randomBytes`), nunca con `Math.random()`.
 - Todo contador que sea un límite de seguridad (intentos, cuotas) se consume de forma atómica en la base —`updateMany` condicional o equivalente— antes de la comparación que protege. Leer, comparar y después incrementar es una carrera: bajo concurrencia el tope no limita.
+- La identidad del cliente para rate limiting, cuotas o bloqueos sale de `req.ip` con `trust proxy` calibrado al número de saltos **medido** del proxy que haya delante, nunca de un header crudo (`X-Real-IP`, `X-Forwarded-For`). El número de saltos se mide contra producción, no se supone; un header lo escribe el cliente y su saneamiento depende del proveedor (ADR-106).
 
 ---
 
@@ -449,7 +450,7 @@ Medidas de seguridad ya activas (auditoría abril 2026):
 - Ownership check (IDOR) en TODOS los endpoints de propuestas, escenarios, páginas y bloques
 - `forbidNonWhitelisted: true` — rechaza campos extra en requests
 - Helmet con CSP, HSTS, X-Frame-Options
-- Rate limiting global (100/60s por IP real vía `X-Real-IP`, `RealIpThrottlerGuard`, no `req.ip`: detrás del edge de Railway `req.ip` rota entre peticiones y el límite nunca se alcanzaba — ADR-071) + estricto en auth: 5/min en login, 5/min en verify-code, 3/min en resend-code. **Pendiente (ADR-105, F9):** la llave sale de un header que el cliente puede escribir; el fix correcto es `trust proxy` con los saltos reales del edge, no volver a `req.ip` — eso reabriría ADR-071.
+- Rate limiting global (100/60s) + estricto en auth: 5/min en login, 5/min en verify-code, 3/min en resend-code. La llave del contador es `req.ip` con `app.set('trust proxy', 2)` — 2 saltos medidos en el edge de Railway —, nunca un header crudo como `X-Real-IP` (ADR-106; historia del bug original en ADR-071).
 - Swagger/OpenAPI en `/api/docs` solo si `SWAGGER_ENABLED=true`; ausente por defecto en producción (ADR-071)
 - Upload: validación de magic bytes + sanitización de originalname
 - XSS: sanitización con sanitize-html en campos de texto
