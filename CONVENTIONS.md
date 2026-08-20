@@ -150,6 +150,8 @@ Confirma explícitamente:
 - Implementa Row Level Security (RLS) en la base de datos. No confíes solo en validaciones del frontend.
 - Valida permisos tanto en el cliente (UX) como en el servidor (seguridad real).
 - Usa HTTPS exclusivamente. Configura headers de seguridad (CSP, HSTS, etc.).
+- Todo secreto que se cambie por una sesión (códigos de verificación, tokens de un solo uso, nonces) se genera con un CSPRNG (`crypto.randomInt`, `crypto.randomBytes`), nunca con `Math.random()`.
+- Todo contador que sea un límite de seguridad (intentos, cuotas) se consume de forma atómica en la base —`updateMany` condicional o equivalente— antes de la comparación que protege. Leer, comparar y después incrementar es una carrera: bajo concurrencia el tope no limita.
 
 ---
 
@@ -447,15 +449,19 @@ Medidas de seguridad ya activas (auditoría abril 2026):
 - Ownership check (IDOR) en TODOS los endpoints de propuestas, escenarios, páginas y bloques
 - `forbidNonWhitelisted: true` — rechaza campos extra en requests
 - Helmet con CSP, HSTS, X-Frame-Options
-- Rate limiting global (100/60s por IP real vía `X-Real-IP`, `RealIpThrottlerGuard`, no `req.ip`: detrás del edge de Railway `req.ip` rota entre peticiones y el límite nunca se alcanzaba — ADR-071) + estricto en auth: 5/min en login, 5/min en verify-code, 3/min en resend-code
+- Rate limiting global (100/60s por IP real vía `X-Real-IP`, `RealIpThrottlerGuard`, no `req.ip`: detrás del edge de Railway `req.ip` rota entre peticiones y el límite nunca se alcanzaba — ADR-071) + estricto en auth: 5/min en login, 5/min en verify-code, 3/min en resend-code **Pendiente (ADR-105, F9):** la llave sale de un header que el cliente puede escribir; el fix correcto es `trust proxy` con los saltos reales del edge, no volver a `req.ip` — eso reabriria ADR-071.
 - Swagger/OpenAPI en `/api/docs` solo si `SWAGGER_ENABLED=true`; ausente por defecto en producción (ADR-071)
 - Upload: validación de magic bytes + sanitización de originalname
 - XSS: sanitización con sanitize-html en campos de texto
 - ParseUUIDPipe en todos los parámetros de ID
 - Transacciones atómicas en operaciones de delete
+- Códigos de verificación generados con `crypto.randomInt` (ADR-105, F1)
+- Tope de intentos del código consumido atómicamente antes de comparar el hash (ADR-105, F10)
 
 **Al agregar endpoints nuevos, SIEMPRE:**
 1. Agregar `@UseGuards(JwtAuthGuard)` + `@ApiBearerAuth()`
 2. Pasar `req.user` y verificar ownership
 3. Usar DTOs tipados con class-validator
 4. Agregar `ParseUUIDPipe` a params de ID
+
+**Escaneo de seguridad:** el proyecto usa el plugin `claude-security` como capa de escaneo profundo bajo demanda. La operativa completa —quién teclea qué, alcance, política de reportes y patches— está en `INSTRUCTIVO_CLAUDE.md` §11. Regla crítica: un hallazgo del escáner no se parchea sin contrastarlo contra `DECISIONS.md`; el escáner no lee los ADR y puede señalar como defecto una solución deliberada a otro problema.
