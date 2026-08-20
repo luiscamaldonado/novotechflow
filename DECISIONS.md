@@ -4668,3 +4668,62 @@ Diagnóstico previo (solo lectura) que reencuadró el problema: `trust proxy` go
 - Propagación de la regla a `CONVENTIONS.md` §K (rate limiting): commit aparte de este ADR.
 - **Cohorte de seguridad abierta del ADR-105, siguiente en orden:** F11 (cuerpos de 50 MB bufferados antes de auth y throttle), endurecimiento del hash del código de verificación (KDF + comparación de tiempo constante), F4 y F12 (zip bomb, throw en callback de multer), re-adjudicación de los candidatos F21–F45 de `apps/api`, y escaneo de `apps/web` + `packages/` (incluido `pricing-engine`), nunca escaneados.
 - Sin cobertura de tests: `RealIpThrottlerGuard` sigue sin spec. Candidato natural si alguna vez se toca el guard otra vez.
+
+## ADR-107 — F11: los límites de tamaño de cuerpo se dimensionan desde la carga real, no desde el miedo a romper la subida de imágenes
+
+**Fecha:** 2026-08-20
+**Estado:** Aceptada
+
+### Contexto
+
+F11 del ADR-105, segundo hallazgo externo de la cohorte tras F9: `json({ limit: '50mb' })` está registrado en `apps/api/src/main.ts` como middleware de Express, es decir **antes de que exista el router de Nest** y por tanto antes del `APP_GUARD` del throttler y de cualquier `JwtAuthGuard`. Un cliente anónimo consigue que el proceso lea y bufferee decenas de MB antes de que nada compruebe quién es ni cuántas peticiones lleva. El 401 o el 429 llegan después de haber pagado el costo. Es asimetría de trabajo —DoS—, no intrusión, y por eso fue detrás de la puerta de verificación por código en el orden de triage.
+
+El 50 MB tampoco era descuido: la hipótesis de trabajo era que sostenía las imágenes en base64 que el sistema guarda en Postgres (`@db.Text`), y bajarlo a ciegas rompía la subida de imágenes de propuestas. Como en F9, el número correcto era un dato empírico a medir antes de tocar nada. La medición desmontó esa hipótesis.
+
+**Inventario estático.** Las seis rutas que reciben archivos van por multipart y **todas llevan guard**, cada una con su tope propio en multer: 2 MB para imágenes (`proposals`, `users/signature`, `templates`), 10 MB para `spec-prefill/extract` (única con `memoryStorage`), 401 KB para los import CSV de admin. No hay `MulterModule` global. El límite de `json()` no gobierna nada de eso.
+
+**Techo efectivo, medido en producción.** Sonda de `POST` con cuerpo JSON a una ruta inexistente (`/__probe-f11`): el body parser corre antes del router, así que un 404 solo puede ocurrir después de que el cuerpo fue leído, y un 413 significa que el límite cortó antes. Método que mide el techo sin tocar rutas reales, sin auth y sin consumir cuota del throttler. Resultados: `novotechflow` aceptó 45 MB (404 en 14,6 s) y rechazó 55 MB, confirmando que el `50mb` es el límite operante — se había planteado la hipótesis de que el parser propio de `NestFactory.create()` lo precediera con un default de ~100 kB, y la medición la descartó. `api-external` aceptó 90 KB y rechazó 150 KB: **no configuraba ningún body parser**, así que corría con el default de Express, un techo que nadie eligió. Dos servicios hermanos con techos separados por tres órdenes de magnitud.
+
+**Calibración de la carga legítima, contra datos de producción.** La base local de desarrollo no sirve para esto (2 usuarios, 5 imágenes, 96 bloques) y se descartó explícitamente. Se restauró el dump `prod_post_wysiwyg_2026-08-16.dump` en una base local desechable `novotechflow_calib` —restore limpio, cero errores, misma versión 18.4 en ambos extremos— se midió, y se borró al terminar. Sobre 426 propuestas, 3 145 bloques, 9 811 clientes y 34 650 spec_options:
+
+- **En producción los bloques están deshidratados.** 0 de 3 145 bloques contienen `data:image`; 731 referencian por `assetId`. De los 11 usuarios, las 9 firmas viven en `signature_asset_id` y 0 en `signature_url`. Las imágenes están separadas en `image_assets`, donde sí está el peso (máximo 2,48 MB en un asset).
+- **El cuerpo JSON legítimo más grande es de 37 054 caracteres (0,035 MB):** la suma de `content` de todos los bloques de todas las páginas de la propuesta más pesada. Por página el máximo es 15,7 KB; el p95 por propuesta, 25 KB.
+- Los 1,14 MB que la base local mostraba en un bloque eran datos anteriores a la deshidratación: un artefacto histórico, no el sistema actual.
+
+`proposal_versions` está vacía **también en producción**, así que el candidato natural a cuerpo más grande no existe todavía como carga real.
+
+### Decisión
+
+**1. `novotechflow` baja de `50mb` a `2mb`** en `json` y `urlencoded`, conservando su posición exacta en la cadena de middleware. Es ~54x el peor cuerpo JSON real medido y reduce la superficie anónima 25 veces. Que sea seguro descansa en el hallazgo del inventario: **el límite de `json()` no afecta a multipart**, que gobierna multer con sus propios topes, así que las subidas de imágenes no se tocan en absoluto.
+
+**2. `api-external` fija `1mb` explícito**, con el import de `json`/`urlencoded` que ese archivo no tenía. Sube el techo respecto al default accidental de ~100 KB, y esa es la decisión consciente: los cuerpos de ese servicio son credenciales y códigos, de cientos de bytes, así que 1 MB sobra; lo que se compra es que el número esté **escrito**. Un `json()` añadido mañana por otra razón no puede abrirlo sin que nadie lo note, que es exactamente lo que pasó al revés en `main.ts`.
+
+**3. El principio, hermano del que fijó el ADR-072 sobre el pool de Prisma:** un límite que nadie calculó desde la carga —sea un valor generoso puesto por si acaso, sea el default de una librería— no describe la aplicación. El 50 MB y el ~100 KB eran el mismo error con signos opuestos, y ninguno de los dos se había medido nunca.
+
+**4. Los comentarios en código remiten al "ADR de F11" de forma genérica, sin número.** Sustituirlo por `ADR-107` costaría un commit que toca runtime y dispara redespliegue de ambos servicios solo para escribir un número. Se deja para cuando esos archivos se toquen por otra razón.
+
+### Consecuencias
+
+- Verificación en producción tras el despliegue, con la misma sonda: `novotechflow` responde 404 hasta 1,9 MB y 413 en 3 MB; `api-external` 404 hasta 900 KB y 413 desde 1,5 MB. Ambas señales de contraste visibles: el fichero de 500 KB pasó de 413 a 404 en `api-external` (el límite explícito reemplazó al default), y 3 MB pasó de aceptado a rechazado en `novotechflow`. Diez peticiones, ningún código inesperado.
+- **Validación funcional en navegador por Luis** (CONVENTIONS §H), que es la que detecta la regresión que la sonda no ve: abrir una propuesta con varios bloques, editarla y guardarla, y subir una imagen a un bloque. Ambos flujos correctos.
+- El costo de una petición anónima contra `novotechflow` cae de 50 MB a 2 MB de buffer. No elimina la asimetría —el cuerpo se sigue leyendo antes del guard, que es cómo funciona el orden de middleware de Express— pero la reduce en un factor de 25. Cerrarla del todo exigiría mover el parseo detrás de la autenticación, que no es la forma del framework.
+- **Riesgo aceptado: ningún test ejercita estos límites.** La suite de la api pasa sin tocarlos, igual que con el guard del throttler en el ADR-106. El respaldo es la medición de producción y la verificación en navegador.
+- **Riesgo aceptado: el 2 MB está calibrado sobre el patrón de deshidratación actual.** Si alguna vez se volviera a guardar base64 inline en `content`, o si `proposal_versions` empezara a llenarse con snapshots completos, el margen de 54x podría comerse. Señal de alarma: 413 al guardar propuestas.
+- Hallazgo adjunto, no accionado aquí: existen en el Postgres local de desarrollo dos bases `novotechflow_jun_copy` y `novotechflow_prod_copy` de trabajos anteriores. Si contienen datos de producción, son copias vivas en la máquina de Luis.
+- **El método de sonda queda como patrón reutilizable:** `POST` a ruta inexistente para medir el techo del body parser sin tocar rutas reales, sin auth y sin consumir cuota del throttler. Hermano de la sonda de headers del ADR-106, y más barato: no requiere desplegar instrumentación.
+
+### Archivos
+
+- `apps/api/src/main.ts` — `json`/`urlencoded` de `50mb` a `2mb`
+- `apps/api/src/main-external.ts` — `json`/`urlencoded` explícitos en `1mb`, con el import de `express` que faltaba
+- `DECISIONS.md` — este ADR
+
+### Commits
+
+- `672dedf` fix(api): size request body limits to measured payloads instead of 50mb and implicit default
+- El commit docs de este ADR
+
+### Pendientes
+
+- **Cohorte de seguridad del ADR-105, lo que queda:** endurecimiento del hash del código de verificación (KDF + comparación de tiempo constante), F4 y F12 (zip bomb en `excel.strategy.ts`, throw en callback de multer en `proposals.controller.ts`), re-adjudicación de los candidatos F21–F45 de `apps/api`, y escaneo de `apps/web` + `packages/` (incluido `pricing-engine`), nunca escaneados.
+- Revisar las dos bases de copia en el Postgres local.
