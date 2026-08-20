@@ -11,10 +11,10 @@ async function bootstrap() {
   const app =
     await NestFactory.create<NestExpressApplication>(ExternalAppModule);
 
-  // 1 y no true: con true, una XFF forjada decide req.ip si el edge appendea
-  // (mismo criterio que main.ts; ver anexo trust proxy en
-  // docs/diagnostico-2026-07-24-deps-bundle.md).
-  app.set('trust proxy', 1);
+  // 2 saltos medidos en produccion (2026-08-20): XFF = "IP cliente, salto
+  // interno del edge". Numero exacto y no true: con true una XFF forjada
+  // decide req.ip (mismo criterio que main.ts).
+  app.set('trust proxy', 2);
 
   app.use(compression());
 

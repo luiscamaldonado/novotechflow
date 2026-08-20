@@ -15,8 +15,8 @@ const compression = require('compression');
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // 1 y no true: con true, una XFF forjada decide req.ip si el edge appendea (anexo trust proxy en docs/diagnostico-2026-07-24-deps-bundle.md)
-  app.set('trust proxy', 1);
+  // 2 saltos medidos en produccion (2026-08-20): XFF = "IP cliente, salto interno del edge". Numero exacto y no true: con true una XFF forjada decide req.ip.
+  app.set('trust proxy', 2);
 
   // TEMPORARY [PROXY-PROBE-F9] instrumentacion de diagnostico, se revierte en el commit siguiente.
   let probeF9Count = 0;
