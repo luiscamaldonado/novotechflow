@@ -53,5 +53,8 @@ jobs:
       - name: Typecheck API (NestJS)
         run: pnpm exec tsc --noEmit --project apps/api/tsconfig.json
 
+      - name: Unit tests pricing-engine (Vitest)
+        run: pnpm --filter @repo/pricing-engine test
+
       - name: Unit tests API (Jest)
         run: pnpm --filter api test
