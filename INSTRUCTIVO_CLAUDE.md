@@ -215,7 +215,7 @@ Reglas operativas asociadas:
 - **ADR en commit aparte** (ver 4.5).
 - **`git status` antes de `git add`.** Adds con **rutas explícitas**, nunca `git add .`.
 - **El `push` a `master` lo hace Luis, no Claude Code.** Solo después de que Luis **verificó la funcionalidad en local**, y Claude debe **preguntarle si es el momento** (puede haber usuarios trabajando en producción). El push dispara `migrate deploy` automático en Railway (api y web son **servicios separados**); se revisa el log de ambos.
-- Antes de cerrar una tarea grande, Claude recuerda: (1) `tsc --noEmit` en web y api, (2) commit atómico, (3) ADR si fue decisión arquitectónica, (4) confirmar el push.
+- Antes de cerrar una tarea grande, Claude recuerda: (1) `tsc --noEmit` en web y api, (2) `pnpm --filter @repo/pricing-engine test` si el cambio toca `packages/pricing-engine`, (3) commit atómico, (4) ADR si fue decisión arquitectónica, (5) confirmar el push.
 - **Sync del conector tras el push.** Tras el push de Luis, darle "Sync now" al conector de GitHub del proyecto de Claude.ai, para que el project knowledge del chat refleje el estado nuevo del repo (incluidos `DECISIONS.md` e `INSTRUCTIVO_CLAUDE.md`, que ya no se re-suben a mano como attachments).
 
 ---
@@ -236,7 +236,12 @@ pnpm exec tsc --noEmit --project apps/web/tsconfig.app.json
 pnpm exec tsc --noEmit --project apps/api/tsconfig.json
 ```
 
-> El gate de tipos de la api es `apps/api/tsconfig.json`, nunca `tsconfig.build.json`: esa última excluye `test` y `**/*spec.ts` por construcción, así que no puede ver una rotura en los specs. Es la config de build, no el gate de tipos. Regla general (ADR-071): la verificación se elige contra la clase de rotura que se está introduciendo; un gate que por construcción no puede verla no es un gate, aunque salga verde.
+> El gate de tipos de la api es `apps/api/tsconfig.json`, nunca `tsconfig.build.json`: esa última excluye `test` y `**/*spec.ts` por construcción, así que no puede ver una rotura en los specs. Es la config de build, no el gate de tipos. Regla general (ADR-071): la verificación se elige contra la clase de rotura que se está introduciendo; un gate que por construcción no puede verla no es un gate, aunque salga verde. Lo mismo aplica al paquete `@repo/pricing-engine` desde ADR-111: su gate es `packages/pricing-engine/tsconfig.json`, nunca `tsconfig.build.json`.
+
+**Suite del pricing-engine (si el cambio toca `packages/pricing-engine`):**
+```powershell
+pnpm --filter @repo/pricing-engine test
+```
 
 **Migración de Prisma (desde `apps/api`, nunca desde la raíz):**
 ```powershell
@@ -309,6 +314,7 @@ Sin esto, nada se declara resuelto:
 - [ ] Diff de los archivos cambiados mostrado.
 - [ ] Tests dirigidos del flujo tocado (si existen) antes que la suite completa.
 - [ ] `tsc --noEmit` en web y api — en la api contra `apps/api/tsconfig.json`, NO `tsconfig.build.json` (excluye los `*.spec.ts` y no ve romperse los tests — ADR-071).
+- [ ] `pnpm --filter @repo/pricing-engine test` si el cambio toca `packages/pricing-engine` — el gate del paquete es su `tsconfig.json`, NO `tsconfig.build.json` (ADR-111).
 - [ ] Si algo falla: parar y reportar con la salida real. No continuar.
 - [ ] Nada se declara resuelto sin evidencia de esta sesión.
 - [ ] Flujos con estado (login, timers, polling, exportaciones): verificación del flujo completo en navegador — la hace Luis (CONVENTIONS §H).

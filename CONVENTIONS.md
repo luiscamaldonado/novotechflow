@@ -301,7 +301,8 @@ quantity: formValue,
 - [ ] **DTOs validados** — ¿El backend usa DTOs con `class-validator`?
 - [ ] **Coerción numérica** — ¿Los inputs se convierten a `Number()` antes de enviar al API?
 - [ ] **Componente < 200 líneas** — Si no, ¿se puede descomponer?
-- [ ] **`tsc --noEmit` pasa** — ¿Cero errores en `apps/web/tsconfig.app.json` y en `apps/api/tsconfig.json`? El gate de la api es `tsconfig.json`, no `tsconfig.build.json`, que excluye los specs por construcción (ADR-071).
+- [ ] **`tsc --noEmit` pasa** — ¿Cero errores en `apps/web/tsconfig.app.json` y en `apps/api/tsconfig.json`? El gate de la api es `tsconfig.json`, no `tsconfig.build.json`, que excluye los specs por construcción (ADR-071). La misma regla aplica al paquete: el gate de `@repo/pricing-engine` es `packages/pricing-engine/tsconfig.json`, nunca `tsconfig.build.json` (ADR-111).
+- [ ] **Suite del pricing-engine pasa** — Si el cambio toca `packages/pricing-engine`, ¿`pnpm --filter @repo/pricing-engine test` está verde? Corregir un borde congelado exige mover su assert en el mismo commit (ADR-111).
 - [ ] **Funcionalidad verificada** — ¿Se probó que no se rompió nada?
 
 ---
@@ -439,6 +440,8 @@ Funciones principales:
 - `calculateScenarioTotals` — totales de escenario (gravado, no gravado, IVA, total, margen global)
 
 Consumidores: en `apps/web`, named imports directos de `@repo/pricing-engine` (hooks de escenarios, builder, cálculos, export a Excel) más el barrel web-only de `lib/pricing-engine.ts`; en `apps/api`, `src/external/external-proposals.service.ts` (cálculo server-side, ADR-053).
+
+**Tests (ADR-111):** el paquete tiene suite propia de caracterización con Vitest — `src/index.spec.ts` (67 unitarios de las funciones hoja) y `src/scenarios.spec.ts` (17 goldens de escenario con invariantes de coherencia entre las dos funciones compuestas), 84 tests co-locados en `src/`. La suite es fotografía del comportamiento actual: los bordes sin guard (backlog H3 del ADR-111) están congelados como caracterizaciones, y corregir uno exige mover su assert a propósito en el mismo commit. Split gate/build del paquete: el gate de tipos es `packages/pricing-engine/tsconfig.json` (ve los specs); el build compila con `tsconfig.build.json` (los excluye). La regla del api (ADR-071) se extiende al paquete: el gate NUNCA es `tsconfig.build.json`. Gate de cierre: `pnpm --filter @repo/pricing-engine test`, que además corre en `ci.yml` y `pr-check.yml` antes del step de Jest.
 
 ---
 
