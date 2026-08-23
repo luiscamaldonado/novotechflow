@@ -261,12 +261,11 @@ Componentes ya establecidos:
 ### C. CONSTANTES CENTRALIZADAS
 
 Magic numbers y strings centralizados en `lib/constants.ts`:
-- `IVA_RATE`, `MAYORISTA_FLETE_PCT`, `PROVEEDOR_MAYORISTA`
+- `MAYORISTA_FLETE_PCT`, `PROVEEDOR_MAYORISTA` — las tasas financieras como `IVA_RATE` viven en el engine (`@repo/pricing-engine`, §J y ADR-112), no en `lib/constants.ts`
 - `ITEM_TYPE_LABELS`, `SPEC_FIELDS_BY_ITEM_TYPE`
 - Constantes locales a un módulo se definen al inicio del archivo con JSDoc.
 
 Constantes ya establecidas en `lib/constants.ts`:
-- `IVA_RATE`, `MAX_MARGIN` (del pricing-engine)
 - `ITEM_TYPE_LABELS`, `SPEC_FIELDS_BY_ITEM_TYPE`
 - `PAGE_TYPE_LABELS`, `PAGE_TYPE_STYLES`, `VIRTUAL_TECH_SPEC_ID`, `VIRTUAL_ECONOMIC_ID`
 - `STATUS_CONFIG`, `ALL_STATUSES`, `PROJECTION_STATUSES`
