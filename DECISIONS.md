@@ -4881,3 +4881,59 @@ Hasta esta fecha, el chat de Claude.ai recibía el contexto del repo por dos ví
 ### Pendientes
 
 - Push de los dos commits a `master` (lo hace Luis) y primer "Sync now" post-push, que estrena el flujo nuevo con este mismo ADR.
+
+## ADR-111 — Suite de caracterización del pricing-engine: Vitest, split gate/build del paquete y backlog H3 congelado
+
+**Fecha:** 2026-08-23
+**Estado:** Aceptado
+
+### Contexto
+
+`@repo/pricing-engine` es la fuente única de cálculo financiero (§J; ADR-052 recuperado en ADR-097) y no tenía suite de tests propia — deuda registrada en ADR-088 y reiterada en ADR-096, que condicionó la migración ESM de los paquetes a su existencia. Los 6 unit specs del api solo verifican toBeDefined(), y la validación de los cierres de seguridad de agosto (ADR-105 a 108) fue medición más navegador — frágil como método permanente.
+
+El reconocimiento del 2026-08-23 (leído del project knowledge sincronizado a 80d98d9 vía el conector de ADR-110 y verificado contra disco) estableció cuatro hallazgos. H1 — el IVA implementado en tres lugares: `IVA_RATE` del engine; copia independiente en `apps/web/src/lib/constants.ts` que consume `useProposalScenarios.ts` para el IVA por item mientras los totales del mismo escenario usan la del engine; y literal `19` en `exportExcel.ts`, que además calcula IVA sobre costo, un cálculo que el engine no expone. Con divergencia documental: CONVENTIONS §C bendice `IVA_RATE` como constante de web mientras §J prohíbe cálculo financiero fuera del engine. H2 — cero política de redondeo: dinero en floats IEEE-754 con divisiones en cadena; el redondeo queda implícito en cada capa de presentación. H3 — bordes sin guards (cantidad 0, márgenes ≥ 100 o negativos, strings no numéricos, pares de moneda desconocidos). H4 — sin tests ni infraestructura para tenerlos.
+
+### Decisión
+
+1. **Vitest dentro del paquete** (4.1.11, caret según convención del repo): TypeScript puro sin capa de transformación (nada de ts-jest ni fricción CJS), estándar del ecosistema Vite que ya usa web. Convive con Jest 30 del api, que ahí sí paga su config por Nest. Script `test: vitest run`, sin `vitest.config.ts` (autodescubrimiento de `*.spec.ts`), specs co-locados en `src/`.
+
+2. **Split gate/build en el paquete, patrón del api (ADR-071):** `tsconfig.json` queda como gate de tipos y VE los specs; `tsconfig.build.json` (nuevo) los excluye y es el project del build. Verificado con `tsc --listFiles` (el gate compila los specs, el build no) y con `dist/` sin rastro de specs. La regla del api se extiende al paquete: el gate es `tsconfig.json`, nunca `tsconfig.build.json`.
+
+3. **Suite de caracterización en dos capas — fotografía, no juicio.** `index.spec.ts`: 67 unitarios sobre las 12 funciones hoja más constantes, valores derivados a mano del JSDoc y verificados contra runtime antes de asertar. `scenarios.spec.ts`: 17 goldens sobre las dos compuestas con fixture mixto forma-DaaS (padre USD con hijo COP y TRM 4000, item exento, servicio diluido, item con `unitPriceOverride`; formas de producción, números inventados). Total: 84. Ningún borde se corrigió: cada comportamiento sorprendente quedó asertado tal cual con marca `caracterización:`; corregirlo será un cambio deliberado que mueva su assert a propósito.
+
+4. **Invariantes de coherencia asertados.** Las dos compuestas duplican el pipeline y hoy no divergen (igualdad exacta al bit, asserts con toBeCloseTo para tolerar reordenamientos correctos): Σ lineTotal de normales = subtotal; desglose gravado/no-gravado = beforeVat/nonTaxed; vat = beforeVat × IVA_RATE; total = subtotal + vat. La conservación de la dilución se cumple a nivel de COSTO (Σ dilutionPerUnit × quantity = totalDilutedCost; delta de totalCost exacto), NO de precio: la dilución sale marcada por el margen de cada item (invariante 3b), y un item con `unitPriceOverride` absorbe su parte como erosión de margen sin mover el precio (invariante 3c — en el fixture, el margen del item pactado cae de 33.33% a 31.31% con precio idéntico).
+
+5. **Golden H1:** el IVA del engine queda como testigo de la unificación futura — assert literal sobre el fixture y assert relacional `vat ≈ beforeVat × IVA_RATE` con `.not` contra `subtotal × IVA_RATE`.
+
+6. **CI:** step `Unit tests pricing-engine (Vitest)` en `ci.yml` y `pr-check.yml`, bloques byte-idénticos (lección de simetría de ADR-088), antes del step de Jest.
+
+### Consecuencias
+
+- El núcleo financiero queda con red: 84 tests corriendo en local y en ambos workflows. La condición de reevaluación ESM de ADR-096 queda habilitada, no ejecutada.
+- Backlog H3 documentado en 24 caracterizaciones congeladas. Las de mayor riesgo de negocio: `resolveMargin('') → 0` (un campo de margen borrado cotiza a costo, mientras uno no tocado cae al base — la UI sugiere lo contrario); cadena NaN sin cortafuegos (`Number()` sin validar en resolveMargin y el guard de calculateUnitPrice no atrapa NaN); cantidad 0 → Infinity o NaN según haya hijos; convertCost con par desconocido o TRM NaN → costo intacto en silencio; `unitPriceOverride` sobre item diluido descartado; escenario 100% diluido → el costo desaparece de los totales; margen ≥ 100 → línea a $0 sin error; flete, cantidad y margen negativos sin guard. Ninguno se corrigió en esta fase.
+- H1 (IVA) y H2 (redondeo) siguen abiertos con fase propia.
+- Convive un segundo framework de test en el repo (Vitest en packages/, Jest en el api). Costo aceptado a cambio de cero configuración.
+
+### Archivos
+
+- `packages/pricing-engine/package.json` — scripts test/build, devDep vitest
+- `packages/pricing-engine/tsconfig.build.json` (nuevo)
+- `packages/pricing-engine/src/index.spec.ts` (nuevo, 67 tests)
+- `packages/pricing-engine/src/scenarios.spec.ts` (nuevo, 17 tests)
+- `.github/workflows/ci.yml`, `.github/workflows/pr-check.yml`
+- `pnpm-lock.yaml`
+
+### Commits
+
+- `3160a5b` — test(pricing-engine): scaffold vitest infrastructure with smoke spec
+- `ba7e062` — test(pricing-engine): characterization unit suite for pure calculation functions
+- `b9c2bea` — test(pricing-engine): golden scenario suite for composite functions
+- `594cb77` — ci: run pricing-engine test suite in both workflows
+
+### Pendientes
+
+- Merge de `feature/pricing-engine-tests` a `master` y push (Luis). El primer push valida el cableado de CI y redeploya los tres servicios (`packages/**` está en los watch paths de los tres, ADR-098).
+- Test de imagen local desde `git archive HEAD` antes del push: el build de los Dockerfiles ahora corre `tsc -p tsconfig.build.json` en el paquete.
+- Propagación documental del cierre: CONVENTIONS §J y AGENTS.md (el paquete tiene suite y split gate/build; gate `pnpm --filter @repo/pricing-engine test` en el checklist), skill novotechflow e instrucciones del proyecto.
+- Fase H1: unificación del IVA en el engine — exponer el IVA sobre costo que necesita el Excel, retirar la copia de `constants.ts` y el literal de `exportExcel.ts`, cerrar la divergencia CONVENTIONS §C vs §J. ADR propio.
+- Backlog H3: adjudicar una a una las 24 caracterizaciones (corregir o aceptar), cada fix con su test movido a propósito.
