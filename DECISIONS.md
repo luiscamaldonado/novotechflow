@@ -4838,3 +4838,46 @@ Cerrados por la verificacion, para que no se reabran:
 - `manualAmount` si es editable despues de crear la propuesta, desde el builder (`ProposalItemsBuilder.tsx`), no solo en el formulario de creacion.
 - El seed local crea un unico usuario (`admin@novotechno.com` / `admin123` / ADM), que es exactamente lo que documenta `CONVENTIONS.md` §G.
 - El e2e sin gate en CI y el `app.close()` faltante ya estaban registrados (ADR-071, ADR-088, arrastrado a ADR-091). Hecho mecanico que faltaba documentar: el Jest del api usa `rootDir: "src"` y `testRegex: ".*\.spec\.ts$"`, y el spec e2e vive en `apps/api/test/`, fuera de ese rootDir; por eso `pnpm --filter api test` nunca lo ejecuta.
+
+## ADR-110 — El repo se conecta al project knowledge de Claude.ai vía el conector de GitHub; los tres .md de raíz dejan de subirse como attachments
+
+**Fecha:** 2026-08-23
+**Estado:** Aceptado
+
+### Contexto
+
+Hasta esta fecha, el chat de Claude.ai recibía el contexto del repo por dos vías manuales: los tres `.md` de raíz (`CONVENTIONS.md`, `DECISIONS.md`, `INSTRUCTIVO_CLAUDE.md`) como attachments que Luis re-subía del disco tras cada push, y el código solo a través de prompts de lectura ejecutados por Claude Code. El costo era doble: cada fase de reconocimiento de solo lectura consumía un ciclo completo prompt → ejecución → pegado, y la re-subida manual de los `.md` era una fuente recurrente de divergencia entre el disco y el contexto del chat (pendiente repetido en varios ADR: "re-subir INSTRUCTIVO_CLAUDE.md y DECISIONS.md a los attachments tras el push").
+
+### Decisión
+
+1. **Conector de GitHub activado** sobre `luiscamaldonado/novotechflow` (rama `master`) en el project knowledge del proyecto de Claude.ai, con alcance quirúrgico y no repo completo: `packages/` completo, `apps/api/src/`, `apps/web/src/`, `apps/api/prisma/` (schema, migraciones, seed, `prisma.config.ts`), ambos Dockerfiles, `nginx.conf`, `vite.config.ts`, `index.html`, los tsconfig de ambas apps, los tres `package.json`, la configuración de raíz (`pnpm-workspace.yaml`, `turbo.json`, `.gitattributes`), `.github/workflows/`, `docker-compose.yml` y los tres `.md` de raíz. Excluidos: `AGENTS.md` (byte-idéntico a `CONVENTIONS.md`), `pnpm-lock.yaml` y todo `backups/`. Capacidad usada: ~44%.
+
+2. **Los tres `.md` de raíz dejan de subirse como attachments manuales.** Llegan al project knowledge por el conector; el paso de re-subida desaparece del flujo. Los archivos exclusivos de Claude.ai (instrucciones del proyecto, skills, estilos) siguen entregándose como `.md` completo para reemplazo en settings, porque no viven en el repo.
+
+3. **Regla de precedencia: el conector es referencia, no verdad.** Refleja el estado del último push a `master`, así que siempre va por detrás del working tree local. Ante cualquier dato que pueda haber cambiado, Claude Code confirma contra el disco — gana el disco. Es la extensión natural de la regla madre de §3 del instructivo a esta nueva fuente de contexto.
+
+4. **Paso nuevo de cierre: "Sync now" tras cada push.** Luis sincroniza el conector después de pushear para que el project knowledge refleje el estado nuevo del repo. Además, antes de cada sesión de análisis sobre el código conectado, Luis da "Sync now"; si el chat sospecha que su copia está desactualizada (Luis reporta un commit que el chat no ve), pide el Sync en vez de razonar sobre la versión vieja.
+
+### Consecuencias
+
+- La fase de reconocimiento de solo lectura del chat se abarata: consultas sobre el código que antes costaban un ciclo completo de Claude Code ahora se resuelven directo contra el project knowledge, reservando a Claude Code la confirmación contra disco cuando el dato pueda haber cambiado.
+- Se elimina la fuente de divergencia de la re-subida manual de los `.md`: attachment y disco ya no pueden decir cosas distintas, porque el attachment dejó de existir.
+- Riesgo aceptado: la brecha entre el working tree local y el conector se vuelve invisible para el chat (antes era explícita: el chat sabía que no veía el código). La mitigación es la regla de precedencia del punto 3 y el Sync del punto 4, propagadas a todas las capas.
+- Propagación completada en el mismo cierre: instrucciones del proyecto en Claude.ai (bloque "Repo conectado por GitHub" en §1, regla de entrega en §4, ítem en §8, paso de Sync en §9; reemplazadas por Luis en settings), e `INSTRUCTIVO_CLAUDE.md` (bloque en §3 y bullet de Sync en §8, commit `63c886b`). Verificado que el skill `novotechflow` no menciona el flujo de attachments, así que no requirió cambio. `CONVENTIONS.md` tampoco lo menciona (verificado con búsqueda).
+- La verificación de mojibake de `INSTRUCTIVO_CLAUDE.md` tiene un falso positivo permanente: la línea de §4.4 cita los patrones de mojibake como ejemplos literales. Criterio para ese archivo: exactamente 1 match y es ese. Este ADR describe el caso sin reproducir las secuencias, para que el gate de `DECISIONS.md` se mantenga en cero matches.
+
+### Archivos
+
+- `INSTRUCTIVO_CLAUDE.md` — bloque "Repo conectado por GitHub" al final de §3; bullet "Sync del conector tras el push" al final de §8
+- Instrucciones del proyecto en Claude.ai (fuera de git) — actualizadas por Luis en settings
+- Configuración del proyecto en Claude.ai (fuera de git) — conector de GitHub activado, attachments de los tres `.md` retirados
+- `DECISIONS.md` — este ADR
+
+### Commits
+
+- `63c886b` — docs: document github connector as post-push reference and sync-now closing step
+- El commit docs de este ADR
+
+### Pendientes
+
+- Push de los dos commits a `master` (lo hace Luis) y primer "Sync now" post-push, que estrena el flujo nuevo con este mismo ADR.
