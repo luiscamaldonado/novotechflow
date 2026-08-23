@@ -52,6 +52,8 @@ Para cualquiera de estos, Claude **confirma contra el código o el archivo real*
 
 > Lección registrada: en una sesión Claude asumió que el último ADR era el 033; en realidad ya existían el 034 y el 035. El ADR nuevo y tres mensajes de commit quedaron mal numerados. El chequeo de "confirma el último ADR contra el disco antes de redactar" lo habría evitado.
 
+**Repo conectado por GitHub (project knowledge de Claude.ai).** El proyecto de Claude.ai tiene conectado este repo (rama `master`) vía el conector de GitHub: código, configuración y los tres `.md` de raíz (`CONVENTIONS.md`, `DECISIONS.md`, `INSTRUCTIVO_CLAUDE.md`) llegan al contexto del chat por ahí, y ya no se suben como attachments manuales. El conector refleja el estado del **último push a `master`**, así que siempre va por detrás del working tree local: es **referencia, no verdad** — ante cualquier dato que pueda haber cambiado, Claude Code confirma contra el disco (gana el disco). Antes de cada sesión de análisis sobre el código conectado, Luis le da "Sync now" al conector; si el chat sospecha que su copia está desactualizada (p. ej. Luis reporta un commit que el chat no ve), pide el Sync en vez de razonar sobre la versión vieja.
+
 ---
 
 ## 4. Protocolo de ADR (el núcleo)
@@ -214,6 +216,7 @@ Reglas operativas asociadas:
 - **`git status` antes de `git add`.** Adds con **rutas explícitas**, nunca `git add .`.
 - **El `push` a `master` lo hace Luis, no Claude Code.** Solo después de que Luis **verificó la funcionalidad en local**, y Claude debe **preguntarle si es el momento** (puede haber usuarios trabajando en producción). El push dispara `migrate deploy` automático en Railway (api y web son **servicios separados**); se revisa el log de ambos.
 - Antes de cerrar una tarea grande, Claude recuerda: (1) `tsc --noEmit` en web y api, (2) commit atómico, (3) ADR si fue decisión arquitectónica, (4) confirmar el push.
+- **Sync del conector tras el push.** Tras el push de Luis, darle "Sync now" al conector de GitHub del proyecto de Claude.ai, para que el project knowledge del chat refleje el estado nuevo del repo (incluidos `DECISIONS.md` e `INSTRUCTIVO_CLAUDE.md`, que ya no se re-suben a mano como attachments).
 
 ---
 
