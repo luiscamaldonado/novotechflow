@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
     IVA_RATE,
     MAX_MARGIN,
+    applyIva,
     calculateBaseLandedCost,
     calculateChildrenCostPerUnit,
     calculateDilutionPerUnit,
     calculateEffectiveLandedCost,
+    calculateIvaAmount,
     calculateLineTotal,
     calculateMarginFromPrice,
     calculateParentLandedCost,
@@ -18,7 +20,8 @@ import {
 import type { PricingScenarioItem } from './index';
 
 // ──────────────────────────────────────────────────────────
-// Suite de CARACTERIZACIÓN de las 12 funciones hoja.
+// Suite de CARACTERIZACIÓN de las 12 funciones hoja originales. El bloque H1
+// del final del archivo NO es caracterización: ver su propia cabecera.
 //
 // Rutas normales: el valor esperado se deriva a mano de la fórmula del JSDoc,
 // con la aritmética en un comentario, para que el test codifique la regla de
@@ -518,5 +521,95 @@ describe('calculateMarginFromPrice', () => {
     it('returns a 100% margin when the cost is 0', () => {
         // ((100 - 0) / 100) x 100 = 100
         expect(calculateMarginFromPrice(100, 0)).toBe(100);
+    });
+});
+
+// ──────────────────────────────────────────────────────────
+// Bloque H1 — tests de ESPECIFICACIÓN de los dos helpers de IVA.
+//
+// A diferencia del resto del archivo, estos NO son caracterización: fijan el
+// contrato que los puntos de IVA del repo (el engine, el hook de escenarios de
+// web y exportExcel) deben cumplir cuando se reapunten al engine. Cada valor se
+// derivó a mano de la fórmula y se verificó contra runtime antes de asertar.
+// ──────────────────────────────────────────────────────────
+
+describe('calculateIvaAmount', () => {
+    it('applies IVA_RATE to a positive taxable base', () => {
+        // 1000 x 0.19 = 190. Exacto: el producto cae justo en un entero
+        // representable, sin ruido que absorber.
+        expect(calculateIvaAmount(1000, true)).toBe(190);
+    });
+
+    it('applies IVA_RATE to a decimal taxable base', () => {
+        // 4567.89 x 0.19 = 867.8991
+        // El runtime devuelve 867.8991000000001; la diferencia (~1.1e-13) es
+        // ruido IEEE 754 del producto, no una tarifa distinta.
+        expect(calculateIvaAmount(4567.89, true)).toBeCloseTo(867.8991, 10);
+    });
+
+    it('returns exactly 0 when the base is not taxable', () => {
+        // La rama no gravada no multiplica: devuelve el literal 0.
+        expect(calculateIvaAmount(1000, false)).toBe(0);
+    });
+
+    it('returns 0 for a base of 0', () => {
+        expect(calculateIvaAmount(0, true)).toBe(0);
+        expect(calculateIvaAmount(0, false)).toBe(0);
+    });
+
+    it('passes the sign through for a negative taxable base', () => {
+        // -1234.56 x 0.19 = -234.5664
+        // Especificado, no accidental: no hay guard de signo. Una base negativa
+        // (nota crédito, ajuste) produce IVA negativo por el mismo camino.
+        expect(calculateIvaAmount(-1234.56, true)).toBeCloseTo(-234.5664, 10);
+    });
+});
+
+describe('applyIva', () => {
+    it('scales a positive taxable base by 1 + IVA_RATE', () => {
+        // 1000 x 1.19 = 1190. Exacto: 1 + 0.19 da el double de 1.19 y el
+        // producto por 1000 cae en un entero representable.
+        expect(applyIva(1000, true)).toBe(1190);
+    });
+
+    it('scales a decimal taxable base by 1 + IVA_RATE', () => {
+        // 1234.56 x 1.19 = 1469.1264
+        // El runtime devuelve 1469.1263999999999: ruido IEEE 754 (~2.3e-13).
+        expect(applyIva(1234.56, true)).toBeCloseTo(1469.1264, 10);
+    });
+
+    it('returns the base untouched when it is not taxable', () => {
+        // La rama no gravada devuelve el mismo número: sin multiplicación,
+        // sin redondeo, sin ruido. Por eso el assert es exacto.
+        expect(applyIva(1234.56, false)).toBe(1234.56);
+        expect(applyIva(1000, false)).toBe(1000);
+    });
+
+    it('returns 0 for a base of 0', () => {
+        expect(applyIva(0, true)).toBe(0);
+        expect(applyIva(0, false)).toBe(0);
+    });
+});
+
+describe('IVA helpers coherence', () => {
+    it('applyIva equals the base plus its calculateIvaAmount', () => {
+        // Invariante que amarra las dos funciones: aplicar el IVA y sumarlo son
+        // el mismo cálculo. b = 4567.89, decimal no trivial cuyo IVA sí arrastra
+        // ruido (867.8991000000001), así que el invariante no se apoya en un
+        // caso limpio.
+        const base = 4567.89;
+        expect(applyIva(base, true)).toBeCloseTo(
+            base + calculateIvaAmount(base, true),
+            10,
+        );
+    });
+
+    it('the amount over the base is IVA_RATE', () => {
+        // Coherencia con la constante del engine: el helper no introduce una
+        // tarifa propia. Todo reapunte de H1 (exportExcel escribe hoy 19 a mano,
+        // constants.ts de web declara su propio 0.19) tiene que caer en este
+        // mismo cociente.
+        const base = 4567.89;
+        expect(calculateIvaAmount(base, true) / base).toBeCloseTo(IVA_RATE, 10);
     });
 });

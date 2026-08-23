@@ -194,6 +194,20 @@ export function calculateMarginFromPrice(
     return ((unitPrice - effectiveLandedCost) / unitPrice) * 100;
 }
 
+/**
+ * IVA amount for a base amount: base x IVA_RATE if taxable, 0 otherwise.
+ */
+export function calculateIvaAmount(base: number, isTaxable: boolean): number {
+    return isTaxable ? base * IVA_RATE : 0;
+}
+
+/**
+ * Amount with IVA applied: base x (1 + IVA_RATE) if taxable, base otherwise.
+ */
+export function applyIva(base: number, isTaxable: boolean): number {
+    return isTaxable ? base * (1 + IVA_RATE) : base;
+}
+
 // ── Display values for a single item ─────────────────────
 
 export interface ItemDisplayValues {
