@@ -10,9 +10,6 @@ import {
 } from 'lucide-react';
 import type { ProposalStatus, SpecFieldDef } from './types';
 
-/** Tasa de IVA colombiano (19%). */
-export const IVA_RATE = 0.19;
-
 /** Porcentaje de flete para proveedores mayoristas. */
 export const MAYORISTA_FLETE_PCT = 1.5;
 

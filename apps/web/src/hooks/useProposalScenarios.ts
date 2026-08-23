@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
-import { IVA_RATE } from '../lib/constants';
-import { calculateItemDisplayValues, calculateScenarioTotals } from '@repo/pricing-engine';
+import { calculateItemDisplayValues, calculateIvaAmount, calculateScenarioTotals } from '@repo/pricing-engine';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -86,7 +85,7 @@ function processScenario(scenario: ScenarioData): ProcessedScenario {
             si, allItems, scenario.currency, scenario.conversionTrm,
         );
         const subtotalBeforeVat = display.lineTotal;
-        const ivaAmount = si.item.isTaxable ? subtotalBeforeVat * IVA_RATE : 0;
+        const ivaAmount = calculateIvaAmount(subtotalBeforeVat, si.item.isTaxable);
         visibleItems.push({
             scenarioItem: si,
             unitSalePrice: display.unitPrice,

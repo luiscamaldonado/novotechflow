@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver';
 import type { Scenario, ProposalCalcItem } from '../hooks/useScenarios';
 import { ITEM_TYPE_LABELS, EXCEL_SHEET_NAME_MAX_LENGTH, EXCEL_SHEET_NAME_FORBIDDEN_CHARS } from './constants';
 import { buildExcelQuickSpecs } from '@repo/item-display';
-import { calculateItemDisplayValues } from '@repo/pricing-engine';
+import { IVA_RATE, applyIva, calculateItemDisplayValues } from '@repo/pricing-engine';
 
 // ── Types ──────────────────────────────────────────────
 interface ExportOptions {
@@ -187,12 +187,11 @@ export async function exportToExcel(opts: ExportOptions) {
                 // ── Delegate all cost calculations to pricing engine ──
                 const dv = calculateItemDisplayValues(si, scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
 
-                const ivaPct = item.isTaxable ? 19 : 0;
-                const ivaMultiplier = 1 + ivaPct / 100;
+                const ivaPct = item.isTaxable ? Math.round(IVA_RATE * 100) : 0;
                 const subtotalCost = dv.effectiveLandedCost * si.quantity;
-                const totalCostConIva = subtotalCost * ivaMultiplier;
+                const totalCostConIva = applyIva(subtotalCost, item.isTaxable);
                 const subtotalVenta = dv.unitPrice * si.quantity;
-                const totalVentaConIva = subtotalVenta * ivaMultiplier;
+                const totalVentaConIva = applyIva(subtotalVenta, item.isTaxable);
 
                 // Source data from ITEMS_ARCHITECT
                 const specs = piFromArchitect?.technicalSpecs || item.technicalSpecs;
