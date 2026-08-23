@@ -4937,3 +4937,46 @@ El reconocimiento del 2026-08-23 (leído del project knowledge sincronizado a 80
 - Propagación documental del cierre: CONVENTIONS §J y AGENTS.md (el paquete tiene suite y split gate/build; gate `pnpm --filter @repo/pricing-engine test` en el checklist), skill novotechflow e instrucciones del proyecto.
 - Fase H1: unificación del IVA en el engine — exponer el IVA sobre costo que necesita el Excel, retirar la copia de `constants.ts` y el literal de `exportExcel.ts`, cerrar la divergencia CONVENTIONS §C vs §J. ADR propio.
 - Backlog H3: adjudicar una a una las 24 caracterizaciones (corregir o aceptar), cada fix con su test movido a propósito.
+
+## ADR-112 — Unificación del IVA en el pricing-engine: helpers calculateIvaAmount/applyIva, retiro de la copia de web y del literal del Excel
+
+**Fecha:** 2026-08-23
+**Estado:** Aceptado
+
+### Contexto
+
+El reconocimiento del 2026-08-23 (registrado en ADR-111 como H1) estableció que el IVA estaba implementado en tres lugares: `IVA_RATE` del engine, usado por `calculateScenarioTotals`; una copia independiente en `apps/web/src/lib/constants.ts`, consumida por `useProposalScenarios.ts` para el IVA por ítem mientras los totales del mismo escenario usaban la del engine; y un literal `19` en `exportExcel.ts` con `ivaMultiplier` propio, aplicado además sobre costo (`totalCostConIva`), un cálculo que el engine no exponía. Con divergencia documental: CONVENTIONS §C bendecía `IVA_RATE` como constante de web mientras §J prohíbe cálculo financiero fuera del engine. Un cambio de tarifa exigía tocar tres sitios; olvidar uno significaba entregar al cliente un Excel con totales distintos a los de la app. El recon barrió también las formas inversas (extraer IVA de un precio que lo incluye): no existen en el repo. `apps/api` no calcula IVA — propaga `isTaxable` y su `vat` server-side sale de `calculateScenarioTotals`.
+
+### Decisión
+
+1. Dos helpers puros nuevos en el engine, con tests de especificación (comportamiento definido por diseño, no caracterización; 11 tests, suite a 95): `calculateIvaAmount(base, isTaxable)` = base × IVA_RATE si gravado, 0 si no; `applyIva(base, isTaxable)` = base × (1 + IVA_RATE) si gravado, base intacta si no. Agnósticos de la base: cubren IVA sobre venta y sobre costo. `calculateScenarioTotals` quedó intacto y su golden de ADR-111 no se movió.
+2. Reapunte de los tres consumidores: `useProposalScenarios.ts` (IVA por ítem → `calculateIvaAmount`); `exportExcel.ts` (`ivaMultiplier` eliminado, `totalCostConIva`/`totalVentaConIva` → `applyIva`, y `ivaPct` reducido a display puro derivado del engine con `Math.round(IVA_RATE * 100)` — el round es blindaje para tarifas futuras con ruido flotante; hoy 0.19 × 100 = 19 exacto); y retiro de la constante `IVA_RATE` de `apps/web/src/lib/constants.ts`.
+3. Equivalencia verificada ANTES de tocar: `(1 + 19/100) === (1 + IVA_RATE)` es el mismo double al bit (0ad7a3703d0af33f), y el reemplazo funcional se probó sobre 8 bases × 2 ramas de `isTaxable` con igualdad estricta en los 16 casos. El refactor es behavior-preserving al bit; verificado además en navegador por Luis (escenario mixto gravado/no gravado, Excel exportado idéntico al centavo, vista de documento correcta).
+4. Cierre de la divergencia documental: `IVA_RATE` sale de la lista de constantes de CONVENTIONS §C, junto con el bullet fósil que aún listaba `IVA_RATE` y `MAX_MARGIN` como constantes de web (ambas viven en el engine desde ADR-052); las tasas financieras viven en el engine (§J).
+
+### Consecuencias
+
+- Una sola declaración de `IVA_RATE` en el repo (`packages/pricing-engine/src/index.ts`) y cero literales `0.19` en `apps/web/src`. Cambiar la tarifa es tocar un solo sitio de cálculo.
+- Deuda consciente registrada, NO tocada en esta fase: 6 sitios de display con `19` hardcodeado como texto (encabezado/celda/rótulo de `EconomicProposalTable`, `TechnicalSpecSheet`, `ScenarioItemRow`, opciones del select de `ProposalItemsBuilder`, `TECH_SHEET_TAXABLE_TEXT` de `exportProposalExcel`; la celda de `exportExcel` ya quedó derivada). No calculan, pero si la tarifa cambiara, mentirían: el inventario completo quedó en el recon de esta sesión. Criterio: formato, no cálculo — se derivan de `IVA_RATE` o se actualizan cuando una fase de UI lo justifique.
+- H2 (política de redondeo: dinero en floats IEEE-754 sin redondeo definido) sigue abierto con fase propia — es decisión de negocio, no refactor.
+
+### Archivos
+
+- `packages/pricing-engine/src/index.ts` — `calculateIvaAmount`, `applyIva`
+- `packages/pricing-engine/src/index.spec.ts` — bloque H1 de especificación (11 tests)
+- `apps/web/src/hooks/useProposalScenarios.ts`, `apps/web/src/lib/exportExcel.ts`, `apps/web/src/lib/constants.ts`
+- `CONVENTIONS.md` §C, `AGENTS.md`
+
+### Commits
+
+- `25de173` — feat(pricing-engine): iva helpers for unified tax calculation
+- `4ff3a6d` — refactor(web): route all iva calculation through pricing-engine helpers
+- `8ed6f19` — docs(conventions): iva rate ownership moves to pricing-engine section
+
+### Pendientes
+
+- Merge de `feature/pricing-iva-unification` a `master` y push (Luis). El push valida CI y redeploya los tres servicios (`packages/**` en los watch paths, ADR-098).
+- Actualizar el skill `novotechflow` en Claude.ai (el párrafo de Pricing Engine que lista H1 como pendiente): lo entrega el chat como `.md` completo, lo reemplaza Luis en settings.
+- Deuda de display de tarifa (6 sitios) — consciente, sin reloj.
+- H2 — política de redondeo, fase propia.
+- Cola fría existente: `"files": ["dist"]` + reevaluación ESM (ADR-096/111), candidatas a cohorte conjunta.
