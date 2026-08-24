@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { ProposalItem, ProposalDetail, TechnicalSpecs } from '../../lib/types';
-import { ITEM_TYPE_LABELS, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, PROVEEDOR_OPTIONS, PROVEEDOR_NOVOTECHNO, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY, QUICK_SPEC_FIELDS_BY_ITEM_TYPE, SPEC_FIELDS_BY_ITEM_TYPE } from '../../lib/constants';
+import { ITEM_TYPE_LABELS, formatMoney, MAYORISTA_FLETE_PCT, PROVEEDOR_MAYORISTA, PROVEEDOR_OPTIONS, PROVEEDOR_NOVOTECHNO, BATTERY_WARRANTY_FORMAT, DEFAULT_BATTERY_WARRANTY, QUICK_SPEC_FIELDS_BY_ITEM_TYPE, SPEC_FIELDS_BY_ITEM_TYPE } from '../../lib/constants';
 import { MAX_MARGIN, calculateParentLandedCost, calculateUnitPrice, calculateMarginFromPrice } from '@repo/pricing-engine';
 import SpecFieldsSection from '../../components/proposals/SpecFieldsSection';
 import PrefillModal from './components/PrefillModal';
@@ -544,7 +544,8 @@ export default function ProposalItemsBuilder() {
                                                         const cost = Number(itemForm.unitCost || 0);
                                                         const flete = Number(itemForm.internalCosts?.fletePct || 0);
                                                         const nuevoCosto = calculateParentLandedCost(cost, flete);
-                                                        return nuevoCosto > 0 ? `$${nuevoCosto.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0.00';
+                                                        const cur = itemForm.costCurrency || 'COP';
+                                                        return formatMoney(nuevoCosto > 0 ? nuevoCosto : 0, cur);
                                                     })()}
                                                 </div>
                                             </div>
@@ -683,7 +684,7 @@ export default function ProposalItemsBuilder() {
                                                             ? 'bg-indigo-100 text-indigo-600'
                                                             : 'bg-slate-100 text-slate-500'
                                                     }`}>{i.costCurrency || 'COP'}</span>
-                                                    <span className="font-mono text-[13px] text-slate-400 tracking-tighter">${calculateParentLandedCost(Number(i.unitCost), Number(i.internalCosts?.fletePct || 0)).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    <span className="font-mono text-[13px] text-slate-400 tracking-tighter">{formatMoney(calculateParentLandedCost(Number(i.unitCost), Number(i.internalCosts?.fletePct || 0)), i.costCurrency || 'COP')}</span>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-8 text-center">

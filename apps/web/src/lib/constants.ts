@@ -186,14 +186,25 @@ export const ACQUISITION_CONFIG: Record<string, { label: string; bg: string; tex
     DAAS:  { label: 'DaaS',  bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
 };
 
+/** Formatea dinero según la política de redondeo (ADR-113): es-CO,
+ *  COP sin decimales, resto con 2. Normaliza -0. */
+export function formatMoney(value: number, currency: string): string {
+    const v = value === 0 ? 0 : value;
+    const decimals = currency === 'COP' ? 0 : 2;
+    return '$' + v.toLocaleString('es-CO', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    });
+}
+
 /** Format a number as Colombian Pesos (COP). */
 export function formatCOP(value: number): string {
-    return '$' + value.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return formatMoney(value, 'COP');
 }
 
 /** Format a number as US Dollars (USD). */
 export function formatUSD(value: number): string {
-    return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return formatMoney(value, 'USD');
 }
 
 /** TRM public API endpoint (Colombian Central Bank rate). */

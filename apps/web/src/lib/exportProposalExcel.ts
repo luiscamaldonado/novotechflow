@@ -33,7 +33,9 @@ const SHEET_TECH = 'Ficha Técnica';
 const SHEET_PRICES = 'Precios de Venta';
 
 // ── Excel currency formats ──────────────────────────────────
-const COP_NUM_FMT = '"$"#,##0.00';
+// Politica de redondeo (ADR-113): COP sin decimales (pesos enteros), USD con
+// centavos. Se conserva el prefijo de moneda de cada formato.
+const COP_NUM_FMT = '"$"#,##0';
 const USD_NUM_FMT = '"USD $"#,##0.00';
 
 // ── Filename prefix ─────────────────────────────────────────

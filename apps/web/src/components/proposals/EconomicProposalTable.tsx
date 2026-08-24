@@ -1,3 +1,4 @@
+import { formatMoney } from '../../lib/constants';
 import { buildQuickDescription, getUnitOfMeasure } from '../../lib/itemDescription';
 import type { ProcessedScenario } from '../../hooks/useProposalScenarios';
 import type { EconomicPageSlice } from '../../lib/paginateEconomicProposal';
@@ -11,12 +12,13 @@ interface EconomicProposalTableProps {
     slice: EconomicPageSlice;
 }
 
-/** Formats a number as Colombian currency */
+/** Formats a number as currency, delegating decimals to the rounding policy
+ *  (ADR-113): COP sin decimales, USD con 2. Conserva el prefijo "USD ". */
 function formatCurrency(value: number, currency: string): string {
     if (currency === 'USD') {
-        return `USD $${value.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        return `USD ${formatMoney(value, currency)}`;
     }
-    return `$${value.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return formatMoney(value, currency);
 }
 
 /**

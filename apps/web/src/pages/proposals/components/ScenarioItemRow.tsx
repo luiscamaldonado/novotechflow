@@ -6,6 +6,7 @@ import { cn } from '../../../lib/utils';
 import type { ScenarioItem } from '../../../hooks/useScenarios';
 import type { ProposalCalcItem } from '../../../hooks/useScenarios';
 import { calculateItemDisplayValues, type ItemDisplayValues } from '@repo/pricing-engine';
+import { formatMoney } from '../../../lib/constants';
 import {
     formatNumberWithThousands,
     formatDecimalWithThousands,
@@ -247,7 +248,7 @@ export default function ScenarioItemRow({
                         Diluido
                     </span>
                 ) : (
-                    <>${ (unitPrice * si.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
+                    <>{formatMoney(unitPrice * si.quantity, scenarioCurrency)}</>
                 )}
             </td>
             <td className="px-4 py-6 text-center">
@@ -363,11 +364,11 @@ export default function ScenarioItemRow({
                                                 </div>
                                                 <div className="flex flex-col items-end">
                                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Costo Unit.</span>
-                                                    <span className="text-[11px] font-mono font-black text-emerald-600">${cLanded.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    <span className="text-[11px] font-mono font-black text-emerald-600">{formatMoney(cLanded, scenarioCurrency)}</span>
                                                 </div>
                                                 <div className="flex flex-col items-end">
                                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total</span>
-                                                    <span className="text-[11px] font-mono font-black text-violet-600">${(cLanded * child.quantity).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    <span className="text-[11px] font-mono font-black text-violet-600">{formatMoney(cLanded * child.quantity, scenarioCurrency)}</span>
                                                 </div>
                                                 {!isReadOnly && (
                                                     <button
@@ -387,7 +388,7 @@ export default function ScenarioItemRow({
                             {children.length > 0 && (
                                 <div className="flex justify-end pt-1">
                                     <span className="text-[9px] font-black text-violet-600 bg-violet-100 px-3 py-1 rounded-lg">
-                                        Costo oculto total: ${childrenCostPerUnit.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                                        Costo oculto total: {formatMoney(childrenCostPerUnit, scenarioCurrency)}
                                     </span>
                                 </div>
                             )}

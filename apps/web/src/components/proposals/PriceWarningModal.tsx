@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { AlertTriangle, X } from 'lucide-react';
+import { formatMoney } from '../../lib/constants';
 import type { ScenarioPriceWarnings, PriceWarning } from '../../lib/priceValidation';
 
 interface PriceWarningModalProps {
@@ -7,9 +8,10 @@ interface PriceWarningModalProps {
     onClose: () => void;
 }
 
-/** Formatea un número como moneda simple con separador de miles es-CO. */
+/** Formatea un monto delegando los decimales a la política de redondeo
+ *  (ADR-113). Conserva el prefijo de moneda que ya mostraba. */
 function formatAmount(value: number, currency: string): string {
-    return `${currency} ${value.toLocaleString('es-CO', { maximumFractionDigits: 2 })}`;
+    return `${currency} ${formatMoney(value, currency)}`;
 }
 
 /** Texto del motivo según el tipo de hallazgo. */

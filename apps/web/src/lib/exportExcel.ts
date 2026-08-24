@@ -80,6 +80,14 @@ export async function exportToExcel(opts: ExportOptions) {
         const sheetName = buildSheetName(scenario.name, usedSheetNames);
         const ws = wb.addWorksheet(sheetName);
 
+        // Moneda del escenario: TODO monto de calculateItemDisplayValues ya viene
+        // convertido a ella, asi que es la unica moneda de las columnas de dinero.
+        const saleCurrency = scenario.currency || 'COP';
+        // Politica de redondeo (ADR-113) en la celda: COP sin decimales (pesos
+        // enteros), cualquier otra moneda con centavos. Solo dinero: la TRM y los
+        // porcentajes conservan su propio formato.
+        const MONEY_NUM_FMT = saleCurrency === 'COP' ? '"$"#,##0' : '"$"#,##0.00';
+
         // ── Column widths ──
         ws.columns = [
             { width: 8 },   // A  - ITEM
@@ -186,10 +194,6 @@ export async function exportToExcel(opts: ExportOptions) {
 
                 // ── Delegate all cost calculations to pricing engine ──
                 const dv = calculateItemDisplayValues(si, scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
-                // Moneda del escenario: TODO monto de dv ya viene convertido a
-                // ella, asi que es la unica moneda de las columnas de dinero.
-                const saleCurrency = scenario.currency || 'COP';
-
                 const ivaPct = item.isTaxable ? Math.round(IVA_RATE * 100) : 0;
                 // Politica de redondeo (ADR-113): dv.effectiveLandedCost y
                 // dv.unitPrice ya llegan redondeados a la moneda del escenario,
@@ -252,7 +256,7 @@ export async function exportToExcel(opts: ExportOptions) {
                     // Numeric columns: right alignment + currency format
                     if ([9, 11, 12, 16, 17, 18].includes(colNumber)) {
                         cell.alignment = { vertical: 'middle', horizontal: 'right' };
-                        cell.numFmt = '"$"#,##0.00';
+                        cell.numFmt = MONEY_NUM_FMT;
                     }
                     // TRM Conversion column: right alignment + thousands format
                     if (colNumber === 14) {
@@ -309,7 +313,7 @@ export async function exportToExcel(opts: ExportOptions) {
             sumColumns.forEach(({ col, letter }) => {
                 const cell = sumRow.getCell(col);
                 cell.value = { formula: `SUM(${letter}${totalsStartRow}:${letter}${totalsEndRow})` };
-                cell.numFmt = '"$"#,##0.00';
+                cell.numFmt = MONEY_NUM_FMT;
                 cell.font = { bold: true, size: 11, color: { argb: col <= 12 ? AMBER_600 : EMERALD_600 } };
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col <= 12 ? 'FFFFFBEB' : EMERALD_50 } };
                 cell.alignment = { vertical: 'middle', horizontal: 'right' };
