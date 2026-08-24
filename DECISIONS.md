@@ -4980,3 +4980,55 @@ El reconocimiento del 2026-08-23 (registrado en ADR-111 como H1) estableció que
 - Deuda de display de tarifa (6 sitios) — consciente, sin reloj.
 - H2 — política de redondeo, fase propia.
 - Cola fría existente: `"files": ["dist"]` + reevaluación ESM (ADR-096/111), candidatas a cohorte conjunta.
+
+## ADR-113 — Política de redondeo del dinero: roundMoney en el engine, salidas redondeadas de las compuestas y formatter único en web
+
+**Fecha:** 2026-08-24
+**Estado:** Aceptado
+
+### Contexto
+
+H2 de ADR-111: el engine calculaba todo el dinero en floats IEEE-754 sin política de redondeo, y cada capa redondeaba (o no) por su cuenta. Estado medido antes de la fase: el documento económico mostraba COP y USD con 2 decimales; el dashboard, COP a peso entero y USD con separadores en-US mientras el documento usaba es-CO; el Excel cargaba el double crudo en las celdas (un cliente que hiciera clic veía 1469.1263999999999 en la barra de fórmulas y su SUM() podía no cuadrar contra el total impreso); y api-external entregaba floats completos. Cuatro decisiones de negocio tomadas por Luis (2026-08-24): la propuesta debe cuadrar a mano por el cliente; COP a peso entero y USD a centavo; el redondeo vive en el engine (opción A — la alternativa de redondear en cada frontera reintroduce el modo de falla de los tres IVAs de ADR-112); modo half-up comercial.
+
+### Decisión
+
+1. **`roundMoney(valor, moneda)` en el engine como política única** (half-up vía Math.round; COP factor 1, default 2 decimales), con especificación propia que documenta que la política redondea el double que existe, no el decimal ideal: 2.345 USD sube a 2.35 (su double cae por encima de la mitad) pero 1.005 USD baja a 1 (su double cae por debajo); 100.5 es el caso discriminante de half-up frente a half-even; roundMoney(-0.4, 'COP') produce -0, que el formatter normaliza.
+2. **Las hoja a precisión completa; las compuestas entregan dinero redondeado.** `calculateItemDisplayValues` y `calculateScenarioTotals` redondean todo campo de dinero a la moneda del escenario a la salida (default 'COP', el que ya usaban); los porcentajes (margin, globalMarginPct) quedan a precisión completa. La cadena impresa cuadra exacta: unitPrice redondeado × cantidad = lineTotal (asertado en las dos direcciones en el golden: 606 061 × 3 = 1 818 183, no roundMoney(606 060.606… × 3) = 1 818 182); Σ líneas = subtotal; vat = roundMoney(calculateIvaAmount(beforeVat)) — con lo que desapareció la última multiplicación directa de IVA_RATE fuera de los helpers de ADR-112; total = subtotal + vat. El override de precio también se redondea (1234.567 tecleado sale 1234.57) y displayMargin se recalcula sobre los valores redondeados que el usuario ve.
+3. **Propiedad demostrada, no concedida:** redondear precios no mueve el libro de costos — totalCost se acumula a precisión completa y la conservación de la dilución quedó EXACTA (toBe, no tolerancia). La deriva vive solo del lado del precio: invariante 3b con cota documentada ±3 pesos (medido +1.761); el modo de falla comercial de 3c (dilución sobre unitPriceOverride erosiona margen sin mover el precio) es idéntico con redondeo.
+4. **Concesión deliberada:** las columnas internas de costo (parentLandedCost, childrenCostPerUnit, baseLandedCost, dilutionPerUnit, effectiveLandedCost) se redondean a la salida y no en cadena — entre ellas puede haber deriva de ±1 peso, demostrada constructivamente en el golden (100.5 + 0.5: 101 + 1 ≠ 101) y ausente en el fixture real. Lo que cuadra exacto es la cadena que el cliente verifica.
+5. **Fronteras de web:** regla de frontera — los consumidores toman los valores del engine, nunca re-suman ni re-multiplican dinero (el hook ya cumplía; ScenarioItemRow re-multiplicaba en la vista y se reapuntó a displayValues.lineTotal). El ivaAmount informativo por item del hook pasa por roundMoney; el documento imprime el IVA del escenario (sobre la base gravada), no la suma de IVAs por línea. exportExcel redondea los cuatro montos derivados (applyIva siempre arrastra ruido ×1.19) y los numFmt van por moneda del escenario ('"$"#,##0' COP, '"$"#,##0.00' USD), conservando los símbolos existentes.
+6. **`formatMoney(valor, moneda)` en lib/constants.ts como formatter único de display** (formato, no cálculo — no viola §J): es-CO, COP 0 decimales, resto 2, normaliza -0. formatCOP/formatUSD quedan como wrappers (formatUSD cambió de en-US a es-CO: el dashboard pasa de 1,234.56 a 1.234,56); EconomicProposalTable, PriceWarningModal, ScenarioTotalsCards, ScenarioItemRow y ProposalItemsBuilder delegan en él. El único toLocaleString de dinero del repo vive dentro de formatMoney.
+7. **api-external sin tocar:** mapea display.unitPrice verbatim sin aritmética propia — Felipe recibe la política por transitividad. Cambio de valores por centavos con contrato intacto; aviso informativo a Felipe a cargo de Luis.
+
+### Consecuencias
+
+- Todo dinero visible (UI, PDF, Excel —valores de celda incluidos—, api-external) sale de la misma política; los goldens de ADR-111 se movieron a propósito en el mismo commit del cambio (regla de ADR-111) y los invariantes de coherencia subieron de tolerancia a igualdad exacta.
+- Los números visibles de propuestas existentes se desplazan pesos (COP) o centavos (USD) al re-renderizarse — nada se persiste (ADR-052), no hay migración.
+- Deuda registrada, no tocada: ScenarioItemRow línea por hijo re-multiplica cLanded × cantidad en la vista (el engine no expone lineTotal por hijo; formatMoney absorbe el ruido, sin bug visible — arreglarlo bien es ampliar la API del engine); ItemPickerModal formatea unitCost sin moneda en scope; los umbrales de PriceThresholdsSettings se imprimen como números sin símbolo.
+- La suite queda en dos naturalezas y tres bloques: caracterización (ADR-111), especificación de IVA (ADR-112) y especificación de redondeo (ADR-113).
+
+### Archivos
+
+- `packages/pricing-engine/src/index.ts` — roundMoney; puntos de redondeo en las dos compuestas
+- `packages/pricing-engine/src/index.spec.ts` — bloque H2 de especificación
+- `packages/pricing-engine/src/scenarios.spec.ts` — goldens movidos a propósito; USD_SCENARIO; invariantes 4/5/6
+- `apps/web/src/hooks/useProposalScenarios.ts`, `apps/web/src/lib/exportExcel.ts`, `apps/web/src/lib/exportProposalExcel.ts`, `apps/web/src/lib/constants.ts`
+- `apps/web/src/components/proposals/EconomicProposalTable.tsx`, `PriceWarningModal.tsx`, `ScenarioTotalsCards.tsx`
+- `apps/web/src/pages/proposals/components/ScenarioItemRow.tsx`, `apps/web/src/pages/proposals/ProposalItemsBuilder.tsx`
+- `CONVENTIONS.md` §J, `AGENTS.md`
+
+### Commits
+
+- `e40ea1f` — feat(pricing-engine): roundMoney helper as the single rounding policy
+- `a860246` — feat(pricing-engine): apply rounding policy at composite outputs
+- `96a614b` — refactor(web): route boundary money values through rounding policy
+- `0195cba` — refactor(web): unify money display formatting under rounding policy
+- `c853e5b` — refactor(web): display engine line total in scenario item row
+- `3815acd` — docs(conventions): money rounding policy in pricing-engine section
+
+### Pendientes
+
+- Verificación en navegador (Luis) con expectativas del golden: documento COP en pesos enteros con desplazamientos de pesos; Excel con celdas limpias en barra de fórmulas y SUM() cuadrando; dashboard USD con separadores es-CO. Luego test de imagen desde git archive, merge fast-forward y push.
+- Aviso informativo a Felipe: valores desplazados por centavos, contrato intacto.
+- Actualización del skill novotechflow y las instrucciones en Claude.ai (H2 cerrada): las entrega el chat como .md completos.
+- Deuda de vista: lineTotal por hijo (ampliar API del engine si algún día se justifica).
