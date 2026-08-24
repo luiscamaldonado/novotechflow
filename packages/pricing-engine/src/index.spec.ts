@@ -16,6 +16,7 @@ import {
     calculateUnitPrice,
     convertCost,
     resolveMargin,
+    roundMoney,
 } from './index';
 import type { PricingScenarioItem } from './index';
 
@@ -611,5 +612,168 @@ describe('IVA helpers coherence', () => {
         // mismo cociente.
         const base = 4567.89;
         expect(calculateIvaAmount(base, true) / base).toBeCloseTo(IVA_RATE, 10);
+    });
+});
+
+// ──────────────────────────────────────────────────────────
+// Bloque H2 — tests de ESPECIFICACIÓN de roundMoney.
+//
+// Como H1 y a diferencia del resto del archivo, NO son caracterización: fijan
+// por diseño la política ÚNICA de redondeo del sistema (ADR-113). Todo valor de
+// dinero que salga del engine o llegue a un documento debe pasar por aquí, así
+// que estos asserts son el contrato que los puntos de redondeo del repo tendrán
+// que cumplir cuando se reapunten.
+//
+// Regla: COP redondea a peso entero (factor 1); cualquier otra moneda, a
+// centavos (factor 100). Half-up en el sentido de Math.round: las mitades van
+// hacia +Infinity, lo que en negativos significa hacia cero.
+//
+// Cada valor se derivó contra runtime ANTES de asertar y la aritmética queda en
+// el comentario. Los asserts son toBe: cada resultado cae exactamente en el
+// double del literal decimal (146913 / 100 === 1469.13 es exacto), así que la
+// división final NO reintroduce ruido y no hace falta toBeCloseTo.
+// ──────────────────────────────────────────────────────────
+
+describe('roundMoney — COP (0 decimals)', () => {
+    it('rounds the golden scenario subtotal to whole pesos', () => {
+        // factor 1: Math.round(13 121 212.121212) = 13 121 212.
+        // Es el subtotal del golden de scenarios.spec (13_121_212.121212, hoy
+        // asertado con toBeCloseTo por su cola infinita), ahora en pesos
+        // enteros: la cola se va entera, no se propaga al documento.
+        expect(roundMoney(13121212.121212, 'COP')).toBe(13121212);
+    });
+
+    it('rounds halves up, not to even', () => {
+        // 100.5 es el caso que DISCRIMINA la política: half-up da 101,
+        // half-even (banker's rounding) daría 100 por ser el par más cercano.
+        expect(roundMoney(100.5, 'COP')).toBe(101);
+        // 101.5 -> 102 coincide bajo las dos reglas (102 ya es el par), así que
+        // el par de asserts junto fija Math.round y descarta half-even: si
+        // alguien cambiara la política a banker's, el primero caería.
+        expect(roundMoney(101.5, 'COP')).toBe(102);
+    });
+
+    it('rounds down below the half', () => {
+        // Math.round(99.4) = 99: por debajo de .5 no sube.
+        expect(roundMoney(99.4, 'COP')).toBe(99);
+    });
+
+    it('leaves whole pesos untouched', () => {
+        // factor 1 sobre un entero: Math.round es identidad y la división por 1
+        // no altera el double. Exacto, sin ruido: por eso toBe.
+        expect(roundMoney(13121212, 'COP')).toBe(13121212);
+        expect(roundMoney(1, 'COP')).toBe(1);
+        expect(roundMoney(-7, 'COP')).toBe(-7);
+    });
+});
+
+describe('roundMoney — USD (2 decimals)', () => {
+    it('absorbs the applyIva noise into cents', () => {
+        // Entrada = el output real de applyIva(1234.56, true) del bloque H1,
+        // que devuelve 1469.1263999999999 en vez de 1469.1264.
+        // 1469.1263999999999 x 100 = 146912.63999999998 -> Math.round = 146913
+        // -> / 100 = 1469.13 exacto. El ruido de ~2.3e-13 muere aquí.
+        expect(roundMoney(1469.1263999999999, 'USD')).toBe(1469.13);
+    });
+
+    it('absorbs the noise of a rounded price times a quantity', () => {
+        // 3.3899999999999997 es la forma en que IEEE 754 representa 1.13 x 3
+        // (precio ya redondeado x cantidad).
+        // x 100 = 338.99999999999994 -> Math.round = 339 -> / 100 = 3.39.
+        expect(roundMoney(3.3899999999999997, 'USD')).toBe(3.39);
+    });
+
+    it('rounds the double that exists, not the ideal decimal (2.345 goes up)', () => {
+        // ESPECIFICADO, no accidental: la política redondea EL DOUBLE QUE
+        // EXISTE, no el decimal ideal que el literal aparenta.
+        // El double más cercano a 2.345 está POR ENCIMA del decimal, y al
+        // multiplicar: 2.345 x 100 = 234.50000000000003 (verificado contra
+        // runtime), que está ARRIBA de la mitad -> Math.round = 235 -> 2.35.
+        // Aquí half-up y "el double real" empujan en la misma dirección.
+        expect(roundMoney(2.345, 'USD')).toBe(2.35);
+    });
+
+    it('rounds the double that exists, not the ideal decimal (1.005 goes down)', () => {
+        // El caso clásico, y el que prueba que la regla es sobre el double:
+        // 1.005 x 100 = 100.49999999999999 (verificado contra runtime), POR
+        // DEBAJO de la mitad -> Math.round = 100 -> / 100 = 1.
+        // Un half-up sobre el decimal ideal daría 1.01. La política NO lo hace,
+        // y no puede hacerlo sin decimales exactos (BigInt / centavos enteros).
+        // Este assert es el testigo de esa frontera.
+        expect(roundMoney(1.005, 'USD')).toBe(1);
+    });
+
+    it('leaves an exact cent amount untouched', () => {
+        // 1469.13 x 100 = 146913 exacto -> round -> / 100 = 1469.13.
+        expect(roundMoney(1469.13, 'USD')).toBe(1469.13);
+    });
+});
+
+describe('roundMoney — borders', () => {
+    it('returns 0 for a value of 0 in both currencies', () => {
+        expect(roundMoney(0, 'COP')).toBe(0);
+        expect(roundMoney(0, 'USD')).toBe(0);
+    });
+
+    it('rounds a negative value by magnitude when it is not a half', () => {
+        // -234.5664 es el IVA negativo del bloque H1 (nota crédito).
+        // Math.round(-234.5664) = -235: la parte fraccionaria .5664 supera la
+        // mitad, así que redondea al entero más cercano, que es el más negativo.
+        expect(roundMoney(-234.5664, 'COP')).toBe(-235);
+    });
+
+    it('rounds negative halves toward +Infinity, i.e. toward zero', () => {
+        // ESPECIFICADO: Math.round rompe TODAS las mitades hacia +Infinity, no
+        // "hacia arriba en magnitud". En negativos eso es hacia cero:
+        // Math.round(-100.5) = -100 (no -101), Math.round(-101.5) = -101.
+        // Consecuencia: |roundMoney(-100.5)| < |roundMoney(100.5)|. La política
+        // NO es simétrica respecto al signo; queda fijado aquí a propósito.
+        expect(roundMoney(-100.5, 'COP')).toBe(-100);
+        expect(roundMoney(-101.5, 'COP')).toBe(-101);
+        expect(roundMoney(100.5, 'COP')).toBe(101);
+    });
+
+    it('produces negative zero for a small negative value', () => {
+        // Math.round(-0.4) = -0, y -0 / 1 sigue siendo -0.
+        // Numéricamente es cero (-0 === 0 es true), así que ninguna suma
+        // posterior cambia; pero Object.is lo distingue y String(-0) da "-0",
+        // que es lo que podría llegar a un documento. Queda especificado para
+        // que quien formatee sepa que tiene que normalizarlo.
+        expect(roundMoney(-0.4, 'COP')).toBe(-0);
+        expect(Object.is(roundMoney(-0.4, 'COP'), -0)).toBe(true);
+        expect(roundMoney(-0.4, 'COP') === 0).toBe(true);
+        expect(Object.is(roundMoney(-0.004, 'USD'), -0)).toBe(true);
+    });
+
+    it('defaults an unknown currency to cents', () => {
+        // El ternario solo distingue COP; todo lo demás usa factor 100. Es
+        // coherente con que COP sea la única moneda entera del dominio: una
+        // moneda nueva (EUR) hereda centavos, no pesos enteros.
+        // 1.005 x 100 = 100.49999999999999 -> 100 -> 1, igual que en USD.
+        expect(roundMoney(1.005, 'EUR')).toBe(roundMoney(1.005, 'USD'));
+        expect(roundMoney(1.005, 'EUR')).toBe(1);
+        expect(roundMoney(2.345, 'EUR')).toBe(2.35);
+        // Y NO se comporta como COP: 2.345 en pesos enteros daría 2.
+        expect(roundMoney(2.345, 'EUR')).not.toBe(roundMoney(2.345, 'COP'));
+    });
+
+    it('is idempotent: rounding a rounded value changes nothing', () => {
+        // Invariante que hace segura la regla "todo valor pasa por aquí":
+        // aplicarla dos veces no puede mover el número, así que un valor
+        // redondeado en el engine y vuelto a redondear en el documento no
+        // deriva. Se prueba con valores CON ruido en ambas monedas, no con
+        // casos limpios.
+        const noisy: Array<[number, string]> = [
+            [13121212.121212, 'COP'],
+            [-234.5664, 'COP'],
+            [1469.1263999999999, 'USD'],
+            [3.3899999999999997, 'USD'],
+            [2.345, 'USD'],
+            [1.005, 'USD'],
+        ];
+        for (const [value, currency] of noisy) {
+            const once = roundMoney(value, currency);
+            expect(roundMoney(once, currency)).toBe(once);
+        }
     });
 });

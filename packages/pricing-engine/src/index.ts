@@ -208,6 +208,18 @@ export function applyIva(base: number, isTaxable: boolean): number {
     return isTaxable ? base * (1 + IVA_RATE) : base;
 }
 
+/**
+ * Rounds a money amount to the precision of its currency, half-up
+ * (Math.round semantics: halves round toward +Infinity).
+ * COP: 0 decimals (whole pesos). Any other currency (USD today): 2 decimals.
+ * This is the SINGLE rounding policy of the system (ADR-113): every money
+ * value that leaves the engine or reaches a document must pass through here.
+ */
+export function roundMoney(value: number, currency: string): number {
+    const factor = currency === 'COP' ? 1 : 100;
+    return Math.round(value * factor) / factor;
+}
+
 // ── Display values for a single item ─────────────────────
 
 export interface ItemDisplayValues {
