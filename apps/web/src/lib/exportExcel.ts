@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver';
 import type { Scenario, ProposalCalcItem } from '../hooks/useScenarios';
 import { ITEM_TYPE_LABELS, EXCEL_SHEET_NAME_MAX_LENGTH, EXCEL_SHEET_NAME_FORBIDDEN_CHARS } from './constants';
 import { buildExcelQuickSpecs } from '@repo/item-display';
-import { IVA_RATE, applyIva, calculateItemDisplayValues } from '@repo/pricing-engine';
+import { IVA_RATE, applyIva, calculateItemDisplayValues, roundMoney } from '@repo/pricing-engine';
 
 // ── Types ──────────────────────────────────────────────
 interface ExportOptions {
@@ -186,12 +186,20 @@ export async function exportToExcel(opts: ExportOptions) {
 
                 // ── Delegate all cost calculations to pricing engine ──
                 const dv = calculateItemDisplayValues(si, scenario.scenarioItems, scenario.currency, scenario.conversionTrm);
+                // Moneda del escenario: TODO monto de dv ya viene convertido a
+                // ella, asi que es la unica moneda de las columnas de dinero.
+                const saleCurrency = scenario.currency || 'COP';
 
                 const ivaPct = item.isTaxable ? Math.round(IVA_RATE * 100) : 0;
-                const subtotalCost = dv.effectiveLandedCost * si.quantity;
-                const totalCostConIva = applyIva(subtotalCost, item.isTaxable);
-                const subtotalVenta = dv.unitPrice * si.quantity;
-                const totalVentaConIva = applyIva(subtotalVenta, item.isTaxable);
+                // Politica de redondeo (ADR-113): dv.effectiveLandedCost y
+                // dv.unitPrice ya llegan redondeados a la moneda del escenario,
+                // pero el producto por la cantidad puede arrastrar ruido IEEE 754
+                // en USD (centavos), y applyIva siempre lo arrastra. Cada monto
+                // que entra a una celda pasa por roundMoney.
+                const subtotalCost = roundMoney(dv.effectiveLandedCost * si.quantity, saleCurrency);
+                const totalCostConIva = roundMoney(applyIva(subtotalCost, item.isTaxable), saleCurrency);
+                const subtotalVenta = roundMoney(dv.unitPrice * si.quantity, saleCurrency);
+                const totalVentaConIva = roundMoney(applyIva(subtotalVenta, item.isTaxable), saleCurrency);
 
                 // Source data from ITEMS_ARCHITECT
                 const specs = piFromArchitect?.technicalSpecs || item.technicalSpecs;
@@ -204,7 +212,7 @@ export async function exportToExcel(opts: ExportOptions) {
 
                 const costCurrencyLabel = item.costCurrency || 'COP';
                 const trmConversionValue = scenario.conversionTrm ?? null;
-                const saleCurrencyLabel = scenario.currency || 'COP';
+                const saleCurrencyLabel = saleCurrency;
 
                 const dataRow = ws.addRow([
                     displayIdx,

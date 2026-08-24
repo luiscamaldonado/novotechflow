@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
-import { calculateItemDisplayValues, calculateIvaAmount, calculateScenarioTotals } from '@repo/pricing-engine';
+import { calculateItemDisplayValues, calculateIvaAmount, calculateScenarioTotals, roundMoney } from '@repo/pricing-engine';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -84,8 +84,15 @@ function processScenario(scenario: ScenarioData): ProcessedScenario {
         const display = calculateItemDisplayValues(
             si, allItems, scenario.currency, scenario.conversionTrm,
         );
+        // El engine ya entrega lineTotal y unitPrice redondeados a la moneda del
+        // escenario (ADR-113): se toman tal cual, sin recalcular nada aqui.
         const subtotalBeforeVat = display.lineTotal;
-        const ivaAmount = calculateIvaAmount(subtotalBeforeVat, si.item.isTaxable);
+        // IVA informativo por item; el IVA impreso del documento es el del
+        // escenario (totals.iva). Se redondea igual que cualquier otro dinero.
+        const ivaAmount = roundMoney(
+            calculateIvaAmount(subtotalBeforeVat, si.item.isTaxable),
+            scenario.currency,
+        );
         visibleItems.push({
             scenarioItem: si,
             unitSalePrice: display.unitPrice,
