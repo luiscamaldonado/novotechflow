@@ -73,7 +73,7 @@ export default function ScenarioItemRow({
     onMoveUp,
     onMoveDown,
 }: ScenarioItemRowProps) {
-    const { childrenCostPerUnit, margin, unitPrice } = displayValues;
+    const { childrenCostPerUnit, lineTotal, margin, unitPrice } = displayValues;
     const hasUnitPriceOverride = si.unitPriceOverride !== null && si.unitPriceOverride !== undefined;
     const children = si.children || [];
     const childCount = children.length;
@@ -248,7 +248,7 @@ export default function ScenarioItemRow({
                         Diluido
                     </span>
                 ) : (
-                    <>{formatMoney(unitPrice * si.quantity, scenarioCurrency)}</>
+                    <>{formatMoney(lineTotal, scenarioCurrency)}</>
                 )}
             </td>
             <td className="px-4 py-6 text-center">
