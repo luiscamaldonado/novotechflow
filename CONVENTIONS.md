@@ -270,7 +270,7 @@ Constantes ya establecidas en `lib/constants.ts`:
 - `PAGE_TYPE_LABELS`, `PAGE_TYPE_STYLES`, `VIRTUAL_TECH_SPEC_ID`, `VIRTUAL_ECONOMIC_ID`
 - `STATUS_CONFIG`, `ALL_STATUSES`, `PROJECTION_STATUSES`
 - `ACQUISITION_CONFIG`, `AcquisitionMode`, `ACQUISITION_OPTIONS`
-- `formatCOP` (utilidad de formato de moneda)
+- `formatMoney` (formatter único de dinero, ADR-113 y §J); `formatCOP` y `formatUSD` son wrappers suyos
 
 ### D. VALIDACIÓN Y DTOs (Backend — NestJS)
 
@@ -441,6 +441,8 @@ Funciones principales:
 Consumidores: en `apps/web`, named imports directos de `@repo/pricing-engine` (hooks de escenarios, builder, cálculos, export a Excel) más el barrel web-only de `lib/pricing-engine.ts`; en `apps/api`, `src/external/external-proposals.service.ts` (cálculo server-side, ADR-053).
 
 **Tests (ADR-111, ADR-112):** el paquete tiene suite propia con Vitest — `src/index.spec.ts` (unitarios de las funciones hoja y especificación de los helpers de IVA) y `src/scenarios.spec.ts` (goldens de escenario con invariantes de coherencia entre las dos funciones compuestas), co-locados en `src/` (caracterización ADR-111 + especificación ADR-112). La caracterización es fotografía del comportamiento actual: los bordes sin guard (backlog H3 del ADR-111) están congelados como caracterizaciones, y corregir uno exige mover su assert a propósito en el mismo commit. Split gate/build del paquete: el gate de tipos es `packages/pricing-engine/tsconfig.json` (ve los specs); el build compila con `tsconfig.build.json` (los excluye). La regla del api (ADR-071) se extiende al paquete: el gate NUNCA es `tsconfig.build.json`. Gate de cierre: `pnpm --filter @repo/pricing-engine test`, que además corre en `ci.yml` y `pr-check.yml` antes del step de Jest.
+
+**Política de redondeo (ADR-113):** `roundMoney(valor, moneda)` es la política única de redondeo del sistema — half-up, COP a 0 decimales, cualquier otra moneda a 2. Las funciones hoja calculan a precisión completa; las dos compuestas (`calculateItemDisplayValues`, `calculateScenarioTotals`) entregan todo campo de dinero ya redondeado a la moneda del escenario (los porcentajes quedan a precisión completa). La cadena impresa cuadra exacta: unitario redondeado × cantidad = línea, Σ líneas = subtotal, `vat = roundMoney(IVA de la base gravada)`, total = subtotal + vat. Concesión deliberada: las columnas internas de costo se redondean a la salida y no en cadena, así que entre ellas puede haber deriva de ±1 peso. Regla de frontera: los consumidores toman los valores del engine — nunca re-suman ni re-multiplican dinero por su cuenta; el display usa `formatMoney` de `lib/constants.ts` (formato, no cálculo, único formatter de dinero).
 
 ---
 
