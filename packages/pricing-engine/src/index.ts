@@ -243,8 +243,9 @@ export function calculateItemDisplayValues(
     scenarioCurrency?: string,
     conversionTrm?: number | null,
 ): ItemDisplayValues {
+    const currency = scenarioCurrency || 'COP';
     const rawCost = Number(si.item.unitCost);
-    const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
+    const cost = convertCost(rawCost, si.item.costCurrency || 'COP', currency, conversionTrm);
     const flete = Number(si.item.internalCosts?.fletePct || 0);
     const parentLanded = calculateParentLandedCost(cost, flete);
 
@@ -263,26 +264,40 @@ export function calculateItemDisplayValues(
     const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
     const baseMargin = resolveMargin(si.marginPctOverride, si.item.marginPct);
 
+    // ── Rounding policy (ADR-113) ────────────────────────
+    // The chain above runs at full precision; money LEAVES this function
+    // already rounded to the scenario currency. The price chain is built on the
+    // ROUNDED unit price so that the arithmetic a client can redo by hand
+    // closes: unitPrice x quantity = lineTotal.
+    const roundedEffectiveLanded = roundMoney(effectiveLanded, currency);
+
     let unitPrice = 0;
     let displayMargin = baseMargin;
 
     if (!si.isDiluted) {
         if (si.unitPriceOverride !== null && si.unitPriceOverride !== undefined) {
-            unitPrice = Number(si.unitPriceOverride);
-            displayMargin = calculateMarginFromPrice(unitPrice, effectiveLanded);
+            unitPrice = roundMoney(Number(si.unitPriceOverride), currency);
+            // The displayed margin is derived from the values the user actually
+            // sees (both rounded), not from the full-precision ones.
+            displayMargin = calculateMarginFromPrice(unitPrice, roundedEffectiveLanded);
         } else {
-            unitPrice = calculateUnitPrice(effectiveLanded, baseMargin);
+            unitPrice = roundMoney(calculateUnitPrice(effectiveLanded, baseMargin), currency);
         }
     }
 
-    const lineTotal = calculateLineTotal(unitPrice, si.quantity);
+    const lineTotal = roundMoney(calculateLineTotal(unitPrice, si.quantity), currency);
 
+    // The cost columns are rounded at the output, each one on its own — NOT in
+    // a chain. Deliberate concession (ADR-113): between internal columns there
+    // can be a drift of up to one minor unit, because parentLanded + children/q
+    // is rounded independently of baseLanded. The chain that closes exactly is
+    // the client's one (unitPrice -> lineTotal -> subtotal -> vat -> total).
     return {
-        parentLandedCost: parentLanded,
-        childrenCostPerUnit: childrenCost,
-        baseLandedCost: baseLanded,
-        dilutionPerUnit: dilution,
-        effectiveLandedCost: effectiveLanded,
+        parentLandedCost: roundMoney(parentLanded, currency),
+        childrenCostPerUnit: roundMoney(childrenCost, currency),
+        baseLandedCost: roundMoney(baseLanded, currency),
+        dilutionPerUnit: roundMoney(dilution, currency),
+        effectiveLandedCost: roundedEffectiveLanded,
         margin: displayMargin,
         unitPrice,
         lineTotal,
@@ -300,6 +315,7 @@ export function calculateScenarioTotals(
     scenarioCurrency?: string,
     conversionTrm?: number | null,
 ): ScenarioTotals {
+    const currency = scenarioCurrency || 'COP';
     let beforeVat = 0;
     let nonTaxed = 0;
     let totalCost = 0;
@@ -326,14 +342,19 @@ export function calculateScenarioTotals(
         const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
 
         const margin = resolveMargin(si.marginPctOverride, si.item.marginPct);
+        // Same rounding policy as calculateItemDisplayValues (ADR-113): this
+        // function duplicates the pipeline, so the rounding point has to be the
+        // same one or the rows and the totals stop agreeing.
         let unitPrice: number;
         if (si.unitPriceOverride !== null && si.unitPriceOverride !== undefined) {
-            unitPrice = Number(si.unitPriceOverride);
+            unitPrice = roundMoney(Number(si.unitPriceOverride), currency);
         } else {
-            unitPrice = calculateUnitPrice(effectiveLanded, margin);
+            unitPrice = roundMoney(calculateUnitPrice(effectiveLanded, margin), currency);
         }
-        const lineTotal = calculateLineTotal(unitPrice, si.quantity);
+        const lineTotal = roundMoney(calculateLineTotal(unitPrice, si.quantity), currency);
 
+        // Full precision on purpose: totalCost never reaches a document, it only
+        // feeds globalMarginPct, which is a percentage and not money.
         totalCost += effectiveLanded * si.quantity;
 
         if (si.item.isTaxable) {
@@ -343,11 +364,16 @@ export function calculateScenarioTotals(
         }
     }
 
+    // beforeVat and nonTaxed are exact sums of already-rounded line totals, so
+    // subtotal needs no rounding of its own. globalMarginPct stays at full
+    // precision (percentage, not money); the display layer formats it.
     const totalPrice = beforeVat + nonTaxed;
     const globalMarginPct = totalPrice > 0 ? ((totalPrice - totalCost) / totalPrice) * 100 : 0;
     const subtotal = beforeVat + nonTaxed;
-    const vat = beforeVat * IVA_RATE;
-    const total = beforeVat + vat + nonTaxed;
+    // Rounding policy (ADR-113) + ADR-112: the IVA goes through the helper —
+    // this was the last direct IVA_RATE multiplication outside them.
+    const vat = roundMoney(calculateIvaAmount(beforeVat, true), currency);
+    const total = subtotal + vat;
 
     return { beforeVat, nonTaxed, subtotal, vat, total, globalMarginPct };
 }
