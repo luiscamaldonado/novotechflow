@@ -5032,3 +5032,52 @@ H2 de ADR-111: el engine calculaba todo el dinero en floats IEEE-754 sin políti
 - Aviso informativo a Felipe: valores desplazados por centavos, contrato intacto.
 - Actualización del skill novotechflow y las instrucciones en Claude.ai (H2 cerrada): las entrega el chat como .md completos.
 - Deuda de vista: lineTotal por hijo (ampliar API del engine si algún día se justifica).
+
+## ADR-114 — Techo (roundMoneyUp) en el precio unitario de venta; enmiendas operativas a ADR-113
+
+**Fecha:** 2026-08-24
+**Estado:** Aceptado
+
+### Contexto
+
+Validando ADR-113 con un escenario real de dilución (diluido 101×10 con flete, visibles 1010×10 y 5000×10 al 7%), Luis contrastó su derivación manual contra la herramienta: unitarios idénticos y total +2 centavos por la cadena impresa — el diseño funcionando. Pero la expectativa comercial quedó explícita: el unitario cotizado no debe quedar nunca por debajo de su valor exacto, y half-up lo permite hasta medio centavo/medio peso (1104.2724 → 1104.27). La doctrina de riesgo asimétrico ya documentada en ADR-039 (vender por debajo es catastrófico e irreversible; cotizar levemente alto se autocorrige) respalda el cambio de modo. La misma validación destapó dos cosas más: un bug preexistente de dilución en producción (abajo) y la segunda mordida de la caché del optimizador de Vite en la misma sesión.
+
+### Decisión
+
+1. **`roundMoneyUp(valor, moneda)` en el engine:** techo a la precisión de la moneda, con guarda de ruido flotante — el ruido de representación se trata como el entero que representa. La guarda es empírica en las dos direcciones: 8.2 × 100 = 819.99999999999988 (ruido por debajo: un ceil ingenuo lo respeta) pero 1.1 × 100 = 110.00000000000001 y 2.2 × 100 = 220.00000000000002 (ruido por ENCIMA: un ceil ingenuo inflaría 1.11 y 2.21). Umbral relativo 1e-9. Especificación propia: garantía sobre los unitarios del negocio (1104.27244914 → 1104.28), trampas de ruido intactas, fracción genuina siempre sube (1.005 → 1.01, donde half-up baja a 1), idempotencia, coherencia up ≥ half-up, negativos hacia +Infinity documentados.
+2. **Aplicado SOLO al precio unitario de venta**, en las dos compuestas (rama de override incluida: el valor tecleado se techa). La línea sigue half-up — el producto de un precio ya techado por una cantidad entera solo arrastra ruido binario; half-up lo absorbe sin inflar centavos fantasma. Líneas, IVA, totales y columnas de costo quedan en roundMoney.
+3. **Invariante 7 (garantía de techo):** para cada item normal de ambos fixtures se deriva el precio exacto vía las funciones hoja a precisión completa y se asierta unitPrice ≥ exacto y unitPrice === roundMoneyUp(exacto). Goldens movidos a propósito en el mismo commit: en COP solo el item A sube (5 351 516; línea 10 703 032; subtotal 13 121 215; total 15 268 791; el vat quedó en el mismo peso por coincidencia documentada); el fixture USD quedó intacto y el invariante 7 lo demuestra en vez de asumirlo. La cota del invariante 3b subió de ±3 a ±5 con justificación nueva: el techo añade hasta una unidad de precisión POR UNIDAD, amplificada por la cantidad.
+4. **Verificado en navegador por Luis** contra predicción exacta: escenario USD de dilución (1 103,95 / 11 039,50 / 65 699,00 / IVA 12 482,81 / total 78 181,81) y escenario COP cuadrando a mano (1 122 223 + 213 222 = 1 335 445). Excel OK.
+
+### Enmiendas a ADR-113 (append-only: se enmienda aquí, no se edita allá)
+
+- Las expectativas de verificación de sus Pendientes quedan reemplazadas por los valores post-techo del punto 4.
+- La concesión de columnas de costo gana el factor nombrado: el error de redondeo de dilutionPerUnit (hasta media unidad de precisión) se amplifica por la cantidad al reconstruir el costo diluido total desde la columna (medido: −0.11 USD en una variante de tres items con cantidades mixtas). No afecta el libro de costos interno (precisión completa) ni precios/líneas/totales; solo a quien re-sume la columna informativa.
+
+### Reglas operativas de la sesión
+
+- **Caché del optimizador de Vite:** optimizeDeps.include fuerza el pre-bundle de los @repo/* CJS y su invalidación va por hash de lockfile+config — NUNCA por el contenido del dist/ del workspace. Mordió dos veces en la sesión (TypeError: roundMoney/roundMoneyUp is not a function; síntomas en cascada en Construcción del Documento). Regla: todo rebuild del engine → borrar apps/web/node_modules/.vite o arrancar con vite --force antes de verificar en navegador. Mover los @repo/* a exclude NO es opción mientras sean CJS (el dev de Vite sirve ESM nativo; los paquetes linkeados CJS requieren pre-bundle). La solución de raíz es la migración ESM: la cohorte de cola fría (ESM + "files": ["dist"], ADR-096/111) sube de prioridad — cuesta una interrupción por rebuild.
+- Cosmético registrado: el input editable del unitario muestra ",00" en COP (es un input, no pasa por formatMoney; el valor subyacente es entero).
+
+### Hallazgo separado — bug de dilución preexistente, confirmado en producción
+
+El caso real de Luis confirmó la caracterización #8 de ADR-111 como bug comercial vivo: el reparto de dilución usa el costo CRUDO (calculateTotalDilutedCost y los pesos de calculateDilutionPerUnit ignoran flete e hijos), así que el flete del diluido se evapora de la cotización — magnitud flete% × costo diluido, marcada por el margen (caso real: 10,80 USD de menos en un escenario de 65 mil). No lo introdujo H2; está en producción desde el origen. Fase inmediata H3-dilución (ADR-115, rama propia): la dilución opera sobre el landed (total repartido Y pesos), la caracterización #8 y los goldens se mueven a propósito, y el caso real de Luis entra como golden con objetivo derivado a mano: unitarios 1 104,28 / 5 466,70 y total 65 709,80 (valores con techo).
+
+### Archivos
+
+- packages/pricing-engine/src/index.ts — roundMoneyUp; unitario reapuntado en las dos compuestas
+- packages/pricing-engine/src/index.spec.ts — especificación de roundMoneyUp
+- packages/pricing-engine/src/scenarios.spec.ts — goldens movidos; invariante 7; cota 3b ±5
+- CONVENTIONS.md §J, AGENTS.md, INSTRUCTIVO_CLAUDE.md (regla de caché de Vite)
+
+### Commits
+
+- 5efb75b — feat(pricing-engine): ceiling rounding for sale unit price
+- 12640c2 — docs: ceiling unit price policy and vite cache rule
+
+### Pendientes
+
+- Test de imagen desde git archive, merge fast-forward y push (Luis); verificación CI + 3 deploys; Sync now.
+- Skill novotechflow e instrucciones de Claude.ai con H2 cerrada (las entrega el chat como .md completos; incluye la regla de caché de Vite).
+- Aviso informativo a Felipe (de ADR-113, sigue vigente; ahora incluye el techo).
+- Fase H3-dilución (ADR-115) — inmediata. Opcional después: script de solo lectura sobre la copia local de producción para cuantificar la exposición (propuestas con diluidos + flete/hijos y su delta).
