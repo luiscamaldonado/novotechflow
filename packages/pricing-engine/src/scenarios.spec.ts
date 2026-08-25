@@ -1,11 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
     IVA_RATE,
+    calculateBaseLandedCost,
+    calculateChildrenCostPerUnit,
+    calculateDilutionPerUnit,
+    calculateEffectiveLandedCost,
     calculateItemDisplayValues,
+    calculateParentLandedCost,
     calculateScenarioTotals,
     calculateTotalDilutedCost,
     calculateTotalNormalSubtotal,
+    calculateUnitPrice,
+    convertCost,
+    resolveMargin,
     roundMoney,
+    roundMoneyUp,
 } from './index';
 import type { ItemDisplayValues, PricingScenarioItem, ScenarioTotals } from './index';
 
@@ -40,6 +49,11 @@ import type { ItemDisplayValues, PricingScenarioItem, ScenarioTotals } from './i
 //   - La cadena que el cliente puede rehacer a mano cuadra exacta:
 //     unitPrice x quantity = lineTotal, Σ lineTotal = subtotal,
 //     vat = roundMoney(IVA de beforeVat), total = subtotal + vat.
+//   - MODO TECHO (ADR-114): SOLO el unitPrice pasa por roundMoneyUp — el
+//     unitario cotizado nunca queda por debajo de su valor exacto (rama de
+//     override incluida). Líneas, IVA, totales y columnas de costo siguen en
+//     roundMoney. El invariante 7 deriva el precio exacto por las hoja y
+//     verifica la garantía en ambos fixtures.
 //
 // Todos los valores de abajo se re-derivaron contra runtime tras el cambio.
 // ──────────────────────────────────────────────────────────
@@ -217,14 +231,15 @@ describe('calculateItemDisplayValues', () => {
         // margin = resolveMargin(undefined, 20) = 20. Es PORCENTAJE: no se
         // redondea, sale tal cual.
         expect(dv.margin).toBe(20);
-        // El precio se calcula sobre el effective SIN redondear y se redondea al
-        // salir: 4 281 212.1212.../(1 - 20/100) = .../0.8 = 5 351 515.1515...
-        //   -> 5 351 515
-        expect(dv.unitPrice).toBe(5_351_515);
+        // El precio se calcula sobre el effective SIN redondear y se TECHA al
+        // salir (ADR-114): 4 281 212.1212.../(1 - 20/100) = 5 351 515.1515...
+        //   -> roundMoneyUp = 5 351 516 (half-up daba 5 351 515, POR DEBAJO
+        //   del exacto: es el peso que el techo recupera).
+        expect(dv.unitPrice).toBe(5_351_516);
 
-        // ── línea ── se construye sobre el precio YA REDONDEADO:
-        // 5 351 515 x q2 = 10 703 030 exacto (entero x entero).
-        expect(dv.lineTotal).toBe(10_703_030);
+        // ── línea ── se construye sobre el precio YA TECHADO:
+        // 5 351 516 x q2 = 10 703 032 exacto (entero x entero).
+        expect(dv.lineTotal).toBe(10_703_032);
     });
 
     it('computes the 8 display values for item B (normal, non-taxable)', () => {
@@ -247,7 +262,8 @@ describe('calculateItemDisplayValues', () => {
 
         // ── precio ──
         expect(dv.margin).toBe(15);
-        // 515 151.5151.../0.85 = 606 060.6060... -> 606 061 (sube)
+        // 515 151.5151.../0.85 = 606 060.6060... -> techo 606 061 (ADR-114;
+        // half-up ya subía aquí, así que B no se mueve con el cambio de modo).
         expect(dv.unitPrice).toBe(606_061);
 
         // ── línea ── AQUÍ SE VE LA POLÍTICA (ADR-113).
@@ -265,7 +281,7 @@ describe('calculateItemDisplayValues', () => {
         const dv = displayValuesOf(ITEM_D);
 
         // El override entra sin pasar por la fórmula de margen, pero SÍ por el
-        // redondeo: 600 000 ya es un entero de pesos, así que sale igual.
+        // techo (ADR-114): 600 000 ya es un entero de pesos, así que sale igual.
         expect(dv.unitPrice).toBe(600_000);
         // lineTotal = 600 000 x q1 = 600 000
         expect(dv.lineTotal).toBe(600_000);
@@ -341,32 +357,35 @@ describe('calculateScenarioTotals', () => {
         const totals = calculateScenarioTotals(SCENARIO, SCENARIO_CURRENCY, TRM);
 
         // C queda fuera del bucle (filter !isDiluted). Líneas que sí entran, ya
-        // redondeadas por la misma política que usa calculateItemDisplayValues:
-        //   A gravado:     10 703 030
+        // redondeadas por la misma política que usa calculateItemDisplayValues
+        // (unitario TECHADO por ADR-114, línea en half-up):
+        //   A gravado:     10 703 032   (5 351 516 x 2, unitario techado)
         //   D gravado:        600 000
         //   B NO gravado:   1 818 183
         //
-        // beforeVat = 10 703 030 + 600 000 = 11 303 030
+        // beforeVat = 10 703 032 + 600 000 = 11 303 032
         // Suma EXACTA de enteros: no hay redondeo adicional que aplicar.
-        expect(totals.beforeVat).toBe(11_303_030);
+        expect(totals.beforeVat).toBe(11_303_032);
         // nonTaxed = 1 818 183
         expect(totals.nonTaxed).toBe(1_818_183);
-        // subtotal = beforeVat + nonTaxed = 13 121 213
-        // A precisión completa eran 13 121 212.1212...: el peso de más viene de
-        // la línea de B, construida sobre su precio redondeado.
-        expect(totals.subtotal).toBe(13_121_213);
+        // subtotal = beforeVat + nonTaxed = 13 121 215
+        // A precisión completa eran 13 121 212.1212...: un peso de B (half-up
+        // de su línea sobre precio redondeado) y dos de A (techo x cantidad 2).
+        expect(totals.subtotal).toBe(13_121_215);
 
         // golden H1: única implementación de IVA que debe sobrevivir.
-        // vat = roundMoney(calculateIvaAmount(11 303 030, true))
-        //     = roundMoney(11 303 030 x 0.19) = roundMoney(2 147 575.7) = 2 147 576
+        // vat = roundMoney(calculateIvaAmount(11 303 032, true))
+        //     = roundMoney(11 303 032 x 0.19) = roundMoney(2 147 576.08) = 2 147 576
+        // (coincide con el valor pre-techo por aritmética: 2 147 575.7 y
+        // 2 147 576.08 redondean al mismo peso).
         // El IVA se aplica SOLO a la base gravada; los 1 818 183 de B no entran.
         // Cualquier otro cálculo de IVA en el repo debe converger aquí o
         // desaparecer. Nótese que se redondea DESPUÉS de aplicar la tarifa: el
         // IVA que se cobra es el de la base gravada impresa.
         expect(totals.vat).toBe(2_147_576);
 
-        // total = subtotal + vat = 13 121 213 + 2 147 576 = 15 268 789
-        expect(totals.total).toBe(15_268_789);
+        // total = subtotal + vat = 13 121 215 + 2 147 576 = 15 268 791
+        expect(totals.total).toBe(15_268_791);
 
         // totalCost = Σ effectiveLanded x cantidad sobre los items normales, a
         // PRECISIÓN COMPLETA (nunca se imprime, solo alimenta el porcentaje):
@@ -374,11 +393,11 @@ describe('calculateScenarioTotals', () => {
         //   B:   515 151.5151... x q3 =  1 545 454.5454...
         //   D:   412 121.2121... x q1 =    412 121.2121...
         //   = 10 520 000  (= 10 220 000 de landed + los 300 000 diluidos)
-        // globalMarginPct = ((13 121 213 - 10 520 000)/13 121 213) x 100
-        //                 = (2 601 213/13 121 213) x 100 = 19.8244857...%
-        // Se movió desde 19.82448037% porque el numerador usa el subtotal
-        // redondeado; sigue siendo porcentaje, así que va con toBeCloseTo.
-        expect(totals.globalMarginPct).toBeCloseTo(19.82448574, 6);
+        // globalMarginPct = ((13 121 215 - 10 520 000)/13 121 215) x 100
+        //                 = (2 601 215/13 121 215) x 100 = 19.8244980...%
+        // Se movió porque el numerador usa el subtotal con el unitario techado;
+        // sigue siendo porcentaje, así que va con toBeCloseTo.
+        expect(totals.globalMarginPct).toBeCloseTo(19.82449796, 6);
     });
 
     it('returns every money total as a whole peso in the COP scenario', () => {
@@ -481,9 +500,10 @@ describe('calculateItemDisplayValues in USD (cents)', () => {
     it('rounds a three-decimal override down to cents (USD item 3)', () => {
         const dv = usdDisplayValuesOf(USD_ITEM_3);
 
-        // El override tecleado NO sale verbatim: pasa por la política.
-        // 1234.567 x 100 = 123456.7 (exacto) -> 123457 -> 1234.57.
-        // Un tercer decimal no puede sobrevivir a un documento en USD.
+        // El override tecleado NO sale verbatim: pasa por el techo (ADR-114).
+        // 1234.567 x 100 = 123456.7 (exacto) -> ceil = 123457 -> 1234.57.
+        // Un tercer decimal no puede sobrevivir a un documento en USD, y el
+        // cliente nunca paga por debajo del valor tecleado.
         expect(dv.unitPrice).toBe(1234.57);
         expect(dv.unitPrice).not.toBe(USD_ITEM_3.unitPriceOverride);
         // lineTotal = 1234.57 x q1 = 1234.57 (sin ruido: cantidad 1)
@@ -661,6 +681,63 @@ describe('coherence invariants between the two composite functions', () => {
         }
     });
 
+    it('invariant 7: the unit price is the ceiling of the exact price (ADR-114)', () => {
+        // La garantía del techo, verificada contra el precio EXACTO derivado
+        // por las funciones hoja a precisión completa (el mismo pipeline de
+        // las compuestas, sin redondear): el unitario cotizado nunca queda por
+        // debajo del exacto, y es exactamente roundMoneyUp(exacto).
+        const exactUnitPrice = (
+            si: PricingScenarioItem,
+            items: PricingScenarioItem[],
+            currency: string,
+            trm: number | null,
+        ): number => {
+            const cost = convertCost(Number(si.item.unitCost), si.item.costCurrency || 'COP', currency, trm);
+            const flete = Number(si.item.internalCosts?.fletePct || 0);
+            const parentLanded = calculateParentLandedCost(cost, flete);
+            const childrenCost = calculateChildrenCostPerUnit(si.children || [], currency, trm);
+            const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
+            const dilution = calculateDilutionPerUnit(
+                cost, si.quantity,
+                calculateTotalNormalSubtotal(items, currency, trm),
+                calculateTotalDilutedCost(items, currency, trm),
+            );
+            const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
+            return calculateUnitPrice(effectiveLanded, resolveMargin(si.marginPctOverride, si.item.marginPct));
+        };
+
+        // COP, precios calculados (derivados contra runtime):
+        //   A: exacto 5 351 515.1515... -> techo 5 351 516 (half-up daba menos)
+        //   B: exacto   606 060.6060... -> techo   606 061 (coincide con half-up)
+        for (const si of [ITEM_A, ITEM_B]) {
+            const exact = exactUnitPrice(si, SCENARIO, SCENARIO_CURRENCY, TRM);
+            const dv = displayValuesOf(si);
+            expect(dv.unitPrice).toBeGreaterThanOrEqual(exact);
+            expect(dv.unitPrice).toBe(roundMoneyUp(exact, SCENARIO_CURRENCY));
+        }
+        // D (override): la garantía aplica sobre el valor tecleado, que es el
+        // "exacto" de esa rama. 600 000 entero: sale igual.
+        const dvD = displayValuesOf(ITEM_D);
+        expect(dvD.unitPrice).toBeGreaterThanOrEqual(Number(ITEM_D.unitPriceOverride));
+        expect(dvD.unitPrice).toBe(roundMoneyUp(Number(ITEM_D.unitPriceOverride), SCENARIO_CURRENCY));
+
+        // USD: U1 exacto 1.125 -> 1.13; U2 exacto 14.925373134328357 -> 14.93
+        // (en ambos el techo coincide con lo que half-up ya daba: por eso el
+        // fixture USD no se movió con ADR-114).
+        for (const si of [USD_ITEM_1, USD_ITEM_2]) {
+            const exact = exactUnitPrice(si, USD_SCENARIO, USD_CURRENCY, null);
+            const dv = usdDisplayValuesOf(si);
+            expect(dv.unitPrice).toBeGreaterThanOrEqual(exact);
+            expect(dv.unitPrice).toBe(roundMoneyUp(exact, USD_CURRENCY));
+        }
+        // U3 (override 1234.567): techo 1234.57 >= el tecleado — con half-up la
+        // garantía también se daba aquí (1234.567 sube), pero un override tipo
+        // x.xx1 habría BAJADO; el techo la vuelve incondicional.
+        const dvU3 = usdDisplayValuesOf(USD_ITEM_3);
+        expect(dvU3.unitPrice).toBeGreaterThanOrEqual(Number(USD_ITEM_3.unitPriceOverride));
+        expect(dvU3.unitPrice).toBe(roundMoneyUp(Number(USD_ITEM_3.unitPriceOverride), USD_CURRENCY));
+    });
+
     it('invariant 3: removing the diluted item lowers total cost by exactly its cost', () => {
         // La conservación se cumple sobre el COSTO, no sobre el precio.
         // totalCost no se retorna, pero se recupera de globalMarginPct:
@@ -697,10 +774,14 @@ describe('coherence invariants between the two composite functions', () => {
         //
         // AQUÍ SÍ aparece la deriva del redondeo, porque el lado del PRECIO es
         // el que se redondea: la diferencia se toma entre dos subtotales, cada
-        // uno suma de 3 líneas redondeadas, así que son 6 redondeos de hasta
-        // medio peso -> cota ±3 pesos sobre el valor exacto.
-        //   13 121 213 - 12 764 705 = 356 508  (medido contra runtime)
-        //   desviación real = +1.76 pesos, dentro de la cota.
+        // uno suma de 3 líneas. Con el TECHO del unitario (ADR-114) la deriva
+        // deja de ser simétrica: el techo añade hasta 1 peso POR UNIDAD,
+        // amplificado por la cantidad -> cota por lado = Σ cantidades de los
+        // items con precio calculado (A q2 + B q3 = 5; D no cuenta: override
+        // exacto) -> cota del delta ±5.
+        //   13 121 215 - 12 764 708 = 356 507  (medido contra runtime; sin C,
+        //   B techa 500 000/0.85 = 588 235.294... a 588 236, x3 = 1 764 708)
+        //   desviación real = +0.76 pesos, dentro de la cota.
         // El assert va exacto porque los dos subtotales son enteros, y la cota
         // queda asertada aparte para que sea la cota —y no el literal— la que
         // documente cuánto puede moverse esto legítimamente.
@@ -711,9 +792,9 @@ describe('coherence invariants between the two composite functions', () => {
 
         const delta = withC.subtotal - withoutC.subtotal;
         const EXACT_MARKED_UP_DELTA = 356_506.238859;
-        const ROUNDING_BAND = 3; // 6 líneas redondeadas x medio peso
+        const ROUNDING_BAND = 5; // techo: hasta 1 peso x unidad (q2 + q3)
 
-        expect(delta).toBe(356_508);
+        expect(delta).toBe(356_507);
         expect(Math.abs(delta - EXACT_MARKED_UP_DELTA)).toBeLessThanOrEqual(ROUNDING_BAND);
         // Y lo que el invariante afirma de fondo sigue en pie con holgura:
         // el subtotal sube MÁS que el costo diluido, no exactamente el costo.

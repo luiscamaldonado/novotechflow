@@ -17,6 +17,7 @@ import {
     convertCost,
     resolveMargin,
     roundMoney,
+    roundMoneyUp,
 } from './index';
 import type { PricingScenarioItem } from './index';
 
@@ -775,5 +776,129 @@ describe('roundMoney — borders', () => {
             const once = roundMoney(value, currency);
             expect(roundMoney(once, currency)).toBe(once);
         }
+    });
+});
+
+// ── ADR-114: roundMoneyUp — techo para el precio unitario de venta ──
+//
+// Mismo régimen de especificación que roundMoney (cabecera del bloque H2),
+// pero con la garantía inversa: el unitario cotizado NUNCA queda por debajo
+// de su valor exacto. SOLO el precio unitario de venta usa este modo; todo
+// lo demás sigue en roundMoney (half-up).
+//
+// La pieza delicada es el guard de ruido: un ceiling ingenuo infla el ruido
+// de representación (8.2 x 100 = 820.0000000000001 se volvería 8.21). El
+// guard trata como entero todo scaled a menos de 1e-9 relativo del entero
+// más cercano, en cualquiera de las dos direcciones. Todo valor de abajo se
+// derivó contra runtime ANTES de asertar, con el scaled en el comentario.
+
+describe('roundMoneyUp — guarantee: never below the exact value', () => {
+    it('ceilings the business unit prices that half-up would cut short', () => {
+        // Los dos unitarios del escenario de dilución de Luis (validación
+        // runtime del 2026-08-24), donde half-up VIOLA la garantía:
+        // 1104.27244914 x 100 = 110427.244913999995 -> ceil = 110428 -> 1104.28
+        //   (roundMoney da 1104.27, POR DEBAJO del exacto: ese es el bug de
+        //   negocio que este modo elimina).
+        expect(roundMoneyUp(1104.27244914, 'USD')).toBe(1104.28);
+        expect(roundMoneyUp(1104.27244914, 'USD')).toBeGreaterThanOrEqual(1104.27244914);
+        expect(roundMoney(1104.27244914, 'USD')).toBeLessThan(1104.27244914);
+        // 5466.69529279 x 100 = 546669.529279000009 -> ceil = 546670 -> 5466.70
+        //   (aquí half-up coincide: .53 ya subía).
+        expect(roundMoneyUp(5466.69529279, 'USD')).toBe(5466.7);
+        expect(roundMoneyUp(5466.69529279, 'USD')).toBeGreaterThanOrEqual(5466.69529279);
+    });
+
+    it('does not inflate representation noise above the integer (the trap)', () => {
+        // La trampa que motiva el guard: la familia x.x0 cuyo double x 100 cae
+        // POR ENCIMA del entero. Un ceil ingenuo los sube un centavo entero.
+        // 8.2 x 100 = 819.99999999999988631 (POR DEBAJO) -> guard -> 820 -> 8.2
+        expect(roundMoneyUp(8.2, 'USD')).toBe(8.2);
+        // 1.1 x 100 = 110.00000000000001421 (POR ENCIMA) -> guard -> 110 -> 1.1
+        //   sin guard: ceil(110.000...014) = 111 -> 1.11, un centavo inventado.
+        expect(roundMoneyUp(1.1, 'USD')).toBe(1.1);
+        // 2.2 x 100 = 220.00000000000002842 (POR ENCIMA) -> guard -> 220 -> 2.2
+        expect(roundMoneyUp(2.2, 'USD')).toBe(2.2);
+        // 5466.70 x 100 = 546670 exacto: sin ruido que absorber.
+        expect(roundMoneyUp(5466.7, 'USD')).toBe(5466.7);
+    });
+
+    it('leaves exact values untouched', () => {
+        // Enteros COP y centavos exactos USD: scaled cae en el entero, el guard
+        // los identifica y la división no altera el double.
+        expect(roundMoneyUp(600000, 'COP')).toBe(600000);
+        expect(roundMoneyUp(13121212, 'COP')).toBe(13121212);
+        expect(roundMoneyUp(1469.13, 'USD')).toBe(1469.13);
+        expect(roundMoneyUp(0, 'COP')).toBe(0);
+        expect(roundMoneyUp(0, 'USD')).toBe(0);
+    });
+
+    it('always goes up on a genuine fraction, however small', () => {
+        // El contraste que define el modo frente a roundMoney:
+        // 100.0001 x 100(COP: factor 1) = 100.0001 -> ceil = 101
+        //   (roundMoney da 100: medio peso de diferencia por 0.0001).
+        expect(roundMoneyUp(100.0001, 'COP')).toBe(101);
+        expect(roundMoney(100.0001, 'COP')).toBe(100);
+        // 2.341 x 100 = 234.10000000000002 -> ceil = 235 -> 2.35
+        //   (roundMoney da 2.34: la fracción .1 no llegaba a la mitad).
+        expect(roundMoneyUp(2.341, 'USD')).toBe(2.35);
+        expect(roundMoney(2.341, 'USD')).toBe(2.34);
+    });
+
+    it('is idempotent: ceiling a ceiled value changes nothing', () => {
+        // La salida cae en la grilla de la moneda; re-aplicar el techo activa
+        // el guard de ruido (8.2 dos veces: su scaled sigue siendo 819.99...)
+        // y no mueve el número. Derivado contra runtime en ambas monedas.
+        const noisy: Array<[number, string]> = [
+            [1104.27244914, 'USD'],
+            [2.341, 'USD'],
+            [8.2, 'USD'],
+            [1.1, 'USD'],
+            [100.0001, 'COP'],
+            [13121212.121212, 'COP'],
+        ];
+        for (const [value, currency] of noisy) {
+            const once = roundMoneyUp(value, currency);
+            expect(roundMoneyUp(once, currency)).toBe(once);
+        }
+    });
+
+    it('never returns less than roundMoney (coherence between the two modes)', () => {
+        // up >= half por construcción (ceil >= round salvo en el guard, donde
+        // coinciden). El set incluye los casos frontera de ambos bloques:
+        // 1.005 es la divergencia visible — roundMoney baja a 1 (su double cae
+        // bajo la mitad), roundMoneyUp sube a 1.01 (fracción genuina).
+        const values: Array<[number, string]> = [
+            [1104.27244914, 'USD'],
+            [5466.69529279, 'USD'],
+            [2.341, 'USD'],
+            [2.345, 'USD'],
+            [1.005, 'USD'],
+            [8.2, 'USD'],
+            [100.0001, 'COP'],
+            [13121212.121212, 'COP'],
+            [-100.5, 'COP'],
+            [-2.341, 'USD'],
+            [0, 'USD'],
+            [600000, 'COP'],
+        ];
+        for (const [value, currency] of values) {
+            expect(roundMoneyUp(value, currency)).toBeGreaterThanOrEqual(roundMoney(value, currency));
+        }
+        expect(roundMoneyUp(1.005, 'USD')).toBe(1.01);
+        expect(roundMoney(1.005, 'USD')).toBe(1);
+    });
+
+    it('ceilings negatives toward +Infinity, i.e. toward zero', () => {
+        // ESPECIFICADO: Math.ceil va hacia +Infinity, igual que las mitades de
+        // Math.round — en negativos, hacia cero. Derivado contra runtime:
+        // -100.5    -> ceil(-100.5)    = -100 (coincide con roundMoney)
+        // -100.0001 -> ceil(-100.0001) = -100 (la fracción genuina negativa
+        //              también "sube" hacia cero: -100 > -100.0001, la garantía
+        //              resultado >= exacto se sostiene con signo)
+        // -2.341    -> ceil(-234.1)/100 = -2.34
+        expect(roundMoneyUp(-100.5, 'COP')).toBe(-100);
+        expect(roundMoneyUp(-100.0001, 'COP')).toBe(-100);
+        expect(roundMoneyUp(-2.341, 'USD')).toBe(-2.34);
+        expect(roundMoneyUp(-100.0001, 'COP')).toBeGreaterThanOrEqual(-100.0001);
     });
 });
