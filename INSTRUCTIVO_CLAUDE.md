@@ -317,7 +317,10 @@ Sin esto, nada se declara resuelto:
 - [ ] `pnpm --filter @repo/pricing-engine test` si el cambio toca `packages/pricing-engine` — el gate del paquete es su `tsconfig.json`, NO `tsconfig.build.json` (ADR-111).
 - [ ] Si algo falla: parar y reportar con la salida real. No continuar.
 - [ ] Nada se declara resuelto sin evidencia de esta sesión.
+- [ ] Si el cambio tocó un paquete `@repo/*`: borrar `apps/web/node_modules/.vite` (o arrancar con `vite --force`) ANTES de verificar en navegador — el pre-bundle del optimizador se invalida por hash de lockfile+config, nunca por el contenido del `dist/`, así que un rebuild del paquete deja la caché sirviendo la versión anterior (síntoma: `TypeError: <exportNueva> is not a function`, con fallos en cascada río abajo).
 - [ ] Flujos con estado (login, timers, polling, exportaciones): verificación del flujo completo en navegador — la hace Luis (CONVENTIONS §H).
+
+> Sobre la caché de Vite: **no** mover los `@repo/*` de `optimizeDeps.include` a `exclude` para evitar el borrado. El dev server de Vite sirve ESM nativo y los paquetes del workspace linkeados son CJS: sin pre-bundle no cargan. La solución de raíz es migrarlos a ESM (cohorte de cola fría ESM + `"files": ["dist"]`, ADR-096/111); hasta entonces el costo es una interrupción por rebuild.
 
 ### 10.5 Bloque obligatorio en prompts de diagnóstico
 
