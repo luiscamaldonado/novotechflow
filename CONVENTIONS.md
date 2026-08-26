@@ -425,14 +425,14 @@ Fuente única de verdad para TODOS los cálculos financieros del proyecto: el pa
 **Regla absoluta:** NINGÚN archivo del proyecto debe implementar cálculos de landed cost, dilución, margen o precio unitario por fuera del pricing-engine. Si necesitas un cálculo financiero nuevo, agrégalo al paquete (`packages/pricing-engine/src/index.ts`).
 
 Funciones principales:
-- `calculateParentLandedCost` — costo aterrizado del item padre
+- `calculateParentLandedCost` — costo aterrizado del item padre; el flete negativo se trata como 0 (ADR-116)
 - `calculateChildrenCostTotal` — costo total acumulado de sub-items, sin dividir por la cantidad del padre (renombrado en ADR-116)
-- `calculateBaseLandedCost` — costo base incluyendo hijos
+- `calculateBaseLandedCost` — costo base por unidad incluyendo hijos; con cantidad <= 0 omite el término de hijos y retorna el landed del padre (ADR-116)
 - `calculateItemLandedTotal` — landed total de un item: costo convertido + flete del padre, × cantidad, + costo total de los hijos; formulado SIN la división por cantidad, para que un `quantity` 0 aporte el costo de los hijos en vez de envenenar el agregado con NaN (ADR-115)
 - `calculateTotalDilutedCost` / `calculateTotalNormalSubtotal` — agregados de dilución, ambos sobre el landed de cada item (ADR-115)
 - `calculateDilutionPerUnit` — distribución proporcional de costos diluidos, con el peso del visible medido por su landed por unidad (ADR-115)
 - `calculateEffectiveLandedCost` — costo final con dilución
-- `resolveMargin` — resolución de margen (override ?? base)
+- `resolveMargin` — resolución de margen: el override gana solo si es un margen válido (finito y >= 0); un override inválido cae al margen base y una base inválida cae a 0 (ADR-116)
 - `calculateUnitPrice` — precio unitario desde costo y margen
 - `calculateLineTotal` — total de línea
 - `calculateMarginFromPrice` — cálculo inverso (precio → margen)

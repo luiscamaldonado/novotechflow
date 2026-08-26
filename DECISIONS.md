@@ -5124,3 +5124,57 @@ La caracterización #8 de ADR-111 congeló que calculateTotalDilutedCost y calcu
 - Skill novotechflow e instrucciones de Claude.ai con H3-dilución cerrada (las entrega el chat).
 - Aviso a Felipe, ahora con los dos cambios (redondeo + dilución landed).
 - Opcional: cuantificación de exposición en la copia local de producción.
+
+## ADR-116 — Adjudicación del backlog H3: guards de margen, flete y cantidad, y fin de los nombres mentirosos
+
+**Fecha:** 2026-08-26
+**Estado:** Implementada (rama feature/pricing-h3-engine, commits 86eaaf2, fa73ee3, e3185e1, 73a4e98, 29b31a1 más el commit de docs de este ADR; pendiente de merge fast-forward a master y push)
+
+### Contexto
+
+ADR-111 congeló los bordes sin guard del pricing-engine como caracterizaciones y ADR-115 dejó 22 vivas. Luis adjudicó el backlog en tres bloques. Bloque A (corregir): el candidato #1 resolveMargin('') → 0 (campo de margen borrado cotizaba a costo en silencio), la cadena NaN de margen inválido que atravesaba el guard del precio, la cantidad <= 0 en calculateBaseLandedCost (Infinity, NaN o resta de hijos según hubiera hijos) y el rename de calculateChildrenCostPerUnit, cuyo nombre mentía por un factor igual a la cantidad del padre. Bloque B, cuatro decisiones de negocio de Luis: B1 — el flete negativo no existe como caso de negocio; B2 — el margen negativo deliberado no ocurre; B3 — sí va aviso de UI cuando un escenario queda 100% diluido; B4 — sí se deshabilitan los campos de precio/margen en filas diluidas. B3 y B4 pertenecen a la cohorte de UI, no a esta. Bloque C (aceptar congelados, sin tocar): convertCost con par desconocido o TRM inválida, isDiluted undefined = normal, override de margen 0 gana, diluido → precio 0, invariantes 3b/3c.
+
+El recon previo (solo lectura, baseline 139 tests en verde sobre cb0bf5f) encontró además que el flete entraba al costo aterrizado por dos vías — calculateParentLandedCost y una fórmula duplicada inline en la vía del hijo — y que la vía del hijo no tenía cobertura de flete negativo.
+
+### Decisión
+
+1. **resolveMargin endurecido (86eaaf2).** Un margen es válido si es un number finito y >= 0, o un string no vacío tras trim cuyo Number() es finito y >= 0 (helper privado isValidMargin). El override gana solo si es válido; un override inválido ('', espacios, no numérico, negativo, NaN, Infinity) cae al margen base — el mismo destino que el campo no tocado —; una base inválida cae a 0. La función nunca retorna NaN ni negativo. resolveMargin(0, 15) → 0 no se tocó: el margen 0 explícito sigue siendo caso de negocio. El guard de B2 vive aquí, en el embudo del pipeline.
+2. **Guard de finitud en calculateUnitPrice (mismo commit).** if (!Number.isFinite(margin) || margin >= MAX_MARGIN) return 0. Es defensivo: un NaN ya no puede llegar vía resolveMargin, pero un consumidor directo tampoco puede colar una división envenenada. La cadena NaN margen → precio → totales queda muerta y asertada: calculateUnitPrice(100, resolveMargin('abc', 15)) es exactamente calculateUnitPrice(100, 15).
+3. **calculateUnitPrice(100, -25) → 80 y su espejo calculateMarginFromPrice(80, 100) → -25 quedan congelados a propósito.** El guard de margen negativo vive en resolveMargin; el espejo es un reportero honesto — informar margen negativo cuando el precio está bajo costo es diagnóstico, no bug. El consumidor directo de calculateUnitPrice en apps/web (ProposalItemsBuilder.tsx) queda cubierto por la cohorte de UI (min=0 en los inputs de margen).
+4. **El flete negativo se trata como 0 (fa73ee3, B1).** Guard de signo en calculateParentLandedCost; la vía del hijo elimina la fórmula duplicada y reutiliza la función — el flete entra al costo aterrizado por una sola puerta. Con flete >= 0 la dedup es bit-idéntica (lo atestigua f2, toBeCloseTo(370, 10)); con negativo el hijo queda cubierto por el mismo guard, con assert nuevo. Sin guard de finitud a propósito: el flete no numérico no está adjudicado.
+5. **calculateBaseLandedCost con cantidad <= 0 retorna el landed del padre solo (e3185e1).** El término de hijos se omite: ya no produce Infinity (hijos/0), NaN (0/0) ni resta de hijos (cantidad negativa). Asimetría deliberada con calculateItemLandedTotal (ADR-115): la hoja sin división sí cuenta los hijos de una fila con cantidad 0 porque mide dinero total, no dinero por unidad — inherente a "por unidad de cero unidades"; documentada en el JSDoc.
+6. **Renames (73a4e98, 29b31a1).** calculateChildrenCostPerUnit → calculateChildrenCostTotal (cero consumidores externos en código, confirmado por grep repo-wide; sin alias de compatibilidad), parámetro childrenCostPerUnit → childrenTotal en calculateBaseLandedCost (su JSDoc ya decía childrenTotal), y el campo del DTO ItemDisplayValues.childrenCostPerUnit → childrenCostTotal, cuyo único consumidor externo real es ScenarioItemRow.tsx (dos sitios). Históricos intactos: DECISIONS.md, docs/audits/ y backups/ (snapshot fechado con variables locales de otro linaje).
+
+Suite: 139 → 146 (145 tras el commit 1 con la cobertura de finitud; +1 el hijo con flete negativo; los renames no mueven valores). Nueve asserts pasaron de "caracterización:" a "especificación (ADR-116):"; la cabecera de index.spec.ts ganó el párrafo EXCEPCIÓN (ADR-116) y su línea de matchers quedó sin toBeNaN() ni toBe(Infinity) — este ADR cerró los tres bordes que los producían.
+
+### Consecuencias
+
+- Los cuatro venenos numéricos del engine (margen NaN, precio NaN, costo Infinity, resta de hijos) quedan cortados en su origen, y el peor caso comercial del backlog — campo de margen borrado cotizando a costo — quedó cerrado con la semántica que la UI sugiere: vaciar el campo y no tocarlo dan el mismo resultado.
+- Lección operativa (extiende ADR-114): apps/web y apps/api resuelven dist/ del paquete, no src/. A mitad de cohorte el dist/ era pre-cohorte: cualquier verificación local habría corrido el engine sin guards. Tras commits al engine, pnpm --filter @repo/pricing-engine build más purga de apps/web/node_modules/.vite antes de cualquier verificación local. Producción no se afecta: Railway construye desde fuente.
+- Dos correcciones de proceso registradas: la transcripción del recon tenía una palabra mal en un bloque declarado verbatim (el JSDoc real decía childrenTotal), y el conjunto de consumidores del campo del DTO estaba inflado (tres archivos importaban del paquete; solo uno usaba el campo). Reafirma la regla: los ADR y las ediciones se redactan contra el disco, no contra transcripciones.
+- Backlog H3 vivo, sin congelar por ningún test: el input no numérico en flete y cantidad atraviesa los guards nuevos (NaN < 0 y NaN <= 0 son false) y sigue devolviendo NaN. El Bloque C sigue congelado según lo adjudicado.
+
+### Archivos
+
+- packages/pricing-engine/src/index.ts — isValidMargin, resolveMargin, calculateUnitPrice, calculateParentLandedCost, calculateChildrenCostTotal (rename + dedup), calculateBaseLandedCost (guard + parámetro), ItemDisplayValues
+- packages/pricing-engine/src/index.spec.ts — cabecera (EXCEPCIÓN ADR-116, matchers), resolveMargin, calculateUnitPrice, calculateParentLandedCost, calculateChildrenCostTotal, calculateBaseLandedCost
+- packages/pricing-engine/src/scenarios.spec.ts — imports, helper exactUnitPrice (dos sitios), campo del DTO (seis sitios)
+- apps/web/src/pages/proposals/components/ScenarioItemRow.tsx — campo del DTO (dos sitios)
+- CONVENTIONS.md / AGENTS.md — glosario del engine (rename en 73a4e98; resolveMargin, calculateParentLandedCost y calculateBaseLandedCost en el commit de este ADR)
+
+### Commits
+
+- 86eaaf2 — fix(pricing-engine): resolveMargin cae a base ante margen invalido y muere la cadena NaN (ADR-116)
+- fa73ee3 — fix(pricing-engine): flete negativo se trata como 0 y la via del hijo reutiliza calculateParentLandedCost (ADR-116)
+- e3185e1 — fix(pricing-engine): calculateBaseLandedCost ignora el termino de hijos con cantidad <= 0 (ADR-116)
+- 73a4e98 — refactor(pricing-engine): renombra calculateChildrenCostPerUnit a calculateChildrenCostTotal (ADR-116)
+- 29b31a1 — refactor(pricing-engine,web): renombra ItemDisplayValues.childrenCostPerUnit a childrenCostTotal (ADR-116)
+
+### Pendientes
+
+- Merge fast-forward a master, push (Luis), verificación de CI y de los tres deploys por CLI, Sync now del conector, borrado de la rama tras confirmación en producción.
+- Verificación en navegador (Luis): la fila con "Costo oculto total" muestra el mismo número que antes; un escenario con el campo de margen borrado cotiza ahora al margen base, no a costo.
+- Cohorte 2 — UI: B3 (aviso de escenario 100% diluido, patrón del modal de ADR-039), B4 (deshabilitar precio/margen en filas diluidas) y min=0 en los inputs de margen del builder.
+- Propagación a capas de Claude.ai (instrucciones del proyecto y skill novotechflow, si nombran las funciones renombradas o la semántica vieja) — entrega a Luis.
+- Cola fría con prioridad subida: backups/2026-03-26-PDF_DOC_BUILDER/ está trackeado (259 archivos) e incluye dumps de Postgres — evaluar si contienen datos de producción y decidir entre .gitignore y purga de historial.
+- Backlog H3 restante: input no numérico en flete y cantidad; congelados del Bloque C.
