@@ -41,6 +41,13 @@ import type { PricingScenarioItem } from './index';
 // cotización. Se movieron a propósito cuando la dilución pasó a operar sobre el
 // landed, y ahora dicen lo que el reparto DEBE hacer, no lo que hacía.
 //
+// EXCEPCIÓN (ADR-116): lo mismo con los bloques marcados "especificación
+// (ADR-116):" en resolveMargin y calculateUnitPrice. Congelaban que un margen
+// inválido ('', "abc", negativo) se volviera 0 o NaN, y que ese NaN atravesara
+// el guard del precio hasta envenenar los totales. Tampoco era una decisión: un
+// campo borrado no es un margen de 0%. Ahora el margen inválido cae al margen
+// base (y la base inválida a 0), y el guard pregunta por finitud.
+//
 // Matchers: toBe para enteros exactos, constantes, Infinity y los retorno-0 de
 // los guards; toBeCloseTo(v, 10) cuando el valor es analíticamente exacto salvo
 // ruido IEEE 754; toBeNaN() para NaN.
@@ -508,24 +515,54 @@ describe('resolveMargin', () => {
         expect(resolveMargin('30', 15)).toBe(30);
     });
 
-    it('returns NaN for a non-numeric string override', () => {
-        // caracterización: Number() sin validación. "abc" no es nullish, asi que
-        // gana sobre el margen base y produce NaN, que de ahí en adelante se
-        // propaga a unitPrice y a los totales sin que nada lo detenga.
-        expect(resolveMargin('abc', 15)).toBeNaN();
+    it('falls back to the base margin for a non-numeric string override', () => {
+        // especificación (ADR-116): un override que no es un margen ya no gana
+        // sobre el margen base ni produce NaN. "abc" es inválido, asi que cae al
+        // 15 del item — el mismo destino que un campo que nadie tocó — y la cadena
+        // NaN hacia unitPrice y los totales queda cortada en su origen.
+        expect(resolveMargin('abc', 15)).toBe(15);
     });
 
-    it('turns an empty-string override into 0, not into the base margin', () => {
-        // caracterización: Number("") = 0 y "" no es nullish, asi que un input de
-        // formulario BORRADO no cae al margen del item: se convierte en un margen
-        // 0% explícito. Vaciar el campo y no tocarlo dan resultados distintos,
-        // que es justo lo contrario de lo que sugiere la UI.
-        expect(resolveMargin('', 15)).toBe(0);
+    it('falls back to the base margin when the override is an empty string', () => {
+        // especificación (ADR-116): un campo de formulario BORRADO ya no se
+        // convierte en un margen 0% explícito. "" no es un margen, es la ausencia
+        // de uno, asi que vaciar el campo y no tocarlo dan el MISMO resultado (15),
+        // que es justo lo que sugiere la UI.
+        expect(resolveMargin('', 15)).toBe(15);
     });
 
-    it('returns NaN for a non-numeric item margin', () => {
-        // caracterización: el mismo Number() sin validar, del lado del fallback.
-        expect(resolveMargin(null, 'abc')).toBeNaN();
+    it('treats a whitespace-only override as an empty field, not as a 0% margin', () => {
+        // especificación (ADR-116): el trim mete los espacios en el mismo saco que
+        // el string vacío. Sin él, Number("  ") = 0 daría un margen 0% tan
+        // silencioso como el de "".
+        expect(resolveMargin('  ', 15)).toBe(15);
+    });
+
+    it('falls back to the base margin for a negative numeric override', () => {
+        // especificación (ADR-116): un margen negativo no es un margen válido. El
+        // -5 se descarta y gana el 15 del item, en vez de llegar a
+        // calculateUnitPrice y cotizar bajo costo sin ningún aviso.
+        expect(resolveMargin(-5, 15)).toBe(15);
+    });
+
+    it('falls back to the base margin for a negative override written as a string', () => {
+        // especificación (ADR-116): la validación corre a ambos lados del
+        // Number(), asi que "-5" y -5 salen por la misma puerta.
+        expect(resolveMargin('-5', 15)).toBe(15);
+    });
+
+    it('falls back to 0 for a non-numeric item margin', () => {
+        // especificación (ADR-116): del lado del fallback ya no hay Number() sin
+        // validar. Sin override utilizable y con una base inválida el margen es 0
+        // (venta al costo), nunca NaN.
+        expect(resolveMargin(null, 'abc')).toBe(0);
+    });
+
+    it('falls back to 0 for a negative item margin', () => {
+        // especificación (ADR-116): mismo destino que la base no numérica. Cuando
+        // la base tampoco sirve no queda a qué caer, y 0 es el único valor que no
+        // envenena el precio ni lo pone bajo costo.
+        expect(resolveMargin(null, -10)).toBe(0);
     });
 });
 
@@ -563,11 +600,29 @@ describe('calculateUnitPrice', () => {
         expect(price).toBeLessThan(100);
     });
 
-    it('returns NaN for a NaN margin instead of tripping the guard', () => {
-        // caracterización: NaN >= 100 es false, asi que el guard NO lo atrapa y la
-        // división corre. Es el eslabón que convierte el NaN de resolveMargin en
-        // un precio NaN.
-        expect(calculateUnitPrice(100, NaN)).toBeNaN();
+    it('returns 0 for a NaN margin: the finite guard catches it', () => {
+        // especificación (ADR-116): el guard pregunta primero por finitud, asi que
+        // NaN ya no atraviesa la división. La línea a 0 es DEFENSIVA y hoy es
+        // inalcanzable vía resolveMargin, que nunca entrega NaN; queda para el
+        // consumidor que llame a esta función directamente.
+        expect(calculateUnitPrice(100, NaN)).toBe(0);
+    });
+
+    it('returns 0 for an infinite margin, on both signs', () => {
+        // especificación (ADR-116): cobertura de la mitad !Number.isFinite del
+        // guard; Infinity ya daba 0 por el brazo MAX_MARGIN, -Infinity ya daba 0
+        // por la división — esto fija que el guard nuevo los corta antes.
+        expect(calculateUnitPrice(100, Infinity)).toBe(0);
+        expect(calculateUnitPrice(100, -Infinity)).toBe(0);
+    });
+
+    it('the NaN chain is dead: an invalid margin prices like the base margin', () => {
+        // especificación (ADR-116): la cadena resolveMargin -> calculateUnitPrice
+        // que convertía un margen inválido en un precio NaN ya no existe. Con un
+        // override inválido el precio es EXACTAMENTE el del margen base: ni NaN,
+        // ni 0, ni un precio distinto.
+        expect(calculateUnitPrice(100, resolveMargin('abc', 15)))
+            .toBe(calculateUnitPrice(100, 15));
     });
 });
 

@@ -183,23 +183,42 @@ export function calculateEffectiveLandedCost(
 }
 
 /**
+ * True when a margin input can be trusted as a percentage (ADR-116): a finite,
+ * non-negative number, or a string that spells one. An empty or whitespace-only
+ * string is NOT a margin — it is a field the user cleared.
+ */
+function isValidMargin(value: number | string | null | undefined): boolean {
+    if (typeof value === 'number') return Number.isFinite(value) && value >= 0;
+    if (typeof value !== 'string' || value.trim() === '') return false;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0;
+}
+
+/**
  * Resolve the effective margin for a scenario item.
- * Override takes priority unless null/undefined. Always returns a number.
+ * The override takes priority ONLY when it is a valid margin (ADR-116): an
+ * invalid override ('', whitespace, non-numeric, negative, NaN, Infinity) falls
+ * back to the item margin — the same destination as a field never touched. An
+ * invalid base margin falls back to 0. Never returns NaN nor a negative number.
  */
 export function resolveMargin(
     marginPctOverride: number | string | null | undefined,
     itemMarginPct: number | string,
 ): number {
     const override = marginPctOverride ?? undefined;
-    return override !== undefined ? Number(override) : Number(itemMarginPct);
+    if (override !== undefined && isValidMargin(override)) return Number(override);
+    return isValidMargin(itemMarginPct) ? Number(itemMarginPct) : 0;
 }
 
 /**
  * Unit sale price = effectiveLandedCost / (1 - margin/100).
  * Returns 0 if margin >= MAX_MARGIN (avoids division by zero or negative price).
+ * The finiteness half of the guard is DEFENSIVE (ADR-116): a NaN or Infinity
+ * margin can no longer arrive through resolveMargin, but a consumer calling this
+ * function directly cannot slip a poisoned division through either.
  */
 export function calculateUnitPrice(effectiveLandedCost: number, margin: number): number {
-    if (margin >= MAX_MARGIN) return 0;
+    if (!Number.isFinite(margin) || margin >= MAX_MARGIN) return 0;
     return effectiveLandedCost / (1 - margin / 100);
 }
 
