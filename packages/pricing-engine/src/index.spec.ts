@@ -42,11 +42,13 @@ import type { PricingScenarioItem } from './index';
 // landed, y ahora dicen lo que el reparto DEBE hacer, no lo que hacía.
 //
 // EXCEPCIÓN (ADR-116): lo mismo con los bloques marcados "especificación
-// (ADR-116):" en resolveMargin y calculateUnitPrice. Congelaban que un margen
-// inválido ('', "abc", negativo) se volviera 0 o NaN, y que ese NaN atravesara
-// el guard del precio hasta envenenar los totales. Tampoco era una decisión: un
-// campo borrado no es un margen de 0%. Ahora el margen inválido cae al margen
-// base (y la base inválida a 0), y el guard pregunta por finitud.
+// (ADR-116):" en resolveMargin, calculateUnitPrice y calculateParentLandedCost.
+// Congelaban que un margen inválido ('', "abc", negativo) se volviera 0 o NaN,
+// que ese NaN atravesara el guard del precio hasta envenenar los totales, y que
+// un flete negativo BAJARA el costo aterrizado. Tampoco eran decisiones: un
+// campo borrado no es un margen de 0%, y un flete negativo no es un descuento.
+// Ahora el margen inválido cae al margen base (y la base inválida a 0), el guard
+// del precio pregunta por finitud, y el flete negativo se trata como 0.
 //
 // Matchers: toBe para enteros exactos, constantes, Infinity y los retorno-0 de
 // los guards; toBeCloseTo(v, 10) cuando el valor es analíticamente exacto salvo
@@ -147,11 +149,11 @@ describe('calculateParentLandedCost', () => {
         expect(calculateParentLandedCost(100, 1.5)).toBeCloseTo(101.5, 10);
     });
 
-    it('discounts the cost when flete is negative', () => {
-        // caracterización: no hay guard de signo. Un flete negativo BAJA el landed
-        // cost (100 x 0.9 = 90) en vez de rechazarse, asi que un dato mal
-        // capturado se vuelve un descuento invisible.
-        expect(calculateParentLandedCost(100, -10)).toBe(90);
+    it('treats a negative flete as 0, so the cost does not drop', () => {
+        // especificación (ADR-116, B1): no existe flete negativo como caso de
+        // negocio; se trata como 0 y el costo no baja. Antes 100 x 0.9 = 90 hacía
+        // de un dato mal capturado un descuento invisible.
+        expect(calculateParentLandedCost(100, -10)).toBe(100);
     });
 
     it('returns 0 when the cost is 0, whatever the flete', () => {
@@ -193,6 +195,15 @@ describe('calculateChildrenCostPerUnit', () => {
         // legítima: Number("10") = 10, y 100 x 1.1 x 2 = 220.
         const children = [makeItem({ unitCost: 100, fletePct: '10', quantity: 2 })];
         expect(calculateChildrenCostPerUnit(children)).toBeCloseTo(220, 10);
+    });
+
+    it('quotes a child with a negative flete as if the flete were 0', () => {
+        // especificación (ADR-116): la vía del hijo pasa por
+        // calculateParentLandedCost; el guard de signo cubre el hueco que la
+        // fórmula duplicada dejaba abierto.
+        // 100 x (1 + 0/100) x 2 = 200, y no 100 x 0.9 x 2 = 180.
+        const children = [makeItem({ unitCost: 100, fletePct: -10, quantity: 2 })];
+        expect(calculateChildrenCostPerUnit(children)).toBe(200);
     });
 
     it('converts a child in another currency before summing', () => {

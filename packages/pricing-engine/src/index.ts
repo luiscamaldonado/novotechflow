@@ -54,14 +54,25 @@ export interface ScenarioTotals {
 
 /**
  * Landed cost of a parent item = unitCost × (1 + fletePct / 100)
+ *
+ * A negative fletePct is treated as 0 (ADR-116, B1): a negative flete does not
+ * exist as a business case, so a mis-captured figure no longer turns into an
+ * invisible discount on the cost. No finiteness guard on purpose — a non-numeric
+ * flete is not adjudicated yet and stays in the backlog.
  */
 export function calculateParentLandedCost(unitCost: number, fletePct: number): number {
-    return unitCost * (1 + fletePct / 100);
+    const pct = fletePct < 0 ? 0 : fletePct;
+    return unitCost * (1 + pct / 100);
 }
 
 /**
  * Sum of (childLanded × childQuantity) across all children.
  * Returns the TOTAL children cost (not per-parent-unit).
+ *
+ * The child's flete goes through calculateParentLandedCost (ADR-116): the flete
+ * enters the landed cost through a single door. With flete >= 0 it is
+ * bit-identical to the inline formula it replaced; with a negative one the child
+ * is now covered by the same sign guard as the parent.
  */
 export function calculateChildrenCostPerUnit(
     children: PricingScenarioItem[],
@@ -73,7 +84,7 @@ export function calculateChildrenCostPerUnit(
         const rawCost = Number(child.item.unitCost);
         const cCost = convertCost(rawCost, child.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
         const cFlete = Number(child.item.internalCosts?.fletePct || 0);
-        total += cCost * (1 + cFlete / 100) * child.quantity;
+        total += calculateParentLandedCost(cCost, cFlete) * child.quantity;
     }
     return total;
 }
