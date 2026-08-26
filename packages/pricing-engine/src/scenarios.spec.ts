@@ -194,7 +194,7 @@ const usdDisplayValuesOf = (si: PricingScenarioItem) =>
 /** Campos de dinero de cada retorno. Los porcentajes quedan fuera a propósito. */
 const MONEY_FIELDS_OF_ITEM: Array<keyof ItemDisplayValues> = [
     'parentLandedCost',
-    'childrenCostPerUnit',
+    'childrenCostTotal',
     'baseLandedCost',
     'dilutionPerUnit',
     'effectiveLandedCost',
@@ -260,7 +260,7 @@ describe('calculateItemDisplayValues', () => {
         // parentLanded = 4 000 000 x (1 + 1.5/100) = 4 000 000 x 1.015 = 4 060 000
         expect(dv.parentLandedCost).toBe(4_060_000);
         // childrenCost = 200 000 x (1 + 0/100) x q1 = 200 000   (TOTAL, no per-unit)
-        expect(dv.childrenCostPerUnit).toBe(200_000);
+        expect(dv.childrenCostTotal).toBe(200_000);
         // baseLanded = 4 060 000 + 200 000/q2 = 4 060 000 + 100 000 = 4 160 000
         expect(dv.baseLandedCost).toBe(4_160_000);
 
@@ -297,7 +297,7 @@ describe('calculateItemDisplayValues', () => {
         // ── costo ── misma moneda: 500 000 sin convertir
         // ── landed ── sin internalCosts, flete 0; sin hijos
         expect(dv.parentLandedCost).toBe(500_000);
-        expect(dv.childrenCostPerUnit).toBe(0);
+        expect(dv.childrenCostTotal).toBe(0);
         // baseLanded = 500 000 + 0/q3 = 500 000
         expect(dv.baseLandedCost).toBe(500_000);
 
@@ -704,7 +704,7 @@ describe('coherence invariants between the two composite functions', () => {
         // produce: las columnas de costo se redondean a la salida cada una POR
         // SEPARADO, no en cadena. Con parentLanded = 100.5 y childrenCost = 0.5:
         //   parentLandedCost    = roundMoney(100.5) = 101
-        //   childrenCostPerUnit = roundMoney(0.5)   = 1
+        //   childrenCostTotal   = roundMoney(0.5)   = 1
         //   baseLandedCost      = roundMoney(100.5 + 0.5/q1) = roundMoney(101) = 101
         // 101 + 1 = 102 != 101: un peso de deriva entre columnas internas.
         // El fixture principal no la exhibe (sus tres items dan deriva 0), pero
@@ -723,9 +723,9 @@ describe('coherence invariants between the two composite functions', () => {
         );
 
         expect(dv.parentLandedCost).toBe(101);
-        expect(dv.childrenCostPerUnit).toBe(1);
+        expect(dv.childrenCostTotal).toBe(1);
         expect(dv.baseLandedCost).toBe(101);
-        expect(dv.parentLandedCost + dv.childrenCostPerUnit - dv.baseLandedCost).toBe(1);
+        expect(dv.parentLandedCost + dv.childrenCostTotal - dv.baseLandedCost).toBe(1);
 
         // Y el fixture principal, en contraste, no deriva en ninguno de sus items.
         for (const si of SCENARIO) {

@@ -73,7 +73,7 @@ export default function ScenarioItemRow({
     onMoveUp,
     onMoveDown,
 }: ScenarioItemRowProps) {
-    const { childrenCostPerUnit, lineTotal, margin, unitPrice } = displayValues;
+    const { childrenCostTotal, lineTotal, margin, unitPrice } = displayValues;
     const hasUnitPriceOverride = si.unitPriceOverride !== null && si.unitPriceOverride !== undefined;
     const children = si.children || [];
     const childCount = children.length;
@@ -388,7 +388,7 @@ export default function ScenarioItemRow({
                             {children.length > 0 && (
                                 <div className="flex justify-end pt-1">
                                     <span className="text-[9px] font-black text-violet-600 bg-violet-100 px-3 py-1 rounded-lg">
-                                        Costo oculto total: {formatMoney(childrenCostPerUnit, scenarioCurrency)}
+                                        Costo oculto total: {formatMoney(childrenCostTotal, scenarioCurrency)}
                                     </span>
                                 </div>
                             )}

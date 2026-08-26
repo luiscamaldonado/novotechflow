@@ -309,7 +309,7 @@ export function roundMoneyUp(value: number, currency: string): number {
 
 export interface ItemDisplayValues {
     parentLandedCost: number;
-    childrenCostPerUnit: number;
+    childrenCostTotal: number;
     baseLandedCost: number;
     dilutionPerUnit: number;
     effectiveLandedCost: number;
@@ -382,7 +382,7 @@ export function calculateItemDisplayValues(
     // the client's one (unitPrice -> lineTotal -> subtotal -> vat -> total).
     return {
         parentLandedCost: roundMoney(parentLanded, currency),
-        childrenCostPerUnit: roundMoney(childrenCost, currency),
+        childrenCostTotal: roundMoney(childrenCost, currency),
         baseLandedCost: roundMoney(baseLanded, currency),
         dilutionPerUnit: roundMoney(dilution, currency),
         effectiveLandedCost: roundedEffectiveLanded,
