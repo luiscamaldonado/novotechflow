@@ -5081,3 +5081,46 @@ El caso real de Luis confirmó la caracterización #8 de ADR-111 como bug comerc
 - Skill novotechflow e instrucciones de Claude.ai con H2 cerrada (las entrega el chat como .md completos; incluye la regla de caché de Vite).
 - Aviso informativo a Felipe (de ADR-113, sigue vigente; ahora incluye el techo).
 - Fase H3-dilución (ADR-115) — inmediata. Opcional después: script de solo lectura sobre la copia local de producción para cuantificar la exposición (propuestas con diluidos + flete/hijos y su delta).
+
+## ADR-115 — La dilución reparte el costo aterrizado: calculateItemLandedTotal y el fin del flete evaporado
+
+**Fecha:** 2026-08-26
+**Estado:** Aceptado
+
+### Contexto
+
+La caracterización #8 de ADR-111 congeló que calculateTotalDilutedCost y calculateTotalNormalSubtotal usaban costo crudo (convertCost(unitCost) × quantity), ignorando flete e hijos. Validando ADR-113/114, el caso real de Luis (diluido 100 con flete 1% ×10; visibles 1000 con flete 1% ×10 y 5000 sin flete ×10; margen 7%, USD) la confirmó como bug comercial vivo en producción: el engine repartía 1000 en vez de 1010 y pesaba con 60 000 en vez de 60 100 — el flete del diluido se evaporaba de la cotización (10,80 USD de menos en un escenario de 65 mil, magnitud flete% × costo diluido marcada por el margen). El detalle revelador del recon: ambas compuestas ya tenían baseLanded calculado en la línea inmediatamente anterior y aun así pasaban el costo crudo a calculateDilutionPerUnit. Cero consumidores de las tres funciones fuera del paquete.
+
+### Decisión
+
+1. **Hoja nueva `calculateItemLandedTotal(si, currency, trm)`** = parentLanded(convertido) × quantity + childrenCost(convertidos). Reutiliza convertCost, calculateParentLandedCost y calculateChildrenCostPerUnit — cero duplicación (§J). Formulada SIN la división por cantidad: es algebraicamente baseLandedCost × quantity (verificado bit-exacto), pero con quantity 0 devuelve el costo de los hijos en vez de NaN — la vía (parent + children/0) × 0 habría envenenado el agregado entero.
+2. **Los dos agregados suman landed** (misma firma; conservan guards y conversión); **los pesos de calculateDilutionPerUnit reciben el landed del visible** — su fórmula no cambió, solo la semántica documentada del primer parámetro (los llamadores pasan baseLanded en vez del costo crudo), por lo que sus 6 asserts de aritmética pura no se movieron. El redondeo no cambia: hojas y agregados a precisión completa, las compuestas redondean a la salida (ADR-113/114).
+3. **Caracterizaciones movidas a propósito en el mismo commit** (regla de ADR-111): los dos asserts "uses ONLY unitCost × quantity" pasan de fotografía del accidente a especificación del diseño, con el valor viejo asertado como not.toBe(200) para que el bug quede escrito. NO se movieron: listas vacías, guards, isDiluted undefined, conversiones de moneda, los 6 de calculateDilutionPerUnit, invariantes 1/2/4/5/6 — y el 3 (libro de costos) quedó IDÉNTICO: repartir el landed cambia quién paga cada parte, no cuánto hay que pagar; el costo sin el diluido ahora ES exactamente totalNormalSubtotal, asertado.
+4. **Goldens re-derivados:** fixture COP se mueve (el peso landed de A con flete e hijo difiere del crudo: subtotal 13 121 793, total 15 269 797); fixture USD NO se mueve ni un valor — sin flete, hijos ni diluido, landed == crudo, documentado en el fixture como el contraste que aísla la causa. **Golden nuevo "caso real ADR-115"** con los números de Luis: totalDilutedCost 1010 (no 1000), dilución 16.973378/84.026622 con conservación exacta, unitarios 1104.28/5466.70 (techo de ADR-114), líneas 11 042.80/54 667.00, subtotal 65 709.80, y la moraleja asertada: not.toBe(65 699.00), delta ≈ +10.80 — el flete ya no se evapora. Suite: 128 → 139.
+5. **Verificado en navegador por Luis:** el escenario real e1 entrega por primera vez su derivación manual exacta (1 104,28 / 5 466,70 / 65 709,80; IVA 12 484,86; total 78 194,66); el escenario e2 (COP sin diluidos) idéntico al pre-fix, confirmando el alcance quirúrgico.
+
+### Consecuencias
+
+- Toda propuesta con diluidos donde el diluido o los visibles lleven flete, hijos o moneda distinta recalcula AL ALZA al re-renderizarse (nada se persiste, ADR-052) — incluidas las GANADA que consume Felipe vía api-external: el aviso pendiente a Felipe deja de ser solo de centavos (ADR-113/114) e incluye este cambio de montos reales.
+- La dilución en ambas monedas queda cubierta por construcción: el landed se calcula convertido a la moneda del escenario (flete porcentual conmuta con la conversión).
+- Pendiente opcional: script de solo lectura sobre la copia local de producción para cuantificar la exposición histórica (propuestas con diluidos + flete/hijos y su delta).
+- Backlog H3 restante: 22 caracterizaciones congeladas; candidato #1 sigue siendo resolveMargin('') → 0.
+
+### Archivos
+
+- packages/pricing-engine/src/index.ts — calculateItemLandedTotal; agregados y compuestas reapuntados
+- packages/pricing-engine/src/index.spec.ts — especificación ADR-115 (2 caracterizaciones movidas + 6 tests de la hoja nueva)
+- packages/pricing-engine/src/scenarios.spec.ts — goldens re-derivados + golden del caso real (5 tests)
+- CONVENTIONS.md §J, AGENTS.md
+
+### Commits
+
+- 84e2a90 — fix(pricing-engine): dilution distributes landed cost instead of raw cost
+- c6370ae — docs(conventions): dilution distributes landed cost
+
+### Pendientes
+
+- Test de imagen desde git archive, merge fast-forward y push (Luis); verificación CI (139 en Vitest) + 3 deploys; Sync now.
+- Skill novotechflow e instrucciones de Claude.ai con H3-dilución cerrada (las entrega el chat).
+- Aviso a Felipe, ahora con los dos cambios (redondeo + dilución landed).
+- Opcional: cuantificación de exposición en la copia local de producción.
