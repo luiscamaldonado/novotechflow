@@ -42,17 +42,22 @@ import type { PricingScenarioItem } from './index';
 // landed, y ahora dicen lo que el reparto DEBE hacer, no lo que hacía.
 //
 // EXCEPCIÓN (ADR-116): lo mismo con los bloques marcados "especificación
-// (ADR-116):" en resolveMargin, calculateUnitPrice y calculateParentLandedCost.
-// Congelaban que un margen inválido ('', "abc", negativo) se volviera 0 o NaN,
-// que ese NaN atravesara el guard del precio hasta envenenar los totales, y que
-// un flete negativo BAJARA el costo aterrizado. Tampoco eran decisiones: un
-// campo borrado no es un margen de 0%, y un flete negativo no es un descuento.
-// Ahora el margen inválido cae al margen base (y la base inválida a 0), el guard
-// del precio pregunta por finitud, y el flete negativo se trata como 0.
+// (ADR-116):" en resolveMargin, calculateUnitPrice, calculateParentLandedCost y
+// calculateBaseLandedCost. Congelaban que un margen inválido ('', "abc",
+// negativo) se volviera 0 o NaN, que ese NaN atravesara el guard del precio
+// hasta envenenar los totales, que un flete negativo BAJARA el costo aterrizado,
+// y que una cantidad <= 0 lo volviera Infinity, NaN o una resta de hijos.
+// Tampoco eran decisiones: un campo borrado no es un margen de 0%, un flete
+// negativo no es un descuento, y una fila de cero unidades no tiene un costo por
+// unidad infinito. Ahora el margen inválido cae al margen base (y la base
+// inválida a 0), el guard del precio pregunta por finitud, el flete negativo se
+// trata como 0, y con cantidad <= 0 el término de hijos se omite.
 //
-// Matchers: toBe para enteros exactos, constantes, Infinity y los retorno-0 de
-// los guards; toBeCloseTo(v, 10) cuando el valor es analíticamente exacto salvo
-// ruido IEEE 754; toBeNaN() para NaN.
+// Matchers: toBe para enteros exactos, constantes y los retorno-0 de los
+// guards; toBeCloseTo(v, 10) cuando el valor es analíticamente exacto salvo
+// ruido IEEE 754. Ya no hay toBeNaN() ni toBe(Infinity): ADR-116 cerró los tres
+// bordes que los producían, y el NaN/Infinity que queda en el archivo es solo de
+// ENTRADA, para probar los guards.
 // ──────────────────────────────────────────────────────────
 
 /** Construye un PricingScenarioItem mínimo para las funciones que reciben listas. */
@@ -226,24 +231,23 @@ describe('calculateBaseLandedCost', () => {
         expect(calculateBaseLandedCost(110, 300, 2)).toBe(260);
     });
 
-    it('returns Infinity when quantity is 0 and there are children', () => {
-        // caracterización: la división no tiene guard. 300/0 = Infinity, asi que
-        // 110 + Infinity = Infinity y el costo se propaga como Infinity a precio
-        // y totales en vez de cortar con un error.
-        expect(calculateBaseLandedCost(110, 300, 0)).toBe(Infinity);
+    it('drops the children term when the quantity is 0', () => {
+        // especificación (ADR-116): con cantidad 0 el término de hijos se omite;
+        // antes 300/0 = Infinity envenenaba precio y totales. Queda el landed del
+        // padre solo, el único valor por-unidad que sigue teniendo sentido.
+        expect(calculateBaseLandedCost(110, 300, 0)).toBe(110);
     });
 
-    it('returns NaN when quantity is 0 and there are no children', () => {
-        // caracterización: mismo hueco, peor síntoma. Sin hijos el numerador es 0,
-        // asi que 0/0 = NaN y el resultado es NaN, no Infinity. Un item con
-        // cantidad 0 envenena el escenario de forma distinta según tenga hijos.
-        expect(calculateBaseLandedCost(110, 0, 0)).toBeNaN();
+    it('drops the children term with quantity 0 even when there are no children', () => {
+        // especificación (ADR-116): mismo guard, sin hijos; antes 0/0 = NaN —
+        // cantidad 0 ya no envenena distinto según haya hijos.
+        expect(calculateBaseLandedCost(110, 0, 0)).toBe(110);
     });
 
-    it('subtracts the children cost when quantity is negative', () => {
-        // caracterización: sin guard de signo, 300/-2 = -150, asi que
-        // 110 + (-150) = -40. El costo de los hijos se RESTA del landed cost.
-        expect(calculateBaseLandedCost(110, 300, -2)).toBe(-40);
+    it('takes a negative quantity through the same guard', () => {
+        // especificación (ADR-116): cantidad negativa entra por el mismo guard;
+        // antes el costo de los hijos se RESTABA del landed cost (110 - 150 = -40).
+        expect(calculateBaseLandedCost(110, 300, -2)).toBe(110);
     });
 });
 

@@ -91,12 +91,24 @@ export function calculateChildrenCostPerUnit(
 
 /**
  * Base landed cost per parent unit = parentLanded + (childrenTotal / parentQuantity)
+ *
+ * With quantity <= 0 the children term is dropped and the function returns the
+ * parent landed cost alone (ADR-116): the only per-unit value that still means
+ * anything. It no longer produces Infinity (children / 0), NaN (0 / 0), nor a
+ * SUBTRACTION of the children cost (children / negative).
+ *
+ * Deliberate asymmetry with calculateItemLandedTotal (ADR-115/116): the
+ * division-free leaf DOES count the children of a row with quantity 0, because
+ * it measures total money and not money per unit. The difference is inherent to
+ * "per unit of zero units" — here there is no unit to charge the children to,
+ * while there the money is owed all the same.
  */
 export function calculateBaseLandedCost(
     parentLandedCost: number,
     childrenCostPerUnit: number,
     quantity: number,
 ): number {
+    if (quantity <= 0) return parentLandedCost;
     return parentLandedCost + (childrenCostPerUnit / quantity);
 }
 
