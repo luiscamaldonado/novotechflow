@@ -66,15 +66,15 @@ export function calculateParentLandedCost(unitCost: number, fletePct: number): n
 }
 
 /**
- * Sum of (childLanded × childQuantity) across all children.
- * Returns the TOTAL children cost (not per-parent-unit).
+ * Sum of (childLanded × childQuantity) across all children: the total children
+ * cost of the row, not a per-parent-unit figure.
  *
  * The child's flete goes through calculateParentLandedCost (ADR-116): the flete
  * enters the landed cost through a single door. With flete >= 0 it is
  * bit-identical to the inline formula it replaced; with a negative one the child
  * is now covered by the same sign guard as the parent.
  */
-export function calculateChildrenCostPerUnit(
+export function calculateChildrenCostTotal(
     children: PricingScenarioItem[],
     scenarioCurrency?: string,
     conversionTrm?: number | null,
@@ -105,11 +105,11 @@ export function calculateChildrenCostPerUnit(
  */
 export function calculateBaseLandedCost(
     parentLandedCost: number,
-    childrenCostPerUnit: number,
+    childrenTotal: number,
     quantity: number,
 ): number {
     if (quantity <= 0) return parentLandedCost;
-    return parentLandedCost + (childrenCostPerUnit / quantity);
+    return parentLandedCost + (childrenTotal / quantity);
 }
 
 /**
@@ -130,7 +130,7 @@ export function calculateItemLandedTotal(
     const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
     const flete = Number(si.item.internalCosts?.fletePct || 0);
     const parentLanded = calculateParentLandedCost(cost, flete);
-    const childrenCost = calculateChildrenCostPerUnit(si.children || [], scenarioCurrency, conversionTrm);
+    const childrenCost = calculateChildrenCostTotal(si.children || [], scenarioCurrency, conversionTrm);
     return parentLanded * si.quantity + childrenCost;
 }
 
@@ -335,7 +335,7 @@ export function calculateItemDisplayValues(
     const parentLanded = calculateParentLandedCost(cost, flete);
 
     const children = si.children || [];
-    const childrenCost = calculateChildrenCostPerUnit(children, scenarioCurrency, conversionTrm);
+    const childrenCost = calculateChildrenCostTotal(children, scenarioCurrency, conversionTrm);
     const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
     // Dilution (only for non-diluted items)
@@ -421,7 +421,7 @@ export function calculateScenarioTotals(
         const parentLanded = calculateParentLandedCost(cost, flete);
 
         const children = si.children || [];
-        const childrenCost = calculateChildrenCostPerUnit(children, scenarioCurrency, conversionTrm);
+        const childrenCost = calculateChildrenCostTotal(children, scenarioCurrency, conversionTrm);
         const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
         // Same ruler as calculateItemDisplayValues (ADR-115): baseLanded, not cost.

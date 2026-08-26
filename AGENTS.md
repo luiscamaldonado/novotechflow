@@ -426,7 +426,7 @@ Fuente única de verdad para TODOS los cálculos financieros del proyecto: el pa
 
 Funciones principales:
 - `calculateParentLandedCost` — costo aterrizado del item padre
-- `calculateChildrenCostPerUnit` — costo acumulado de sub-items
+- `calculateChildrenCostTotal` — costo total acumulado de sub-items, sin dividir por la cantidad del padre (renombrado en ADR-116)
 - `calculateBaseLandedCost` — costo base incluyendo hijos
 - `calculateItemLandedTotal` — landed total de un item: costo convertido + flete del padre, × cantidad, + costo total de los hijos; formulado SIN la división por cantidad, para que un `quantity` 0 aporte el costo de los hijos en vez de envenenar el agregado con NaN (ADR-115)
 - `calculateTotalDilutedCost` / `calculateTotalNormalSubtotal` — agregados de dilución, ambos sobre el landed de cada item (ADR-115)

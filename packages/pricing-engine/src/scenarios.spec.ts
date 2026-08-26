@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     IVA_RATE,
     calculateBaseLandedCost,
-    calculateChildrenCostPerUnit,
+    calculateChildrenCostTotal,
     calculateDilutionPerUnit,
     calculateEffectiveLandedCost,
     calculateItemDisplayValues,
@@ -748,7 +748,7 @@ describe('coherence invariants between the two composite functions', () => {
             const cost = convertCost(Number(si.item.unitCost), si.item.costCurrency || 'COP', currency, trm);
             const flete = Number(si.item.internalCosts?.fletePct || 0);
             const parentLanded = calculateParentLandedCost(cost, flete);
-            const childrenCost = calculateChildrenCostPerUnit(si.children || [], currency, trm);
+            const childrenCost = calculateChildrenCostTotal(si.children || [], currency, trm);
             const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
             // ADR-115: el peso es el landed POR UNIDAD, no el costo crudo.
             const dilution = calculateDilutionPerUnit(
@@ -1078,7 +1078,7 @@ describe('ADR-115 real case (USD, diluted item WITH flete)', () => {
             );
             const flete = Number(si.item.internalCosts?.fletePct || 0);
             const parentLanded = calculateParentLandedCost(cost, flete);
-            const childrenCost = calculateChildrenCostPerUnit(si.children || [], REAL_CURRENCY, null);
+            const childrenCost = calculateChildrenCostTotal(si.children || [], REAL_CURRENCY, null);
             const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
             const dilution = calculateDilutionPerUnit(
                 baseLanded, si.quantity,

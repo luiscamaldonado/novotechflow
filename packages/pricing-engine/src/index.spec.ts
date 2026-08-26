@@ -4,7 +4,7 @@ import {
     MAX_MARGIN,
     applyIva,
     calculateBaseLandedCost,
-    calculateChildrenCostPerUnit,
+    calculateChildrenCostTotal,
     calculateDilutionPerUnit,
     calculateEffectiveLandedCost,
     calculateItemLandedTotal,
@@ -51,7 +51,9 @@ import type { PricingScenarioItem } from './index';
 // negativo no es un descuento, y una fila de cero unidades no tiene un costo por
 // unidad infinito. Ahora el margen inválido cae al margen base (y la base
 // inválida a 0), el guard del precio pregunta por finitud, el flete negativo se
-// trata como 0, y con cantidad <= 0 el término de hijos se omite.
+// trata como 0, y con cantidad <= 0 el término de hijos se omite. Y en
+// calculateChildrenCostTotal el assert ya no congela un nombre mentiroso: el
+// rename convirtió la advertencia en la definición de la función.
 //
 // Matchers: toBe para enteros exactos, constantes y los retorno-0 de los
 // guards; toBeCloseTo(v, 10) cuando el valor es analíticamente exacto salvo
@@ -167,9 +169,9 @@ describe('calculateParentLandedCost', () => {
     });
 });
 
-describe('calculateChildrenCostPerUnit', () => {
+describe('calculateChildrenCostTotal', () => {
     it('returns 0 for an empty children list', () => {
-        expect(calculateChildrenCostPerUnit([])).toBe(0);
+        expect(calculateChildrenCostTotal([])).toBe(0);
     });
 
     it('sums childLanded x childQuantity across children', () => {
@@ -177,29 +179,28 @@ describe('calculateChildrenCostPerUnit', () => {
         // hijo B:  50 x (1 +  0/100) x 3 =  50 x 1   x 3 = 150
         // total = 220 + 150 = 370
         //
-        // caracterización: el nombre dice PerUnit pero el retorno es el TOTAL de
-        // los hijos, sin dividir por la cantidad del padre. Lo admite su propio
-        // JSDoc ("Returns the TOTAL children cost (not per-parent-unit)"); quien
-        // lo lea por el nombre y no por el JSDoc se equivoca por un factor igual
-        // a la cantidad del padre.
+        // especificación (ADR-116): el nombre ahora dice lo que la función
+        // retorna — el TOTAL de los hijos, sin dividir por la cantidad del padre.
+        // La aclaración dejó de ser una advertencia contra el nombre y pasó a ser
+        // su definición.
         const children = [
             makeItem({ unitCost: 100, fletePct: 10, quantity: 2 }),
             makeItem({ unitCost: 50, fletePct: 0, quantity: 3 }),
         ];
-        expect(calculateChildrenCostPerUnit(children)).toBeCloseTo(370, 10);
+        expect(calculateChildrenCostTotal(children)).toBeCloseTo(370, 10);
     });
 
     it('treats a missing internalCosts as flete 0', () => {
         // 100 x (1 + 0/100) x 2 = 200
         const children = [makeItem({ unitCost: 100, quantity: 2 })];
-        expect(calculateChildrenCostPerUnit(children)).toBe(200);
+        expect(calculateChildrenCostTotal(children)).toBe(200);
     });
 
     it('coerces a string fletePct through Number()', () => {
         // El tipo declara fletePct?: number | string, asi que "10" es una entrada
         // legítima: Number("10") = 10, y 100 x 1.1 x 2 = 220.
         const children = [makeItem({ unitCost: 100, fletePct: '10', quantity: 2 })];
-        expect(calculateChildrenCostPerUnit(children)).toBeCloseTo(220, 10);
+        expect(calculateChildrenCostTotal(children)).toBeCloseTo(220, 10);
     });
 
     it('quotes a child with a negative flete as if the flete were 0', () => {
@@ -208,20 +209,20 @@ describe('calculateChildrenCostPerUnit', () => {
         // fórmula duplicada dejaba abierto.
         // 100 x (1 + 0/100) x 2 = 200, y no 100 x 0.9 x 2 = 180.
         const children = [makeItem({ unitCost: 100, fletePct: -10, quantity: 2 })];
-        expect(calculateChildrenCostPerUnit(children)).toBe(200);
+        expect(calculateChildrenCostTotal(children)).toBe(200);
     });
 
     it('converts a child in another currency before summing', () => {
         // hijo en USD: 10 x 4000 = 40 000 COP; flete 0; cantidad 1, total 40 000.
         const children = [makeItem({ unitCost: 10, costCurrency: 'USD', quantity: 1 })];
-        expect(calculateChildrenCostPerUnit(children, 'COP', 4000)).toBe(40000);
+        expect(calculateChildrenCostTotal(children, 'COP', 4000)).toBe(40000);
     });
 
     it('defaults both currencies to COP when they are omitted', () => {
         // Sin costCurrency ni scenarioCurrency ambos caen a COP, asi que son la
         // misma moneda y convertCost no toca el costo: 100 x 1 x 1 = 100.
         const children = [makeItem({ unitCost: 100, quantity: 1 })];
-        expect(calculateChildrenCostPerUnit(children, undefined, 4000)).toBe(100);
+        expect(calculateChildrenCostTotal(children, undefined, 4000)).toBe(100);
     });
 });
 
@@ -295,7 +296,7 @@ describe('calculateItemLandedTotal', () => {
             children: [makeItem({ unitCost: 200000, costCurrency: 'COP', quantity: 1 })],
         });
         const parentLanded = calculateParentLandedCost(convertCost(1000, 'USD', 'COP', 4000), 1.5);
-        const childrenCost = calculateChildrenCostPerUnit(si.children ?? [], 'COP', 4000);
+        const childrenCost = calculateChildrenCostTotal(si.children ?? [], 'COP', 4000);
 
         expect(calculateItemLandedTotal(si, 'COP', 4000)).toBeCloseTo(8_320_000, 6);
         expect(calculateItemLandedTotal(si, 'COP', 4000))
