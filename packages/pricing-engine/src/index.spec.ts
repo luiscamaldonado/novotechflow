@@ -7,6 +7,7 @@ import {
     calculateChildrenCostPerUnit,
     calculateDilutionPerUnit,
     calculateEffectiveLandedCost,
+    calculateItemLandedTotal,
     calculateIvaAmount,
     calculateLineTotal,
     calculateMarginFromPrice,
@@ -32,6 +33,13 @@ import type { PricingScenarioItem } from './index';
 // Bordes: se asierta LO QUE EL CÓDIGO HACE HOY, marcado "caracterización:".
 // Ningún assert de este archivo juzga si el comportamiento es correcto; los
 // congela para que un cambio futuro sea visible y deliberado.
+//
+// EXCEPCIÓN (ADR-115): los bloques marcados "especificación (ADR-115):" en los
+// dos agregados de dilución ya NO son caracterización. Congelaban el reparto
+// sobre costo CRUDO, que no era una decisión sino un bug comercial vivo en
+// producción — el flete y los hijos de un item diluido se evaporaban de la
+// cotización. Se movieron a propósito cuando la dilución pasó a operar sobre el
+// landed, y ahora dicen lo que el reparto DEBE hacer, no lo que hacía.
 //
 // Matchers: toBe para enteros exactos, constantes, Infinity y los retorno-0 de
 // los guards; toBeCloseTo(v, 10) cuando el valor es analíticamente exacto salvo
@@ -221,6 +229,73 @@ describe('calculateBaseLandedCost', () => {
     });
 });
 
+describe('calculateItemLandedTotal', () => {
+    it('is the converted unit cost times the quantity with no flete and no children', () => {
+        // 100 x (1 + 0/100) x q3 = 300
+        expect(calculateItemLandedTotal(makeItem({ unitCost: 100, quantity: 3 }), 'COP', null)).toBe(300);
+    });
+
+    it('applies the parent flete before multiplying by the quantity', () => {
+        // 100 x (1 + 50/100) = 150, x q2 = 300
+        expect(calculateItemLandedTotal(makeItem({ unitCost: 100, quantity: 2, fletePct: 50 }), 'COP', null)).toBe(300);
+    });
+
+    it('adds the children cost ONCE, because it is already a total', () => {
+        // padre: 100 x q2                 =   200
+        // hijos: 999 x (1 + 0/100) x q5   = 4 995   (TOTAL, no por unidad de padre)
+        // landed total                    = 5 195
+        const si = makeItem({
+            unitCost: 100,
+            quantity: 2,
+            children: [makeItem({ unitCost: 999, quantity: 5 })],
+        });
+        expect(calculateItemLandedTotal(si, 'COP', null)).toBe(5195);
+    });
+
+    it('converts the parent cost to the scenario currency', () => {
+        // 10 USD x 4000 = 40 000 COP, x q2 = 80 000
+        const si = makeItem({ unitCost: 10, costCurrency: 'USD', quantity: 2 });
+        expect(calculateItemLandedTotal(si, 'COP', 4000)).toBe(80000);
+    });
+
+    it('equals baseLandedCost x quantity, written without the division', () => {
+        // Identidad algebraica: (parentLanded + children/q) x q === parentLanded x q + children.
+        // convertCost(1000, USD, COP, 4000)       = 4 000 000
+        // parentLanded = 4 000 000 x 1.015        = 4 060 000
+        //   (a precisión completa 4 059 999.9999999995: ruido IEEE 754 de 1.015)
+        // landed total = 4 060 000 x q2 + 200 000 = 8 320 000
+        // La segunda igualdad es EXACTA contra runtime, no solo algebraica.
+        const si = makeItem({
+            unitCost: 1000,
+            costCurrency: 'USD',
+            quantity: 2,
+            fletePct: 1.5,
+            children: [makeItem({ unitCost: 200000, costCurrency: 'COP', quantity: 1 })],
+        });
+        const parentLanded = calculateParentLandedCost(convertCost(1000, 'USD', 'COP', 4000), 1.5);
+        const childrenCost = calculateChildrenCostPerUnit(si.children ?? [], 'COP', 4000);
+
+        expect(calculateItemLandedTotal(si, 'COP', 4000)).toBeCloseTo(8_320_000, 6);
+        expect(calculateItemLandedTotal(si, 'COP', 4000))
+            .toBe(calculateBaseLandedCost(parentLanded, childrenCost, 2) * 2);
+    });
+
+    it('keeps the children cost when the quantity is 0, instead of NaN', () => {
+        // caracterización: la forma sin división es lo que evita el NaN. Con
+        // quantity 0 el padre aporta 110 x 0 = 0, pero el total de los hijos
+        // sigue entrando entero: 50. La vía baseLandedCost x quantity daría
+        // (110 + 50/0) x 0 = Infinity x 0 = NaN y envenenaría el agregado entero.
+        // No es un guard explícito: es la razón por la que la fórmula se escribe así.
+        const si = makeItem({
+            unitCost: 100,
+            quantity: 0,
+            fletePct: 10,
+            children: [makeItem({ unitCost: 50, quantity: 1 })],
+        });
+        expect(calculateItemLandedTotal(si, 'COP', null)).toBe(50);
+    });
+});
+
 describe('calculateTotalDilutedCost', () => {
     it('returns 0 for an empty list', () => {
         expect(calculateTotalDilutedCost([])).toBe(0);
@@ -243,12 +318,17 @@ describe('calculateTotalDilutedCost', () => {
         expect(calculateTotalDilutedCost(items)).toBe(200);
     });
 
-    it('uses ONLY unitCost x quantity, ignoring flete and children', () => {
-        // 100 x 2 = 200. NO 100 x 1.5 x 2 = 300, y sin sumar el hijo de 999 x 5.
+    it('distributes the LANDED cost: flete and children included', () => {
+        // padre:  100 x (1 + 50/100) = 150, x q2 =   300
+        // hijos:  999 x (1 + 0/100)  x q5        = 4 995
+        // landed total a repartir                = 5 295
         //
-        // caracterización: el costo que se reparte por dilución es el costo CRUDO,
-        // no el landed cost. El flete y los hijos de un item diluido no entran a
-        // ningún total del escenario: se pierden.
+        // especificación (ADR-115): el costo que se reparte es el LANDED del item
+        // diluido, no su costo crudo. Antes este assert congelaba 200 (100 x q2):
+        // el flete del diluido y el costo de sus hijos no entraban a ningún total
+        // del escenario y se evaporaban de la cotización — bug comercial vivo en
+        // producción desde el origen, de magnitud flete% x costo diluido marcada
+        // por el margen.
         const items = [
             makeItem({
                 unitCost: 100,
@@ -258,7 +338,9 @@ describe('calculateTotalDilutedCost', () => {
                 children: [makeItem({ unitCost: 999, quantity: 5 })],
             }),
         ];
-        expect(calculateTotalDilutedCost(items)).toBe(200);
+        expect(calculateTotalDilutedCost(items)).toBe(5295);
+        // El valor que este mismo assert congelaba antes del fix:
+        expect(calculateTotalDilutedCost(items)).not.toBe(200);
     });
 
     it('converts a diluted item in another currency', () => {
@@ -302,9 +384,14 @@ describe('calculateTotalNormalSubtotal', () => {
         expect(calculateTotalNormalSubtotal(items)).toBe(300);
     });
 
-    it('uses ONLY unitCost x quantity, ignoring flete and children', () => {
-        // 100 x 2 = 200, igual que el lado diluido: el denominador de la dilución
-        // se pesa con costo crudo, no con landed cost.
+    it('weighs with the LANDED cost: flete and children included', () => {
+        // 150 x q2 + 4 995 = 5 295, igual que el lado diluido.
+        //
+        // especificación (ADR-115): numerador y denominador de la dilución se
+        // miden con la MISMA regla. Si el denominador se pesara con costo crudo
+        // mientras el numerador reparte landed, los pesos dejarían de sumar 1 y
+        // la conservación (Σ dilutionPerUnit x cantidad = totalDilutedCost) se
+        // rompería. Antes este assert congelaba 200.
         const items = [
             makeItem({
                 unitCost: 100,
@@ -314,7 +401,8 @@ describe('calculateTotalNormalSubtotal', () => {
                 children: [makeItem({ unitCost: 999, quantity: 5 })],
             }),
         ];
-        expect(calculateTotalNormalSubtotal(items)).toBe(200);
+        expect(calculateTotalNormalSubtotal(items)).toBe(5295);
+        expect(calculateTotalNormalSubtotal(items)).not.toBe(200);
     });
 
     it('converts a normal item in another currency', () => {
@@ -326,9 +414,15 @@ describe('calculateTotalNormalSubtotal', () => {
     });
 });
 
+// La aritmética de calculateDilutionPerUnit NO se movió con ADR-115: la fórmula
+// es la misma y sus cuatro parámetros siguen siendo números. Lo que cambió es la
+// SEMÁNTICA del primero — ahora es el landed por unidad (baseLandedCost) y no el
+// costo crudo — y eso vive en los llamadores, no aquí. Por eso todos los asserts
+// de este describe siguen intactos: si alguno se hubiera movido, el fix habría
+// tocado una fórmula que no debía tocar.
 describe('calculateDilutionPerUnit', () => {
     it('distributes the diluted cost proportionally to item weight', () => {
-        // weight = (itemCost x itemQuantity) / totalNormalSubtotal
+        // weight = (itemLandedCost x itemQuantity) / totalNormalSubtotal
         //        = (100 x 2) / 500 = 200/500 = 0.4
         // dilutionPerUnit = (weight x totalDilutedCost) / itemQuantity
         //                 = (0.4 x 300) / 2 = 120/2 = 60

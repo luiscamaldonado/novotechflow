@@ -90,7 +90,33 @@ export function calculateBaseLandedCost(
 }
 
 /**
- * Total cost of all diluted items: Σ(unitCost × quantity) for isDiluted=true.
+ * Landed total of ONE scenario item, in the scenario currency:
+ * (converted unitCost + parent flete) × quantity + total children cost.
+ *
+ * This is the same money as baseLandedCost × quantity, written without the
+ * division by quantity so a quantity of 0 contributes 0 instead of NaN.
+ * It is the unit of account of the dilution (ADR-115): what a diluted item
+ * hands over, and what weighs a visible one.
+ */
+export function calculateItemLandedTotal(
+    si: PricingScenarioItem,
+    scenarioCurrency?: string,
+    conversionTrm?: number | null,
+): number {
+    const rawCost = Number(si.item.unitCost);
+    const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
+    const flete = Number(si.item.internalCosts?.fletePct || 0);
+    const parentLanded = calculateParentLandedCost(cost, flete);
+    const childrenCost = calculateChildrenCostPerUnit(si.children || [], scenarioCurrency, conversionTrm);
+    return parentLanded * si.quantity + childrenCost;
+}
+
+/**
+ * Total LANDED cost of all diluted items: Σ(landedTotal) for isDiluted=true.
+ *
+ * Landed and not raw (ADR-115): the flete and the children of a diluted item
+ * are part of what has to be recovered. Distributing only unitCost × quantity
+ * made them evaporate from the quote.
  */
 export function calculateTotalDilutedCost(
     items: PricingScenarioItem[],
@@ -100,17 +126,16 @@ export function calculateTotalDilutedCost(
     let total = 0;
     for (const si of items) {
         if (si.isDiluted) {
-            const rawCost = Number(si.item.unitCost);
-            const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
-            total += cost * si.quantity;
+            total += calculateItemLandedTotal(si, scenarioCurrency, conversionTrm);
         }
     }
     return total;
 }
 
 /**
- * Total normal subtotal: Σ(unitCost × quantity) for isDiluted=false.
- * Used as the weight denominator for dilution distribution.
+ * Total normal subtotal: Σ(landedTotal) for isDiluted=false.
+ * Used as the weight denominator for dilution distribution, so it has to be
+ * measured with the same ruler as the numerator (ADR-115): LANDED cost.
  */
 export function calculateTotalNormalSubtotal(
     items: PricingScenarioItem[],
@@ -120,9 +145,7 @@ export function calculateTotalNormalSubtotal(
     let total = 0;
     for (const si of items) {
         if (!si.isDiluted) {
-            const rawCost = Number(si.item.unitCost);
-            const cost = convertCost(rawCost, si.item.costCurrency || 'COP', scenarioCurrency || 'COP', conversionTrm);
-            total += cost * si.quantity;
+            total += calculateItemLandedTotal(si, scenarioCurrency, conversionTrm);
         }
     }
     return total;
@@ -130,17 +153,22 @@ export function calculateTotalNormalSubtotal(
 
 /**
  * Dilution share per unit for a normal item, based on weight-proportional distribution.
- * Weight = (itemCost × itemQuantity) / totalNormalSubtotal
+ * Weight = (itemLandedCost × itemQuantity) / totalNormalSubtotal
  * dilutionPerUnit = (weight × totalDilutedCost) / itemQuantity
+ *
+ * itemLandedCost is the item's LANDED cost per unit (baseLandedCost): flete and
+ * children included, already converted to the scenario currency. The formula is
+ * unchanged; what ADR-115 fixed is the caller, which used to hand over the raw
+ * unitCost and so weighed an item by less than it actually costs.
  */
 export function calculateDilutionPerUnit(
-    itemCost: number,
+    itemLandedCost: number,
     itemQuantity: number,
     totalNormalSubtotal: number,
     totalDilutedCost: number,
 ): number {
     if (totalNormalSubtotal <= 0 || totalDilutedCost <= 0 || itemQuantity <= 0) return 0;
-    const itemWeight = (itemCost * itemQuantity) / totalNormalSubtotal;
+    const itemWeight = (itemLandedCost * itemQuantity) / totalNormalSubtotal;
     return (itemWeight * totalDilutedCost) / itemQuantity;
 }
 
@@ -273,7 +301,8 @@ export function calculateItemDisplayValues(
     if (!si.isDiluted) {
         const totalDilutedCost = calculateTotalDilutedCost(allItems, scenarioCurrency, conversionTrm);
         const totalNormalSub = calculateTotalNormalSubtotal(allItems, scenarioCurrency, conversionTrm);
-        dilution = calculateDilutionPerUnit(cost, si.quantity, totalNormalSub, totalDilutedCost);
+        // The weight is the LANDED cost per unit (ADR-115), not the raw one.
+        dilution = calculateDilutionPerUnit(baseLanded, si.quantity, totalNormalSub, totalDilutedCost);
     }
 
     const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
@@ -353,8 +382,9 @@ export function calculateScenarioTotals(
         const childrenCost = calculateChildrenCostPerUnit(children, scenarioCurrency, conversionTrm);
         const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
 
+        // Same ruler as calculateItemDisplayValues (ADR-115): baseLanded, not cost.
         const dilution = calculateDilutionPerUnit(
-            cost, si.quantity, totalNormalSubtotal, totalDilutedCost,
+            baseLanded, si.quantity, totalNormalSubtotal, totalDilutedCost,
         );
         const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
 

@@ -6,6 +6,7 @@ import {
     calculateDilutionPerUnit,
     calculateEffectiveLandedCost,
     calculateItemDisplayValues,
+    calculateItemLandedTotal,
     calculateParentLandedCost,
     calculateScenarioTotals,
     calculateTotalDilutedCost,
@@ -54,6 +55,27 @@ import type { ItemDisplayValues, PricingScenarioItem, ScenarioTotals } from './i
 //     override incluida). Líneas, IVA, totales y columnas de costo siguen en
 //     roundMoney. El invariante 7 deriva el precio exacto por las hoja y
 //     verifica la garantía en ambos fixtures.
+//
+// POLÍTICA DE DILUCIÓN (ADR-115). El costo que se reparte y los pesos que lo
+// reparten son LANDED y convertidos: costo en la moneda del escenario + flete
+// del padre + costo total de los hijos (la misma matemática de
+// baseLandedCost x cantidad). Antes ambos lados usaban el costo CRUDO, así que
+// el flete y los hijos de un item diluido se evaporaban de la cotización.
+// Consecuencias para este archivo:
+//
+//   - El fixture COP se mueve entero por el lado de la dilución: su denominador
+//     sube de 9 900 000 (crudo) a 10 220 000 (landed) porque el item A tiene
+//     flete Y un hijo, así que su peso landed difiere de su peso crudo. Los
+//     otros dos normales (B y D) no tienen ni flete ni hijos: cambian solo
+//     porque el denominador cambió.
+//   - El fixture USD NO se mueve, y eso se verificó contra runtime en vez de
+//     asumirse: sus tres items no tienen flete ni hijos y no hay item diluido,
+//     así que landed == crudo y la dilución sigue siendo 0.
+//   - El invariante 3 (libro de costos) no se mueve ni un peso: totalCost ya
+//     era landed + diluido. Lo que sí cambia es que ahora el costo sin C
+//     coincide EXACTAMENTE con totalNormalSubtotal, porque los dos son landed.
+//   - El golden del caso real de ADR-115, al final, es el que fija la magnitud
+//     del bug corregido: 10,80 USD en un escenario de 65 mil.
 //
 // Todos los valores de abajo se re-derivaron contra runtime tras el cambio.
 // ──────────────────────────────────────────────────────────
@@ -137,6 +159,12 @@ const displayValuesOf = (si: PricingScenarioItem, items: PricingScenarioItem[] =
 //
 // Escenario en USD, items en USD: convertCost no interviene (misma moneda) y
 // no hay item diluido, así que la dilución es 0 y el foco queda en el precio.
+//
+// Ni un valor de este fixture se movió con ADR-115, y se verificó contra runtime
+// en vez de asumirse: sus tres items no tienen flete ni hijos (landed == crudo) y
+// sin item diluido el guard de calculateDilutionPerUnit devuelve 0 igual que
+// antes. Es el contraste que aísla la causa: lo que se movió en el fixture COP
+// se movió por el flete y el hijo de A, no por el cambio en general.
 const USD_CURRENCY = 'USD';
 
 /** USD 1 — precio con mitad exacta (1.125) y cantidad 3: el ruido clásico. */
@@ -183,24 +211,42 @@ const MONEY_FIELDS_OF_TOTALS: Array<keyof ScenarioTotals> = [
 
 // ── Agregados del fixture, derivados a mano ──────────────
 //
-// Ambos totales usan costo CRUDO convertido x cantidad (sin flete ni hijos):
-//   A: 1000 USD x 4000 = 4 000 000 COP, x q2 = 8 000 000   (normal)
-//   B:                     500 000 COP, x q3 = 1 500 000   (normal)
-//   C:                     300 000 COP, x q1 =   300 000   (DILUIDO)
-//   D:                     400 000 COP, x q1 =   400 000   (normal)
+// Ambos totales usan el LANDED convertido de cada item (ADR-115): costo
+// convertido + flete del padre, x cantidad, + costo total de los hijos.
+//   A: 1000 USD x 4000 = 4 000 000 -> x1.015 = 4 060 000, x q2 + 200 000 hijo
+//                                            = 8 320 000   (normal)
+//   B:                     500 000 sin flete ni hijos, x q3
+//                                            = 1 500 000   (normal)
+//   C:                     300 000 sin flete ni hijos, x q1
+//                                            =   300 000   (DILUIDO)
+//   D:                     400 000 sin flete ni hijos, x q1
+//                                            =   400 000   (normal)
 //
 // totalDilutedCost    =                                       300 000
-// totalNormalSubtotal = 8 000 000 + 1 500 000 + 400 000 =    9 900 000
+// totalNormalSubtotal = 8 320 000 + 1 500 000 + 400 000 =   10 220 000
+//
+// SE MOVIÓ: el denominador era 9 900 000 con costo crudo. Los 320 000 de
+// diferencia son el flete de A (60 000 x q2) y su hijo (200 000) entrando al
+// peso, que es exactamente lo que el reparto crudo ignoraba. El numerador NO se
+// movió porque C no tiene flete ni hijos — el fixture COP prueba el lado de los
+// pesos; el golden del caso real de abajo prueba el lado del total repartido.
 const TOTAL_DILUTED_COST = 300_000;
-const TOTAL_NORMAL_SUBTOTAL = 9_900_000;
+const TOTAL_NORMAL_SUBTOTAL = 10_220_000;
 
 describe('fixture aggregates', () => {
-    it('splits the scenario into 300 000 diluted and 9 900 000 normal', () => {
+    it('splits the scenario into 300 000 diluted and 10 220 000 landed normal', () => {
         // Los dos números que gobiernan toda la dilución del fixture. Si este
         // test cae, todos los golden de abajo mienten por la misma causa.
         // Funciones HOJA: siguen a precisión completa, la política no las toca.
         expect(calculateTotalDilutedCost(SCENARIO, SCENARIO_CURRENCY, TRM)).toBe(TOTAL_DILUTED_COST);
         expect(calculateTotalNormalSubtotal(SCENARIO, SCENARIO_CURRENCY, TRM)).toBe(TOTAL_NORMAL_SUBTOTAL);
+        // Y el denominador es la suma de los landed totales de los normales, no
+        // de sus costos crudos. El valor viejo queda escrito como testigo.
+        const landedOfNormals = SCENARIO
+            .filter((si) => !si.isDiluted)
+            .reduce((acc, si) => acc + calculateItemLandedTotal(si, SCENARIO_CURRENCY, TRM), 0);
+        expect(landedOfNormals).toBe(TOTAL_NORMAL_SUBTOTAL);
+        expect(calculateTotalNormalSubtotal(SCENARIO, SCENARIO_CURRENCY, TRM)).not.toBe(9_900_000);
     });
 });
 
@@ -218,28 +264,31 @@ describe('calculateItemDisplayValues', () => {
         // baseLanded = 4 060 000 + 200 000/q2 = 4 060 000 + 100 000 = 4 160 000
         expect(dv.baseLandedCost).toBe(4_160_000);
 
-        // ── dilución ──
-        // weight = (4 000 000 x q2) / 9 900 000 = 8 000 000/9 900 000 = 80/99
-        // perUnit = (80/99 x 300 000) / q2 = 24 000 000/198 = 121 212.1212...
-        //   -> roundMoney COP baja a 121 212 (la cola .1212 no llega a medio peso)
-        expect(dv.dilutionPerUnit).toBe(121_212);
-        // effectiveLanded = 4 160 000 + 121 212.1212... = 4 281 212.1212...
-        //   -> 4 281 212
-        expect(dv.effectiveLandedCost).toBe(4_281_212);
+        // ── dilución ── (ADR-115: el peso es el LANDED de A, no su crudo)
+        // weight = (4 160 000 x q2) / 10 220 000 = 8 320 000/10 220 000 = 416/511
+        // perUnit = (416/511 x 300 000) / q2 = 124 800 000/511/2 = 122 113.5029...
+        //   -> roundMoney COP SUBE a 122 114 (la cola .5029 pasa de medio peso)
+        // Con el peso crudo (80/99) daban 121 212: A pesaba menos de lo que
+        // cuesta, así que recibía menos dilución de la que le toca.
+        expect(dv.dilutionPerUnit).toBe(122_114);
+        expect(dv.dilutionPerUnit).not.toBe(121_212);
+        // effectiveLanded = 4 160 000 + 122 113.5029... = 4 282 113.5029...
+        //   -> 4 282 114
+        expect(dv.effectiveLandedCost).toBe(4_282_114);
 
         // ── precio ──
         // margin = resolveMargin(undefined, 20) = 20. Es PORCENTAJE: no se
         // redondea, sale tal cual.
         expect(dv.margin).toBe(20);
         // El precio se calcula sobre el effective SIN redondear y se TECHA al
-        // salir (ADR-114): 4 281 212.1212.../(1 - 20/100) = 5 351 515.1515...
-        //   -> roundMoneyUp = 5 351 516 (half-up daba 5 351 515, POR DEBAJO
-        //   del exacto: es el peso que el techo recupera).
-        expect(dv.unitPrice).toBe(5_351_516);
+        // salir (ADR-114): 4 282 113.5029.../(1 - 20/100) = 5 352 641.8787...
+        //   -> roundMoneyUp = 5 352 642 (half-up daba 5 352 642 también aquí;
+        //   el techo sigue verificado por el invariante 7).
+        expect(dv.unitPrice).toBe(5_352_642);
 
         // ── línea ── se construye sobre el precio YA TECHADO:
-        // 5 351 516 x q2 = 10 703 032 exacto (entero x entero).
-        expect(dv.lineTotal).toBe(10_703_032);
+        // 5 352 642 x q2 = 10 705 284 exacto (entero x entero).
+        expect(dv.lineTotal).toBe(10_705_284);
     });
 
     it('computes the 8 display values for item B (normal, non-taxable)', () => {
@@ -252,29 +301,32 @@ describe('calculateItemDisplayValues', () => {
         // baseLanded = 500 000 + 0/q3 = 500 000
         expect(dv.baseLandedCost).toBe(500_000);
 
-        // ── dilución ──
-        // weight = (500 000 x q3) / 9 900 000 = 1 500 000/9 900 000 = 15/99
-        // perUnit = (15/99 x 300 000) / q3 = 45 454.5454.../3 = 15 151.5151...
-        //   -> roundMoney COP SUBE a 15 152 (.5151 pasa de medio peso)
-        expect(dv.dilutionPerUnit).toBe(15_152);
-        // effectiveLanded = 500 000 + 15 151.5151... = 515 151.5151... -> 515 152
-        expect(dv.effectiveLandedCost).toBe(515_152);
+        // ── dilución ── B no tiene flete ni hijos, así que su LANDED es su
+        // crudo: se mueve solo porque el denominador pasó a 10 220 000 (ADR-115).
+        // weight = (500 000 x q3) / 10 220 000 = 1 500 000/10 220 000 = 75/511
+        // perUnit = (75/511 x 300 000) / q3 = 22 500 000/511/3 = 14 677.1037...
+        //   -> roundMoney COP baja a 14 677 (.1037 no llega a medio peso)
+        // Menos que los 15 152 de antes: A ahora pesa lo que cuesta y se lleva
+        // la parte que B recibía de más.
+        expect(dv.dilutionPerUnit).toBe(14_677);
+        // effectiveLanded = 500 000 + 14 677.1037... = 514 677.1037... -> 514 677
+        expect(dv.effectiveLandedCost).toBe(514_677);
 
         // ── precio ──
         expect(dv.margin).toBe(15);
-        // 515 151.5151.../0.85 = 606 060.6060... -> techo 606 061 (ADR-114;
+        // 514 677.1037.../0.85 = 605 502.4749... -> techo 605 503 (ADR-114;
         // half-up ya subía aquí, así que B no se mueve con el cambio de modo).
-        expect(dv.unitPrice).toBe(606_061);
+        expect(dv.unitPrice).toBe(605_503);
 
         // ── línea ── AQUÍ SE VE LA POLÍTICA (ADR-113).
         // La línea se construye sobre el precio REDONDEADO, no sobre el exacto:
-        //   606 061         x q3 = 1 818 183           <- lo que se imprime
-        //   606 060.6060... x q3 = 1 818 181.8181...   -> redondeado: 1 818 182
-        // Se eligen los 1 818 183 A PROPÓSITO: el cliente multiplica el precio
-        // que ve por 3 y le tiene que cuadrar. El peso de diferencia contra el
-        // cálculo a precisión completa es el precio de esa garantía.
-        expect(dv.lineTotal).toBe(1_818_183);
-        expect(dv.lineTotal).not.toBe(1_818_182);
+        //   605 503         x q3 = 1 816 509           <- lo que se imprime
+        //   605 502.4749... x q3 = 1 816 507.4248...   -> redondeado: 1 816 507
+        // Se eligen los 1 816 509 A PROPÓSITO: el cliente multiplica el precio
+        // que ve por 3 y le tiene que cuadrar. Los dos pesos de diferencia
+        // contra el cálculo a precisión completa son el precio de esa garantía.
+        expect(dv.lineTotal).toBe(1_816_509);
+        expect(dv.lineTotal).not.toBe(1_816_507);
     });
 
     it('uses unitPriceOverride verbatim as the unit price for item D', () => {
@@ -292,22 +344,23 @@ describe('calculateItemDisplayValues', () => {
 
         // ── costo/landed ── 400 000, flete 0, sin hijos -> baseLanded 400 000
         expect(dv.baseLandedCost).toBe(400_000);
-        // ── dilución ──
-        // weight = (400 000 x q1)/9 900 000 = 4/99
-        // perUnit = (4/99 x 300 000)/q1 = 1 200 000/99 = 12 121.2121... -> 12 121
-        expect(dv.dilutionPerUnit).toBe(12_121);
-        // effectiveLanded = 400 000 + 12 121.2121... = 412 121.2121... -> 412 121
-        expect(dv.effectiveLandedCost).toBe(412_121);
+        // ── dilución ── sin flete ni hijos: landed == crudo, se mueve solo por
+        // el denominador nuevo (ADR-115).
+        // weight = (400 000 x q1)/10 220 000 = 20/511
+        // perUnit = (20/511 x 300 000)/q1 = 6 000 000/511 = 11 741.6829... -> 11 742
+        expect(dv.dilutionPerUnit).toBe(11_742);
+        // effectiveLanded = 400 000 + 11 741.6829... = 411 741.6829... -> 411 742
+        expect(dv.effectiveLandedCost).toBe(411_742);
 
         // ── margen mostrado ──
         // Se recalcula sobre los valores REDONDEADOS, que son los que el usuario
-        // ve en pantalla: calculateMarginFromPrice(600 000, 412 121)
-        //   = ((600 000 - 412 121) / 600 000) x 100
-        //   = (187 879 / 600 000) x 100 = 31.3131666...%
-        // Sobre el effective sin redondear daría 31.31313131%; la diferencia
-        // (3.5e-5 puntos) es el precio de que la columna y el margen cuenten la
+        // ve en pantalla: calculateMarginFromPrice(600 000, 411 742)
+        //   = ((600 000 - 411 742) / 600 000) x 100
+        //   = (188 258 / 600 000) x 100 = 31.3763333...%
+        // Sobre el effective sin redondear daría 31.37638617%; la diferencia
+        // (5.3e-5 puntos) es el precio de que la columna y el margen cuenten la
         // misma historia. Sigue sin ser el marginPct base del item (10).
-        expect(dv.margin).toBeCloseTo(31.31316667, 6);
+        expect(dv.margin).toBeCloseTo(31.37633333, 6);
         expect(dv.margin).not.toBe(ITEM_D.item.marginPct);
     });
 
@@ -359,45 +412,45 @@ describe('calculateScenarioTotals', () => {
         // C queda fuera del bucle (filter !isDiluted). Líneas que sí entran, ya
         // redondeadas por la misma política que usa calculateItemDisplayValues
         // (unitario TECHADO por ADR-114, línea en half-up):
-        //   A gravado:     10 703 032   (5 351 516 x 2, unitario techado)
+        //   A gravado:     10 705 284   (5 352 642 x 2, unitario techado)
         //   D gravado:        600 000
-        //   B NO gravado:   1 818 183
+        //   B NO gravado:   1 816 509
         //
-        // beforeVat = 10 703 032 + 600 000 = 11 303 032
+        // beforeVat = 10 705 284 + 600 000 = 11 305 284
         // Suma EXACTA de enteros: no hay redondeo adicional que aplicar.
-        expect(totals.beforeVat).toBe(11_303_032);
-        // nonTaxed = 1 818 183
-        expect(totals.nonTaxed).toBe(1_818_183);
-        // subtotal = beforeVat + nonTaxed = 13 121 215
-        // A precisión completa eran 13 121 212.1212...: un peso de B (half-up
-        // de su línea sobre precio redondeado) y dos de A (techo x cantidad 2).
-        expect(totals.subtotal).toBe(13_121_215);
+        expect(totals.beforeVat).toBe(11_305_284);
+        // nonTaxed = 1 816 509
+        expect(totals.nonTaxed).toBe(1_816_509);
+        // subtotal = beforeVat + nonTaxed = 13 121 793
+        // A precisión completa eran 13 121 791.1822...: los 1.82 de deriva son
+        // 0.24 de A (0.1213 de techo x q2) y 1.58 de B (0.5250 x q3), o sea el
+        // costo de que la línea se construya sobre el unitario ya redondeado.
+        expect(totals.subtotal).toBe(13_121_793);
 
         // golden H1: única implementación de IVA que debe sobrevivir.
-        // vat = roundMoney(calculateIvaAmount(11 303 032, true))
-        //     = roundMoney(11 303 032 x 0.19) = roundMoney(2 147 576.08) = 2 147 576
-        // (coincide con el valor pre-techo por aritmética: 2 147 575.7 y
-        // 2 147 576.08 redondean al mismo peso).
-        // El IVA se aplica SOLO a la base gravada; los 1 818 183 de B no entran.
+        // vat = roundMoney(calculateIvaAmount(11 305 284, true))
+        //     = roundMoney(11 305 284 x 0.19) = roundMoney(2 148 003.96) = 2 148 004
+        // El IVA se aplica SOLO a la base gravada; los 1 816 509 de B no entran.
         // Cualquier otro cálculo de IVA en el repo debe converger aquí o
         // desaparecer. Nótese que se redondea DESPUÉS de aplicar la tarifa: el
         // IVA que se cobra es el de la base gravada impresa.
-        expect(totals.vat).toBe(2_147_576);
+        expect(totals.vat).toBe(2_148_004);
 
-        // total = subtotal + vat = 13 121 215 + 2 147 576 = 15 268 791
-        expect(totals.total).toBe(15_268_791);
+        // total = subtotal + vat = 13 121 793 + 2 148 004 = 15 269 797
+        expect(totals.total).toBe(15_269_797);
 
         // totalCost = Σ effectiveLanded x cantidad sobre los items normales, a
         // PRECISIÓN COMPLETA (nunca se imprime, solo alimenta el porcentaje):
-        //   A: 4 281 212.1212... x q2 =  8 562 424.2424...
-        //   B:   515 151.5151... x q3 =  1 545 454.5454...
-        //   D:   412 121.2121... x q1 =    412 121.2121...
+        //   A: 4 282 113.5029... x q2 =  8 564 227.0058...
+        //   B:   514 677.1037... x q3 =  1 544 031.3111...
+        //   D:   411 741.6829... x q1 =    411 741.6829...
         //   = 10 520 000  (= 10 220 000 de landed + los 300 000 diluidos)
-        // globalMarginPct = ((13 121 215 - 10 520 000)/13 121 215) x 100
-        //                 = (2 601 215/13 121 215) x 100 = 19.8244980...%
-        // Se movió porque el numerador usa el subtotal con el unitario techado;
-        // sigue siendo porcentaje, así que va con toBeCloseTo.
-        expect(totals.globalMarginPct).toBeCloseTo(19.82449796, 6);
+        // El TOTAL de costo no se movió con ADR-115 —los 300 000 se reparten
+        // distinto, no cambian de tamaño— pero ahora sus 10 220 000 de landed
+        // son literalmente totalNormalSubtotal. Es la conservación en el libro.
+        // globalMarginPct = ((13 121 793 - 10 520 000)/13 121 793) x 100
+        //                 = (2 601 793/13 121 793) x 100 = 19.8280295...%
+        expect(totals.globalMarginPct).toBeCloseTo(19.82802960, 6);
     });
 
     it('returns every money total as a whole peso in the COP scenario', () => {
@@ -697,8 +750,9 @@ describe('coherence invariants between the two composite functions', () => {
             const parentLanded = calculateParentLandedCost(cost, flete);
             const childrenCost = calculateChildrenCostPerUnit(si.children || [], currency, trm);
             const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
+            // ADR-115: el peso es el landed POR UNIDAD, no el costo crudo.
             const dilution = calculateDilutionPerUnit(
-                cost, si.quantity,
+                baseLanded, si.quantity,
                 calculateTotalNormalSubtotal(items, currency, trm),
                 calculateTotalDilutedCost(items, currency, trm),
             );
@@ -707,8 +761,8 @@ describe('coherence invariants between the two composite functions', () => {
         };
 
         // COP, precios calculados (derivados contra runtime):
-        //   A: exacto 5 351 515.1515... -> techo 5 351 516 (half-up daba menos)
-        //   B: exacto   606 060.6060... -> techo   606 061 (coincide con half-up)
+        //   A: exacto 5 352 641.8786... -> techo 5 352 642 (coincide con half-up)
+        //   B: exacto   605 502.4749... -> techo   605 503 (coincide con half-up)
         for (const si of [ITEM_A, ITEM_B]) {
             const exact = exactUnitPrice(si, SCENARIO, SCENARIO_CURRENCY, TRM);
             const dv = displayValuesOf(si);
@@ -759,18 +813,25 @@ describe('coherence invariants between the two composite functions', () => {
         const costWithoutC = withoutC.subtotal * (1 - withoutC.globalMarginPct / 100);
 
         // 10 520 000 - 10 220 000 = 300 000 = el costo de C, ni un peso más.
+        // NO se movió con ADR-115: repartir el landed cambia QUIÉN paga cada
+        // parte, no cuánto hay que pagar. Y el costo sin C es ahora exactamente
+        // el denominador de la dilución, porque los dos son landed.
         expect(costWithC).toBe(10_520_000);
         expect(costWithoutC).toBe(10_220_000);
+        expect(costWithoutC).toBe(TOTAL_NORMAL_SUBTOTAL);
         expect(costWithC - costWithoutC).toBe(TOTAL_DILUTED_COST);
     });
 
     it('invariant 3b: the subtotal rises by the diluted cost MARKED UP, not by the cost', () => {
         // caracterización: la dilución entra como costo y sale marcada por el
         // margen de cada item, asi que el subtotal NO sube los 300 000.
-        //   A: 242 424.2424 de costo, marcado /0.8  -> 303 030.3030 de precio
-        //   B:  45 454.5454 de costo, marcado /0.85 ->  53 475.9358 de precio
-        //   D:  12 121.2121 de costo, precio FIJADO ->       0      de precio
-        //   Σ a precisión completa = 356 506.2388 > 300 000
+        //   A: 244 227.0058 de costo, marcado /0.8  -> 305 283.7573 de precio
+        //   B:  44 031.3111 de costo, marcado /0.85 ->  51 801.5425 de precio
+        //   D:  11 741.6829 de costo, precio FIJADO ->       0      de precio
+        //   Σ a precisión completa = 357 085.2998 > 300 000
+        // Los repartos se movieron con ADR-115 (A pesa su landed), pero el
+        // reparto sigue sumando 300 000 de costo: lo que cambia es el mix de
+        // márgenes que lo marca, y con él el delta del subtotal.
         //
         // AQUÍ SÍ aparece la deriva del redondeo, porque el lado del PRECIO es
         // el que se redondea: la diferencia se toma entre dos subtotales, cada
@@ -779,9 +840,11 @@ describe('coherence invariants between the two composite functions', () => {
         // amplificado por la cantidad -> cota por lado = Σ cantidades de los
         // items con precio calculado (A q2 + B q3 = 5; D no cuenta: override
         // exacto) -> cota del delta ±5.
-        //   13 121 215 - 12 764 708 = 356 507  (medido contra runtime; sin C,
-        //   B techa 500 000/0.85 = 588 235.294... a 588 236, x3 = 1 764 708)
-        //   desviación real = +0.76 pesos, dentro de la cota.
+        //   13 121 793 - 12 764 708 = 357 085  (medido contra runtime; sin C,
+        //   B techa 500 000/0.85 = 588 235.294... a 588 236, x3 = 1 764 708.
+        //   El subtotal sin C no se movió con ADR-115: sin item diluido la
+        //   dilución es 0 y el denominador nuevo no interviene.)
+        //   desviación real = -0.30 pesos, dentro de la cota.
         // El assert va exacto porque los dos subtotales son enteros, y la cota
         // queda asertada aparte para que sea la cota —y no el literal— la que
         // documente cuánto puede moverse esto legítimamente.
@@ -791,10 +854,10 @@ describe('coherence invariants between the two composite functions', () => {
         );
 
         const delta = withC.subtotal - withoutC.subtotal;
-        const EXACT_MARKED_UP_DELTA = 356_506.238859;
+        const EXACT_MARKED_UP_DELTA = 357_085.299873;
         const ROUNDING_BAND = 5; // techo: hasta 1 peso x unidad (q2 + q3)
 
-        expect(delta).toBe(356_507);
+        expect(delta).toBe(357_085);
         expect(Math.abs(delta - EXACT_MARKED_UP_DELTA)).toBeLessThanOrEqual(ROUNDING_BAND);
         // Y lo que el invariante afirma de fondo sigue en pie con holgura:
         // el subtotal sube MÁS que el costo diluido, no exactamente el costo.
@@ -804,24 +867,243 @@ describe('coherence invariants between the two composite functions', () => {
 
     it('invariant 3c: an overridden price absorbs its dilution share as lost margin', () => {
         // caracterización: el item D no puede repercutir su dilución porque su
-        // precio está fijado, asi que absorbe los 12 121 como margen menor.
+        // precio está fijado, asi que absorbe los 11 742 como margen menor.
         //   sin C: margen = ((600 000 - 400 000)/600 000) x 100 = 33.3333...%
-        //   con C: margen = ((600 000 - 412 121)/600 000) x 100 = 31.3131666...%
-        // Dos puntos de margen que se van sin que el precio se mueva. Es el modo
-        // de falla que importa en DaaS: diluir un servicio sobre items con precio
-        // pactado no encarece la cotización, erosiona el margen en silencio.
-        // El redondeo del effective mueve el segundo margen 3.5e-5 puntos
-        // (31.31313131 -> 31.31316667); el modo de falla es idéntico.
+        //   con C: margen = ((600 000 - 411 742)/600 000) x 100 = 31.3763333...%
+        // Casi dos puntos de margen que se van sin que el precio se mueva. Es el
+        // modo de falla que importa en DaaS: diluir un servicio sobre items con
+        // precio pactado no encarece la cotización, erosiona el margen en
+        // silencio. Con ADR-115 D absorbe algo MENOS (11 742 en vez de 12 121),
+        // porque A pesa su landed y se lleva más del reparto; el modo de falla es
+        // idéntico. El margen sin C no se mueve: no hay dilución que absorber.
         const withoutC = [ITEM_A, ITEM_B, ITEM_D];
 
         const marginWithC = displayValuesOf(ITEM_D).margin;
         const marginWithoutC = displayValuesOf(ITEM_D, withoutC).margin;
 
         expect(marginWithoutC).toBeCloseTo(33.33333333, 6);
-        expect(marginWithC).toBeCloseTo(31.31316667, 6);
+        expect(marginWithC).toBeCloseTo(31.37633333, 6);
         expect(marginWithC).toBeLessThan(marginWithoutC);
 
         // Y el precio no se movió ni un peso.
         expect(displayValuesOf(ITEM_D).unitPrice).toBe(displayValuesOf(ITEM_D, withoutC).unitPrice);
+    });
+});
+
+// ──────────────────────────────────────────────────────────
+// GOLDEN del caso real de ADR-115 — el bug de dilución en producción.
+//
+// Es el escenario con el que Luis destapó el bug: la herramienta cotizaba
+// 65 699,00 USD donde la derivación a mano daba 65 709,80. Los 10,80 de
+// diferencia son el flete del item diluido (1% de 1 000 = 10) marcado por el
+// margen de los visibles (7%): 10/0.93 = 10.7527, más el redondeo al techo.
+//
+// Forma: moneda USD sin TRM (convertCost no interviene), nada gravado (el foco
+// es el subtotal, no el IVA), margen 7% en los dos visibles. El diluido SÍ
+// tiene flete — es justo la parte que el reparto crudo perdía.
+//
+// Este golden no es caracterización ni fotografía: sus valores están derivados
+// A MANO en ADR-114 y verificados contra runtime. Si cae, o la dilución volvió
+// al costo crudo o el redondeo cambió de modo.
+// ──────────────────────────────────────────────────────────
+
+const REAL_CURRENCY = 'USD';
+
+/** DILUIDO — 100 USD con 1% de flete, x10. Su landed (1 010) es lo que se reparte. */
+const REAL_DILUTED: PricingScenarioItem = {
+    quantity: 10,
+    isDiluted: true,
+    item: {
+        unitCost: 100,
+        costCurrency: 'USD',
+        internalCosts: { fletePct: 1 },
+        marginPct: 0,
+        isTaxable: false,
+    },
+};
+
+/** VISIBLE 1 — 1 000 USD con 1% de flete, x10, margen 7%. */
+const REAL_P2: PricingScenarioItem = {
+    quantity: 10,
+    item: {
+        unitCost: 1000,
+        costCurrency: 'USD',
+        internalCosts: { fletePct: 1 },
+        marginPct: 7,
+        isTaxable: false,
+    },
+};
+
+/** VISIBLE 2 — 5 000 USD sin flete, x10, margen 7%. */
+const REAL_P3: PricingScenarioItem = {
+    quantity: 10,
+    item: {
+        unitCost: 5000,
+        costCurrency: 'USD',
+        marginPct: 7,
+        isTaxable: false,
+    },
+};
+
+const REAL_SCENARIO: PricingScenarioItem[] = [REAL_DILUTED, REAL_P2, REAL_P3];
+
+const realDisplayValuesOf = (si: PricingScenarioItem) =>
+    calculateItemDisplayValues(si, REAL_SCENARIO, REAL_CURRENCY, null);
+
+describe('ADR-115 real case (USD, diluted item WITH flete)', () => {
+    it('distributes 1 010 — the landed of the diluted item, not its 1 000 of raw cost', () => {
+        // diluido: 100 x (1 + 1/100) = 101, x q10 = 1 010
+        expect(calculateTotalDilutedCost(REAL_SCENARIO, REAL_CURRENCY, null)).toBe(1010);
+        // El valor que se repartía antes del fix: los 10 USD de flete se
+        // evaporaban del escenario en vez de recuperarse en el precio.
+        expect(calculateTotalDilutedCost(REAL_SCENARIO, REAL_CURRENCY, null)).not.toBe(1000);
+
+        // denominador: P2 1 010 x q10 = 10 100, P3 5 000 x q10 = 50 000
+        expect(calculateTotalNormalSubtotal(REAL_SCENARIO, REAL_CURRENCY, null)).toBe(60_100);
+    });
+
+    it('splits the 1 010 between the two visible items by landed weight', () => {
+        // P2: weight = 10 100/60 100 -> perUnit = (10 100/60 100 x 1 010)/q10
+        //            = 10 201 000/601 000 = 16.973377703826955
+        // P3: weight = 50 000/60 100 -> perUnit = (50 000/60 100 x 1 010)/q10
+        //            = 50 500 000/601 000 = 84.02662229617304
+        const dilutionOf = (si: PricingScenarioItem, landedPerUnit: number) =>
+            calculateDilutionPerUnit(
+                landedPerUnit,
+                si.quantity,
+                calculateTotalNormalSubtotal(REAL_SCENARIO, REAL_CURRENCY, null),
+                calculateTotalDilutedCost(REAL_SCENARIO, REAL_CURRENCY, null),
+            );
+
+        const perUnitP2 = dilutionOf(REAL_P2, 1010);
+        const perUnitP3 = dilutionOf(REAL_P3, 5000);
+
+        expect(perUnitP2).toBeCloseTo(16.97337770, 6);
+        expect(perUnitP3).toBeCloseTo(84.02662230, 6);
+
+        // CONSERVACIÓN: Σ dilutionPerUnit x cantidad = totalDilutedCost, exacto.
+        // 169.73377703826955 + 840.2662229617304 = 1 010
+        expect(perUnitP2 * REAL_P2.quantity + perUnitP3 * REAL_P3.quantity).toBe(1010);
+
+        // Y es lo que las compuestas ponen en la columna, ya en centavos.
+        expect(realDisplayValuesOf(REAL_P2).dilutionPerUnit).toBe(16.97);
+        expect(realDisplayValuesOf(REAL_P3).dilutionPerUnit).toBe(84.03);
+    });
+
+    it('prices the two visible items at 1 104.28 and 5 466.70', () => {
+        const dvP2 = realDisplayValuesOf(REAL_P2);
+        const dvP3 = realDisplayValuesOf(REAL_P3);
+
+        // P2: effectiveLanded = 1 010 + 16.973377703826955 = 1 026.9733777038
+        //     precio exacto = 1 026.9733777038/(1 - 7/100) = 1 104.2724491439
+        //     -> roundMoneyUp USD = 1 104.28 (half-up daba 1 104.27, POR DEBAJO)
+        expect(dvP2.baseLandedCost).toBe(1010);
+        expect(dvP2.effectiveLandedCost).toBe(1026.97);
+        expect(dvP2.unitPrice).toBe(1104.28);
+        // línea sobre el precio ya techado: 1 104.28 x q10 = 11 042.80
+        expect(dvP2.lineTotal).toBe(11_042.80);
+
+        // P3: effectiveLanded = 5 000 + 84.02662229617304 = 5 084.0266222962
+        //     precio exacto = 5 084.0266222962/0.93 = 5 466.6952927916
+        //     -> roundMoneyUp USD = 5 466.70
+        expect(dvP3.baseLandedCost).toBe(5000);
+        expect(dvP3.effectiveLandedCost).toBe(5084.03);
+        expect(dvP3.unitPrice).toBe(5466.70);
+        expect(dvP3.lineTotal).toBe(54_667.00);
+
+        // El diluido no se cobra: su costo se fue al precio de los otros dos.
+        const dvDiluted = realDisplayValuesOf(REAL_DILUTED);
+        expect(dvDiluted.parentLandedCost).toBe(101);
+        expect(dvDiluted.unitPrice).toBe(0);
+        expect(dvDiluted.lineTotal).toBe(0);
+    });
+
+    it('closes the scenario at 65 709.80 — and NOT at the 65 699.00 of the bug', () => {
+        const totals = calculateScenarioTotals(REAL_SCENARIO, REAL_CURRENCY, null);
+
+        // Nada gravado: todo el subtotal es nonTaxed y el IVA es 0.
+        expect(totals.beforeVat).toBe(0);
+        expect(totals.nonTaxed).toBe(65_709.80);
+        // subtotal = 11 042.80 + 54 667.00 = 65 709.80
+        expect(totals.subtotal).toBe(65_709.80);
+        expect(totals.vat).toBe(0);
+        expect(totals.total).toBe(65_709.80);
+
+        // LA MORALEJA. Con el reparto sobre costo CRUDO este mismo escenario
+        // cotizaba 65 699.00: repartía 1 000 en vez de 1 010, así que los precios
+        // salían 1 103.95 y 5 465.95 y las líneas 11 039.50 y 54 659.50. Los
+        // 10.80 USD de diferencia son el flete del diluido, que se evaporaba de
+        // la cotización — marcado por el margen (10/0.93 = 10.7527) y redondeado
+        // al techo. No era una concesión de redondeo: era plata regalada, en
+        // producción desde el origen y proporcional al flete de lo que se diluya.
+        expect(totals.subtotal).not.toBe(65_699.00);
+        expect(totals.subtotal - 65_699.00).toBeCloseTo(10.80, 6);
+
+        // El libro de costos cierra exacto sobre el landed: totalCost recuperado
+        // de globalMarginPct = 60 100 de los visibles + 1 010 del diluido.
+        const totalCost = totals.subtotal * (1 - totals.globalMarginPct / 100);
+        expect(totalCost).toBeCloseTo(61_110, 6);
+        expect(totals.globalMarginPct).toBeCloseTo(7.00017349, 6);
+    });
+
+    it('keeps the invariants of the two composite functions on this scenario', () => {
+        const totals = calculateScenarioTotals(REAL_SCENARIO, REAL_CURRENCY, null);
+
+        // invariante 1: las líneas de la UI suman lo que cobran los totales.
+        const sumOfLineTotals = REAL_SCENARIO
+            .filter((si) => !si.isDiluted)
+            .reduce((acc, si) => acc + realDisplayValuesOf(si).lineTotal, 0);
+        expect(sumOfLineTotals).toBe(totals.subtotal);
+
+        for (const si of REAL_SCENARIO) {
+            const dv = realDisplayValuesOf(si);
+            // invariante 4: la línea impresa es el unitario impreso x la cantidad.
+            expect(dv.lineTotal).toBe(roundMoney(dv.unitPrice * si.quantity, REAL_CURRENCY));
+            // invariante 5: idempotencia de todo campo de dinero.
+            for (const field of MONEY_FIELDS_OF_ITEM) {
+                expect(roundMoney(dv[field], REAL_CURRENCY)).toBe(dv[field]);
+            }
+            // invariante 6: las columnas de costo de este fixture no derivan.
+            expect(dv.baseLandedCost + dv.dilutionPerUnit).toBe(dv.effectiveLandedCost);
+        }
+        for (const field of MONEY_FIELDS_OF_TOTALS) {
+            expect(roundMoney(totals[field], REAL_CURRENCY)).toBe(totals[field]);
+        }
+
+        // invariante 7: el unitario es el techo del precio exacto (ADR-114),
+        // derivado por las funciones hoja a precisión completa sobre el landed.
+        const exactUnitPrice = (si: PricingScenarioItem): number => {
+            const cost = convertCost(
+                Number(si.item.unitCost), si.item.costCurrency || 'COP', REAL_CURRENCY, null,
+            );
+            const flete = Number(si.item.internalCosts?.fletePct || 0);
+            const parentLanded = calculateParentLandedCost(cost, flete);
+            const childrenCost = calculateChildrenCostPerUnit(si.children || [], REAL_CURRENCY, null);
+            const baseLanded = calculateBaseLandedCost(parentLanded, childrenCost, si.quantity);
+            const dilution = calculateDilutionPerUnit(
+                baseLanded, si.quantity,
+                calculateTotalNormalSubtotal(REAL_SCENARIO, REAL_CURRENCY, null),
+                calculateTotalDilutedCost(REAL_SCENARIO, REAL_CURRENCY, null),
+            );
+            const effectiveLanded = calculateEffectiveLandedCost(baseLanded, dilution);
+            return calculateUnitPrice(
+                effectiveLanded, resolveMargin(si.marginPctOverride, si.item.marginPct),
+            );
+        };
+
+        for (const si of [REAL_P2, REAL_P3]) {
+            const exact = exactUnitPrice(si);
+            const dv = realDisplayValuesOf(si);
+            expect(dv.unitPrice).toBeGreaterThanOrEqual(exact);
+            expect(dv.unitPrice).toBe(roundMoneyUp(exact, REAL_CURRENCY));
+        }
+        // El techo se ve: los dos exactos quedan POR DEBAJO del cotizado.
+        expect(exactUnitPrice(REAL_P2)).toBeLessThan(realDisplayValuesOf(REAL_P2).unitPrice);
+        expect(exactUnitPrice(REAL_P3)).toBeLessThan(realDisplayValuesOf(REAL_P3).unitPrice);
+
+        // Y el landed total de cada item, que es la unidad de cuenta del reparto.
+        expect(calculateItemLandedTotal(REAL_DILUTED, REAL_CURRENCY, null)).toBe(1010);
+        expect(calculateItemLandedTotal(REAL_P2, REAL_CURRENCY, null)).toBe(10_100);
+        expect(calculateItemLandedTotal(REAL_P3, REAL_CURRENCY, null)).toBe(50_000);
     });
 });
