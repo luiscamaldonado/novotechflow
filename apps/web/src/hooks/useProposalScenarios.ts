@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
-import { calculateItemDisplayValues, calculateIvaAmount, calculateScenarioTotals, roundMoney } from '@repo/pricing-engine';
+import {
+    calculateItemDisplayValues,
+    calculateIvaAmount,
+    calculateScenarioTotals,
+    calculateTotalDilutedCost,
+    calculateTotalNormalSubtotal,
+    roundMoney,
+} from '@repo/pricing-engine';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -67,6 +74,10 @@ export interface ProcessedScenario {
     currency: string;
     visibleItems: VisibleItemCalc[];
     totals: ScenarioCalcTotals;
+    /** Costo aterrizado total de los ítems diluidos, sin redondear. */
+    dilutedCost: number;
+    /** Todo el costo está en ítems diluidos y no queda base que lo absorba. */
+    isFullyDiluted: boolean;
 }
 
 // ── Scenario processing (delegates to pricing-engine) ───────
@@ -106,6 +117,18 @@ function processScenario(scenario: ScenarioData): ProcessedScenario {
         allItems, scenario.currency, scenario.conversionTrm,
     );
 
+    // Misma deteccion que el banner de ProposalCalculations (ADR-117, B3), sobre
+    // los items CRUDOS y con el mismo TRM que los totales. Aqui es la senal para
+    // el aviso pre-documento: el filtro de visibles de arriba vuelve este estado
+    // invisible al validador de precios (diseno de ADR-039 que este flag
+    // complementa, no reemplaza).
+    const dilutedCost = calculateTotalDilutedCost(
+        allItems, scenario.currency, scenario.conversionTrm,
+    );
+    const normalSubtotal = calculateTotalNormalSubtotal(
+        allItems, scenario.currency, scenario.conversionTrm,
+    );
+
     return {
         id: scenario.id,
         name: scenario.name,
@@ -118,6 +141,8 @@ function processScenario(scenario: ScenarioData): ProcessedScenario {
             iva: t.vat,
             total: t.total,
         },
+        dilutedCost,
+        isFullyDiluted: dilutedCost > 0 && normalSubtotal <= 0,
     };
 }
 

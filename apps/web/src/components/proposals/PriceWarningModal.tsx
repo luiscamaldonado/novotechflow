@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { AlertTriangle, X } from 'lucide-react';
+import { roundMoney } from '@repo/pricing-engine';
 import { formatMoney } from '../../lib/constants';
 import type { ScenarioPriceWarnings, PriceWarning } from '../../lib/priceValidation';
 
@@ -14,17 +15,31 @@ function formatAmount(value: number, currency: string): string {
     return `${currency} ${formatMoney(value, currency)}`;
 }
 
+/** Severidad por tipo de hallazgo: rojo = pérdida, ámbar = tolerable.
+ *  Reemplaza al ternario isLow, que asumía solo dos kinds (ADR-117). */
+const SEVERITY: Record<PriceWarning['kind'], 'danger' | 'warning'> = {
+    COP_BELOW_FLOOR: 'danger',
+    USD_ABOVE_CEILING: 'warning',
+    FULLY_DILUTED_SCENARIO: 'danger',
+};
+
 /** Texto del motivo según el tipo de hallazgo. */
 function reasonText(kind: PriceWarning['kind']): string {
-    return kind === 'COP_BELOW_FLOOR'
-        ? 'valor muy bajo, verif\u00edcalo'
-        : 'valor muy alto, verif\u00edcalo';
+    switch (kind) {
+        case 'COP_BELOW_FLOOR':
+            return 'valor muy bajo, verif\u00edcalo';
+        case 'USD_ABOVE_CEILING':
+            return 'valor muy alto, verif\u00edcalo';
+        case 'FULLY_DILUTED_SCENARIO':
+            return 'Todos los \u00edtems del escenario est\u00e1n diluidos: no queda base que absorba el costo y la cotizaci\u00f3n sale en $0.';
+    }
 }
 
 /**
- * Modal de aviso (no bloqueante) de precios unitarios sospechosos por probable error de moneda.
- * Lista los hallazgos agrupados por escenario; los de COP bajo (graves) van primero y en rojo,
- * los de USD alto (tolerables) después y en ámbar. Un solo botón cierra sin obligar a corregir.
+ * Modal de aviso (no bloqueante) de precios unitarios sospechosos por probable error de moneda,
+ * más el escenario 100 % diluido (ADR-117, B3), que no tiene ítem ni umbral asociados.
+ * Lista los hallazgos agrupados por escenario; los graves (COP bajo, 100 % diluido) en rojo,
+ * los tolerables (USD alto) en ámbar. Un solo botón cierra sin obligar a corregir.
  */
 export default function PriceWarningModal({ scenarioWarnings, onClose }: PriceWarningModalProps) {
     return (
@@ -69,31 +84,35 @@ export default function PriceWarningModal({ scenarioWarnings, onClose }: PriceWa
                             </p>
                             <div className="space-y-2">
                                 {sw.warnings.map((w, idx) => {
-                                    const isLow = w.kind === 'COP_BELOW_FLOOR';
+                                    const isDanger = SEVERITY[w.kind] === 'danger';
                                     return (
                                         <div
                                             key={`${sw.scenarioId}-${idx}`}
                                             className={
-                                                isLow
+                                                isDanger
                                                     ? 'rounded-xl border border-red-200 bg-red-50 px-4 py-3'
                                                     : 'rounded-xl border border-amber-200 bg-amber-50 px-4 py-3'
                                             }
                                         >
                                             <div className="flex items-center justify-between">
-                                                <span className="text-sm font-bold text-slate-800">{w.itemName}</span>
+                                                <span className="text-sm font-bold text-slate-800">
+                                                    {w.kind === 'FULLY_DILUTED_SCENARIO' ? 'Costo diluido' : w.itemName}
+                                                </span>
                                                 <span
                                                     className={
-                                                        isLow
+                                                        isDanger
                                                             ? 'text-sm font-black text-red-600'
                                                             : 'text-sm font-black text-amber-600'
                                                     }
                                                 >
-                                                    {formatAmount(w.unitSalePrice, w.currency)}
+                                                    {w.kind === 'FULLY_DILUTED_SCENARIO'
+                                                        ? formatAmount(roundMoney(w.dilutedCost, w.currency), w.currency)
+                                                        : formatAmount(w.unitSalePrice, w.currency)}
                                                 </span>
                                             </div>
                                             <p
                                                 className={
-                                                    isLow
+                                                    isDanger
                                                         ? 'text-xs font-semibold text-red-600 mt-0.5'
                                                         : 'text-xs font-semibold text-amber-600 mt-0.5'
                                                 }
