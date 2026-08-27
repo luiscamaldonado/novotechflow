@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     Calculator, Loader2, Package,
@@ -10,7 +10,11 @@ import ItemPickerModal from '../../components/proposals/ItemPickerModal';
 import ScenarioTotalsCards from '../../components/proposals/ScenarioTotalsCards';
 import { exportToExcel } from '../../lib/exportExcel';
 import { useAuthStore } from '../../store/authStore';
-import { calculateItemDisplayValues } from '@repo/pricing-engine';
+import {
+    calculateItemDisplayValues,
+    calculateTotalDilutedCost,
+    calculateTotalNormalSubtotal,
+} from '@repo/pricing-engine';
 import { type AcquisitionMode } from '../../lib/constants';
 import { resolveMargin } from '@repo/pricing-engine';
 import ScenarioItemRow from './components/ScenarioItemRow';
@@ -20,6 +24,7 @@ import ProposalStepper from '../../components/proposals/ProposalStepper';
 import ProposalNavBar from '../../components/proposals/ProposalNavBar';
 import { useProposalReadOnly } from '../../hooks/useProposalReadOnly';
 import ReadOnlyBanner from '../../components/proposals/ReadOnlyBanner';
+import FullyDilutedBanner from '../../components/proposals/FullyDilutedBanner';
 
 export default function ProposalCalculations() {
     const { id } = useParams<{ id: string }>();
@@ -112,6 +117,27 @@ export default function ProposalCalculations() {
         [visible[pos], visible[target]] = [visible[target], visible[pos]];
         reorderItems([...diluted, ...visible].map(p => p.id!));
     };
+
+    // ── Escenario 100% diluido (ADR-117, B3) ──────────────────
+    // La condición replica el guard de calculateDilutionPerUnit (ADR-115):
+    // cuando no hay base normal que absorba, el costo diluido se descarta y el
+    // escenario cotiza en $0 — es el estado que ADR-116 dejó asertado como
+    // "pérdida total, sin ninguna señal" y que este banner rompe. Regla de
+    // frontera intacta: los agregados los computa el engine; web solo compara
+    // y muestra. El TRM es el mismo effectiveConversionTrm con que se calculan
+    // los totales que el banner encabeza.
+    const { dilutedCost, isFullyDiluted } = useMemo(() => {
+        if (!activeScenario) return { dilutedCost: 0, isFullyDiluted: false };
+        const items = activeScenario.scenarioItems;
+        const currency = activeScenario.currency;
+        const trmForCalc = effectiveConversionTrm;
+        const totalDiluted = calculateTotalDilutedCost(items, currency, trmForCalc);
+        const normalSubtotal = calculateTotalNormalSubtotal(items, currency, trmForCalc);
+        return {
+            dilutedCost: totalDiluted,
+            isFullyDiluted: totalDiluted > 0 && normalSubtotal <= 0,
+        };
+    }, [activeScenario, effectiveConversionTrm]);
 
     if (loading || !proposal) {
         return (
@@ -346,6 +372,13 @@ export default function ProposalCalculations() {
                                     </table>
                                 </div>
                             </div>
+
+                            {isFullyDiluted && (
+                                <FullyDilutedBanner
+                                    dilutedCost={dilutedCost}
+                                    currency={activeScenario.currency}
+                                />
+                            )}
 
                             <ScenarioTotalsCards totals={totals} currency={activeScenario.currency} />
                         </>
