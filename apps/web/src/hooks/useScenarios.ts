@@ -421,7 +421,11 @@ export function useScenarios(proposalId: string | undefined) {
 
     const updateMargin = async (siId: string, margin: string) => {
         const val = parseFloat(margin.replace(',', '.'));
-        if (isNaN(val)) return;
+        // Defensa en profundidad (ADR-117): el margen negativo no existe
+        // (ADR-116 B2) y el @Min(0) del DTO ya lo rechaza con un 400, así que
+        // cortar aquí evita un round-trip condenado cuyo único rastro sería un
+        // console.error que el usuario no ve.
+        if (isNaN(val) || val < 0) return;
         try {
             await api.patch(`/proposals/scenarios/items/${siId}`, { marginPct: val, unitPriceOverride: null });
             setScenarios(prev =>
@@ -505,7 +509,12 @@ export function useScenarios(proposalId: string | undefined) {
 
     const updateGlobalMargin = async (margin: string) => {
         const val = parseFloat(margin.replace(',', '.'));
-        if (isNaN(val) || !activeScenarioId) return;
+        // Mismo piso que updateMargin (ADR-117). Aquí el PATCH corre antes del
+        // setScenarios, así que un 400 del @Min(0) no deja el estado local
+        // divergido; lo que cortar aquí evita es la escritura global inútil y
+        // el alert genérico que la falla dispara sobre un valor que la UI ya
+        // podía descartar.
+        if (isNaN(val) || val < 0 || !activeScenarioId) return;
         try {
             await api.patch(`/proposals/scenarios/${activeScenarioId}/apply-margin`, { marginPct: val });
             // Espeja el filtro del servidor (ADR-117): los ítems diluidos no

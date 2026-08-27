@@ -174,7 +174,12 @@ export default function ScenarioItemRow({
                             onChange={(e) => setEditingCell({ id: si.id!, field: 'margin', value: e.target.value })}
                             onBlur={(e) => {
                                 const parsed = parseFloat(e.target.value.replace(',', '.'));
-                                if (!isNaN(parsed)) {
+                                // El margen negativo no existe (ADR-116 B2): se trata como
+                                // input inválido — no se envía, y el input revierte al valor
+                                // vigente al re-render. Sin este guard el -25 viajaba; el DTO
+                                // lo rechaza con un 400, pero el descarte era silencioso
+                                // (ADR-117).
+                                if (!isNaN(parsed) && parsed >= 0) {
                                     updateMargin(si.id!, String(parsed));
                                 }
                                 setEditingCell(null);
