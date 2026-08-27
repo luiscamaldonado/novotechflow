@@ -279,15 +279,20 @@ export class ScenariosService {
     if (!scenarioItem)
       throw new NotFoundException('\u00cdtem de escenario no encontrado.');
     await this.verifyScenarioOwnership(scenarioItem.scenarioId, user);
+    // Cambiar el estado de dilución resetea los overrides en ambas direcciones
+    // (ADR-117): al diluir no queda estado invisible (el engine los ignora pero
+    // seguían vivos en BD), y al des-diluir el ítem vuelve al margen base —
+    // nunca al 0 forzado que lo dejaba cotizando a costo. Ambas direcciones
+    // cubren además las filas legadas que ya cargan marginPctOverride 0 o un
+    // precio fijo huérfano. El reset gana sobre el margen o el precio que venga
+    // en el mismo payload.
+    const isDilutionChange = data.isDiluted !== undefined;
     return this.prisma.scenarioItem.update({
       where: { id },
       data: {
         quantity: data.quantity,
-        marginPctOverride: data.marginPct,
-        unitPriceOverride:
-          data.unitPriceOverride === undefined
-            ? undefined
-            : data.unitPriceOverride,
+        marginPctOverride: isDilutionChange ? null : data.marginPct,
+        unitPriceOverride: isDilutionChange ? null : data.unitPriceOverride,
         isDiluted: data.isDiluted,
       },
     });

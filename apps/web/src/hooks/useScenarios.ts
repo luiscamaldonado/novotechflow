@@ -31,7 +31,7 @@ export interface ScenarioItem {
     itemId: string;
     parentId?: string | null;
     quantity: number;
-    marginPctOverride?: number;
+    marginPctOverride?: number | null;
     unitPriceOverride?: number | null;
     isDiluted?: boolean;
     sortOrder: number;
@@ -460,16 +460,22 @@ export function useScenarios(proposalId: string | undefined) {
         if (!si) return;
         const newVal = !si.isDiluted;
         try {
-            // When enabling dilute, force margin to 0
-            const patchData: Record<string, unknown> = { isDiluted: newVal };
-            if (newVal) patchData.marginPct = 0;
-            await api.patch(`/proposals/scenarios/items/${siId}`, patchData);
+            await api.patch(`/proposals/scenarios/items/${siId}`, { isDiluted: newVal });
+            // Espeja la regla del servidor (ADR-117): la transición de dilución
+            // resetea ambos overrides en las dos direcciones, así que el estado
+            // local no puede seguir cargando el margen 0 forzado ni un precio
+            // fijo huérfano.
             setScenarios(prev =>
                 prev.map(s => ({
                     ...s,
                     scenarioItems: s.scenarioItems.map(item =>
                         item.id === siId
-                            ? { ...item, isDiluted: newVal, ...(newVal ? { marginPctOverride: 0 } : {}) }
+                            ? {
+                                  ...item,
+                                  isDiluted: newVal,
+                                  marginPctOverride: null,
+                                  unitPriceOverride: null,
+                              }
                             : item,
                     ),
                 })),
