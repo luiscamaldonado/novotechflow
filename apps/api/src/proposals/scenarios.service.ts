@@ -309,8 +309,8 @@ export class ScenariosService {
   }
 
   /**
-   * Aplica un margen global a todos los ítems de un escenario específico.
-   * Esto sobreescribe cualquier margen individual previo.
+   * Aplica un margen global a todos los ítems cotizables de un escenario
+   * específico. Esto sobreescribe cualquier margen individual previo.
    */
   async applyMarginToEntireScenario(
     scenarioId: string,
@@ -318,8 +318,11 @@ export class ScenariosService {
     user: AuthenticatedUser,
   ) {
     await this.verifyScenarioOwnership(scenarioId, user);
+    // Los ítems diluidos no cotizan: su margen y su precio no existen para el
+    // engine. El margen global no debe escribirles marginPctOverride ni
+    // borrarles unitPriceOverride (ADR-117).
     return this.prisma.scenarioItem.updateMany({
-      where: { scenarioId },
+      where: { scenarioId, isDiluted: false },
       data: {
         marginPctOverride: marginPct,
         unitPriceOverride: null,

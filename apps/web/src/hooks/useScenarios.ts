@@ -502,10 +502,20 @@ export function useScenarios(proposalId: string | undefined) {
         if (isNaN(val) || !activeScenarioId) return;
         try {
             await api.patch(`/proposals/scenarios/${activeScenarioId}/apply-margin`, { marginPct: val });
+            // Espeja el filtro del servidor (ADR-117): los ítems diluidos no
+            // cotizan, así que el margen global no les toca ni el margen ni el
+            // precio; quedan intactos en el estado local.
             setScenarios(prev =>
                 prev.map(s =>
                     s.id === activeScenarioId
-                        ? { ...s, scenarioItems: s.scenarioItems.map(si => ({ ...si, marginPctOverride: val, unitPriceOverride: null })) }
+                        ? {
+                              ...s,
+                              scenarioItems: s.scenarioItems.map(si =>
+                                  si.isDiluted
+                                      ? si
+                                      : { ...si, marginPctOverride: val, unitPriceOverride: null },
+                              ),
+                          }
                         : s,
                 ),
             );
