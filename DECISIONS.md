@@ -5178,3 +5178,60 @@ Suite: 139 → 146 (145 tras el commit 1 con la cobertura de finitud; +1 el hijo
 - Propagación a capas de Claude.ai (instrucciones del proyecto y skill novotechflow, si nombran las funciones renombradas o la semántica vieja) — entrega a Luis.
 - Cola fría con prioridad subida: backups/2026-03-26-PDF_DOC_BUILDER/ está trackeado (259 archivos) e incluye dumps de Postgres — evaluar si contienen datos de producción y decidir entre .gitignore y purga de historial.
 - Backlog H3 restante: input no numérico en flete y cantidad; congelados del Bloque C.
+
+## ADR-117 — Cohorte H3-UI: el estado de dilución deja de perder dinero en silencio
+
+**Fecha:** 2026-08-27
+**Estado:** Implementada (rama feature/h3-ui, commits 1f14881, 66fcd22, 3c7abe4, c984bba, e2bab6b, 78bcc90, e8db7de, 8804117 más el commit de docs de este ADR; pendiente de merge fast-forward a master y push)
+
+### Contexto
+
+ADR-116 adjudicó el backlog H3 del engine y dejó a la cohorte de UI las decisiones B3 (sí va aviso de escenario 100% diluido) y B4 (sí se deshabilitan precio/margen en filas diluidas), más un min=0 en los inputs de margen del builder. El recon de solo lectura corrigió el plan: B4 a nivel de fila ya estaba implementado (margen deshabilitado ámbar, precio como em-dash), los inputs de margen del builder fueron eliminados en marzo (0d5e13c; ramas huérfanas en el handler), y lo que sí existía eran tres fugas sin señal: el margen global escribía sobre los items diluidos y les borraba el unitPriceOverride; diluir dejaba un precio fijo vivo e invisible en BD; y des-diluir dejaba marginPctOverride = 0, con el item volviendo a cotizar a costo en silencio — la misma pérdida que ADR-116 cerró para el campo borrado, por otra puerta. Los dos inputs de margen vivos (fila y global) aceptaban negativos y ningún marginPct del api tenía piso: el valor se persistía aunque resolveMargin lo descartara. El escenario 100% diluido cotizaba en $0 sin señal en ninguna superficie: las tarjetas imprimían ceros, y el modal de ADR-039 no disparaba porque itera visibleItems, que en ese estado queda vacío. Cobertura previa de todo lo anterior: cero (apps/api/src/proposals/ sin un solo spec).
+
+### Decisión
+
+1. **apply-margin excluye diluidos (1f14881, api+web en el mismo commit — por separado la UI mostraría un estado que el servidor no tiene, criterio ADR-106).** updateMany con where { scenarioId, isDiluted: false }; espejo en el update local del hook (los diluidos quedan intactos por identidad de referencia).
+2. **Piso Min(0) en los cinco marginPct de los DTOs (66fcd22).** El engine ya descartaba el negativo (ADR-116 B2); el piso evita además persistirlo. ExternalItemOut no se tocó: es contrato de salida sin class-validator — si api-external gana escritura de margen, necesitará el piso.
+3. **La transición de isDiluted resetea ambos overrides, server-side y en ambas direcciones (3c7abe4).** Si el payload trae isDiluted, el update fuerza marginPctOverride: null y unitPriceOverride: null, ganando sobre lo que venga en el mismo payload. Al diluir no queda estado invisible; al des-diluir el item vuelve al margen base — semántica D1: "queda como item no tocado". El payload de toggleDilpidate dejó de mandar marginPct: 0. Obligó a alinear el tipo local de useScenarios (marginPctOverride number | null): era el outlier contra el engine, lib/types.ts y el wire. Deuda registrada: los dos ScenarioItem de web siguen duplicados.
+4. **Guards >= 0 en los dos inputs de margen vivos (c984bba).** Fila (onBlur) y hook (updateMargin, updateGlobalMargin — el header no parsea: delega). Corrección de premisa registrada: el hook es server-first con await, no optimista — el 400 nunca dejaba estado divergido; lo que el guard elimina es el round-trip condenado y el alert genérico. Deuda registrada: reorderItems/reorderScenarios sí son optimistas con flush debounced sin rollback ni refetch.
+5. **Banner de escenario 100% diluido en cálculos (e2bab6b, B3 primera superficie).** FullyDilutedBanner (componente extraído: ProposalCalculations ya iba en 393 líneas contra el límite de 200), rojo, role="alert", persistente sin latch ni dismiss — el estado es corregible y el banner muere al corregirlo. La detección estrena consumidor de calculateTotalDilutedCost y calculateTotalNormalSubtotal (antes solo internas al engine), replica el guard de calculateDilutionPerUnit (dilutedCost > 0 && normalSubtotal <= 0) y usa effectiveConversionTrm — el mismo TRM de los totales que encabeza. Regla de frontera intacta: el engine computa, web compara y muestra.
+6. **El escenario 100% diluido dispara el modal del DocBuilder (78bcc90, B3 segunda superficie).** La detección vive en processScenario (que ve los items crudos) y viaja en ProcessedScenario (dilutedCost, isFullyDiluted) con el TRM propio del documento (scenario.conversionTrm). PriceWarning pasó a unión discriminada por kind; kind nuevo FULLY_DILUTED_SCENARIO empujado antes de iterar visibleItems (con visibles vacío es el único hallazgo y evita el filtro de findProposalPriceWarnings). El modal generalizó la severidad a un mapa kind → severidad (el nuevo en rojo: pérdida total), fila con etiqueta "Costo diluido" y monto vía formatAmount — paridad con sus filas hermanas. ProposalDocBuilder no necesitó ni una línea. Complementa el diseño de ADR-039, no lo reemplaza.
+7. **Specs de ScenariosService (8804117): 8 tests que atan las reglas 1-3**, con argumentos exactos de las escrituras y validación de DTOs por constraint (min, no solo conteo). Verificados por mutation-check: revertir cada regla en el service hace fallar su test. El mutation-check queda como práctica estándar para specs que aten reglas de negocio. Micro-commit e8db7de: acentos reales en los comentarios de priceValidation.ts (los escapes \uXXXX no se interpretan en comentarios; quedaban de origen).
+
+### Consecuencias
+
+- Las tres fugas de la dilución quedan cerradas en el servidor (cualquier cliente recibe la regla), el margen negativo muere en tres capas (UI, DTO, engine), y el escenario 100% diluido tiene señal en las dos superficies donde se decide: donde se edita y antes de generar el documento.
+- Las filas legadas se sanean al pasar por cualquier transición de dilución futura; no hubo migración de datos.
+- Deudas registradas: ScenarioItem duplicado en web; reorder optimista sin rollback; primera suite de web pendiente con candidato identificado (priceValidation.ts: función pura, ahora con tres kinds); las ramas huérfanas de marginPct/unitPrice en el handler del builder (código muerto de 0d5e13c).
+
+### Archivos
+
+- apps/api/src/proposals/scenarios.service.ts — applyMarginToEntireScenario, updateScenarioItem
+- apps/api/src/proposals/dto/proposals.dto.ts — Min(0) en cinco DTOs
+- apps/api/src/proposals/scenarios.service.spec.ts — nuevo
+- apps/web/src/hooks/useScenarios.ts — updateGlobalMargin, toggleDilpidate, updateMargin, tipo ScenarioItem
+- apps/web/src/hooks/useProposalScenarios.ts — processScenario, ProcessedScenario
+- apps/web/src/lib/priceValidation.ts — unión discriminada, kind nuevo, acentos
+- apps/web/src/components/proposals/PriceWarningModal.tsx — mapa de severidad, fila nueva
+- apps/web/src/components/proposals/FullyDilutedBanner.tsx — nuevo
+- apps/web/src/pages/proposals/ProposalCalculations.tsx — detección y montaje del banner
+- apps/web/src/pages/proposals/components/ScenarioItemRow.tsx — guard del onBlur
+- INSTRUCTIVO_CLAUDE.md §6 — subagentes en prompts de lectura/verificación
+
+### Commits
+
+- 1f14881 — fix(api,web): apply-margin excluye los items diluidos (ADR-117)
+- 66fcd22 — fix(api): Min(0) en todos los campos de margen de los DTOs (ADR-117)
+- 3c7abe4 — fix(api,web): la transicion de isDiluted limpia ambos overrides (ADR-117)
+- c984bba — fix(web): los inputs de margen rechazan valores negativos (ADR-117)
+- e2bab6b — feat(web): banner de escenario 100% diluido en calculos (ADR-117)
+- 78bcc90 — feat(web): el escenario 100% diluido dispara el aviso del DocBuilder (ADR-117)
+- e8db7de — style(web): acentos reales en los comentarios de priceValidation.ts
+- 8804117 — test(api): specs de ScenariosService para las reglas de ADR-117
+
+### Pendientes
+
+- Merge fast-forward a master, push (Luis), CI y tres deploys por CLI, Sync now, borrado de la rama tras confirmación en producción.
+- Verificación en navegador (Luis): banner con un escenario real 100% diluido; el mismo escenario dispara el modal del DocBuilder; un margen negativo en fila y en global se rechaza sin round-trip; diluir y des-diluir un item con precio fijo lo deja en margen base sin candado.
+- Opcional (decisión de Luis): inventario en producción de filas NO diluidas con marginPctOverride = 0 — residuo del bug de des-diluir previo a esta cohorte, indistinguible del 0% deliberado; solo conteo, sin tocar datos.
+- Primera suite de web (candidato: priceValidation.ts); ramas huérfanas del builder; dedup de ScenarioItem; reorder sin rollback.
