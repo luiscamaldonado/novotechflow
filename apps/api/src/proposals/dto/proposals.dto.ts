@@ -159,6 +159,7 @@ export class CreateProposalItemDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   marginPct?: number;
 
   @IsOptional()
@@ -230,6 +231,7 @@ export class UpdateProposalItemDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   marginPct?: number;
 
   @IsOptional()
@@ -326,6 +328,7 @@ export class AddScenarioItemDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   marginPct?: number;
 }
 
@@ -340,6 +343,7 @@ export class UpdateScenarioItemDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   marginPct?: number;
 
   @ApiPropertyOptional({
@@ -360,9 +364,13 @@ export class UpdateScenarioItemDto {
 
 /**
  * DTO para aplicar margen global a un escenario.
+ *
+ * El margen negativo no existe como caso de negocio (ADR-116 B2): el engine ya
+ * lo descarta vía resolveMargin, y este piso evita además persistirlo (ADR-117).
  */
 export class ApplyMarginDto {
   @IsNumber()
+  @Min(0)
   marginPct: number;
 }
 
