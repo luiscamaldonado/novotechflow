@@ -1,6 +1,6 @@
 import type { ProcessedScenario } from '../hooks/useProposalScenarios';
 
-/** Umbrales de validaci\u00f3n de precio unitario (piso COP, techo USD). */
+/** Umbrales de validación de precio unitario (piso COP, techo USD). */
 export interface PriceThresholds {
     copMinUnitPrice: number;
     usdMaxUnitPrice: number;
@@ -13,7 +13,7 @@ export type PriceWarningKind =
     | 'USD_ABOVE_CEILING'
     | 'FULLY_DILUTED_SCENARIO';
 
-/** Un hallazgo de precio sospechoso para un \u00edtem concreto. */
+/** Un hallazgo de precio sospechoso para un ítem concreto. */
 export interface ItemPriceWarning {
     kind: 'COP_BELOW_FLOOR' | 'USD_ABOVE_CEILING';
     itemName: string;
@@ -22,7 +22,7 @@ export interface ItemPriceWarning {
     threshold: number;
 }
 
-/** Un hallazgo de escenario 100 % diluido: sin item concreto ni umbral,
+/** Un hallazgo de escenario 100 % diluido: sin ítem concreto ni umbral,
  *  solo el costo que se pierde (ADR-117, B3). */
 export interface FullyDilutedScenarioWarning {
     kind: 'FULLY_DILUTED_SCENARIO';
@@ -41,11 +41,11 @@ export interface ScenarioPriceWarnings {
 }
 
 /**
- * Eval\u00faa un escenario procesado contra los umbrales.
- * Asim\u00e9trico: en COP marca unitarios por DEBAJO del piso; en USD por ENCIMA del techo.
+ * Evalúa un escenario procesado contra los umbrales.
+ * Asimétrico: en COP marca unitarios por DEBAJO del piso; en USD por ENCIMA del techo.
  * Los umbrales solo recorren visibleItems (ya excluye diluidos); el hallazgo de
- * escenario 100 % diluido es la excepcion y no depende de ellos (ADR-117, B3).
- * Funci\u00f3n pura: sin React, sin I/O.
+ * escenario 100 % diluido es la excepción y no depende de ellos (ADR-117, B3).
+ * Función pura: sin React, sin I/O.
  */
 export function getScenarioPriceWarnings(
     scenario: ProcessedScenario,
@@ -54,8 +54,8 @@ export function getScenarioPriceWarnings(
     const warnings: PriceWarning[] = [];
     const currency = scenario.currency;
 
-    // Va ANTES de visibleItems (ADR-117, B3): con todos los items diluidos la
-    // lista de visibles queda vacia, asi que este es el unico hallazgo posible,
+    // Va ANTES de visibleItems (ADR-117, B3): con todos los ítems diluidos la
+    // lista de visibles queda vacía, así que este es el único hallazgo posible,
     // y es el que evita que findProposalPriceWarnings descarte el escenario por
     // no tener ninguno.
     if (scenario.isFullyDiluted) {
@@ -91,8 +91,8 @@ export function getScenarioPriceWarnings(
 }
 
 /**
- * Eval\u00faa todos los escenarios y devuelve solo los que tienen hallazgos.
- * Funci\u00f3n pura: no muta la entrada.
+ * Evalúa todos los escenarios y devuelve solo los que tienen hallazgos.
+ * Función pura: no muta la entrada.
  */
 export function findProposalPriceWarnings(
     scenarios: ProcessedScenario[],
