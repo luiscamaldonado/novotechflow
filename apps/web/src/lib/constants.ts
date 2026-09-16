@@ -8,7 +8,7 @@ import {
     Cpu, DollarSign,
     Image as ImageIcon,
 } from 'lucide-react';
-import type { ProposalStatus, SpecFieldDef } from './types';
+import type { ProposalStatus, ItemType, SpecFieldDef } from './types';
 
 /** Porcentaje de flete para proveedores mayoristas. */
 export const MAYORISTA_FLETE_PCT = 1.5;
@@ -177,6 +177,9 @@ export const STATUS_CONFIG: Record<ProposalStatus, { label: string; bg: string; 
 /** All proposal statuses in display order. */
 export const ALL_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA', 'PERDIDA', 'PENDIENTE_FACTURAR', 'FACTURADA', 'APLAZADA', 'CANCELADA'];
 
+/** Categorías de ítem seleccionables en los filtros del tablero. */
+export const ALL_ITEM_TYPES: ItemType[] = ['PCS', 'ACCESSORIES', 'PC_SERVICES', 'SOFTWARE', 'INFRASTRUCTURE', 'INFRA_SERVICES'];
+
 /** Statuses valid for billing projections. */
 export const PROJECTION_STATUSES: ProposalStatus[] = ['PENDIENTE_FACTURAR', 'FACTURADA'];
 
@@ -252,6 +255,9 @@ export const INACTIVITY_WARNING_BEFORE_MS = 60 * 1000;
 
 /** Clave de localStorage para cachear el timeout entre recargas. */
 export const INACTIVITY_TIMEOUT_STORAGE_KEY = 'inactivity_timeout_minutes';
+
+/** Clave de sessionStorage para los filtros del tablero. El sufijo de versión invalida snapshots de formas anteriores. */
+export const DASHBOARD_FILTERS_STORAGE_KEY = 'ntf_dashboard_filters_v1';
 
 
 // ── Economic proposal PDF pagination — alturas (height-aware) ─

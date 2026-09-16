@@ -1,5 +1,5 @@
 import { Calendar, Tag, Factory, DollarSign, ShoppingCart, X } from 'lucide-react';
-import { ITEM_TYPE_LABELS, ACQUISITION_CONFIG, MONTH_NAMES_ES } from '../../lib/constants';
+import { ITEM_TYPE_LABELS, ACQUISITION_CONFIG, MONTH_NAMES_ES, ALL_ITEM_TYPES } from '../../lib/constants';
 import { formatNumberWithThousands, parseFormattedNumber } from '../../lib/format-utils';
 import type { ItemType, AcquisitionType } from '../../lib/types';
 
@@ -34,8 +34,6 @@ export interface DashboardFiltersProps {
 }
 
 // ── Constants ────────────────────────────────────────────────
-
-const ALL_ITEM_TYPES: ItemType[] = ['PCS', 'ACCESSORIES', 'PC_SERVICES', 'SOFTWARE', 'INFRASTRUCTURE', 'INFRA_SERVICES'];
 
 const LABEL_CLASSES = 'text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block';
 const INPUT_CLASSES = 'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-300 transition-colors';

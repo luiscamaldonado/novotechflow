@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { AuthUser } from '../lib/types';
 import { INACTIVITY_TIMEOUT_STORAGE_KEY } from '../lib/constants';
+import { clearDashboardFilters } from '../lib/dashboardFilterStorage';
 import { api } from '../lib/api';
 
 /** Rango válido para minutos de inactividad configurados en el backend. */
@@ -63,6 +64,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem(INACTIVITY_TIMEOUT_STORAGE_KEY);
+        clearDashboardFilters();
         set({ token: null, user: null, isAuthenticated: false, inactivityTimeoutMinutes: null });
     },
 

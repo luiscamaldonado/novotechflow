@@ -7,6 +7,7 @@ import { getTrmMonthlyAverage } from '../lib/trm-service';
 import { parseMultiValueFilter, matchesAnyTerm } from '../lib/filter-utils';
 import { findBoardHygieneIssues, type ProposalHygieneInput, type ProposalHygieneIssues } from '../lib/dashboardValidation';
 import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionType, ItemType } from '../lib/types';
+import { readDashboardFilters, writeDashboardFilters } from '../lib/dashboardFilterStorage';
 import type { DateRange } from '../pages/dashboard/DashboardFilters';
 
 // â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -171,25 +172,55 @@ export function useDashboard() {
     const [trmPreviousMonthAvg, setTrmPreviousMonthAvg] = useState<number | null>(null);
     const [isLoadingTrmAverages, setIsLoadingTrmAverages] = useState(true);
 
+    // Snapshot de filtros persistido en sessionStorage; se lee una vez por montaje del hook.
+    const [persistedFilters] = useState(readDashboardFilters);
+
     // Filter state
-    const [showFilters, setShowFilters] = useState(false);
-    const [codeFilter, setCodeFilter] = useState('');
-    const [clientFilter, setClientFilter] = useState('');
-    const [subjectFilter, setSubjectFilter] = useState('');
-    const [statusFilters, setStatusFilters] = useState<Set<ProposalStatus>>(new Set());
+    const [showFilters, setShowFilters] = useState(persistedFilters?.showFilters ?? false);
+    const [codeFilter, setCodeFilter] = useState(persistedFilters?.codeFilter ?? '');
+    const [clientFilter, setClientFilter] = useState(persistedFilters?.clientFilter ?? '');
+    const [subjectFilter, setSubjectFilter] = useState(persistedFilters?.subjectFilter ?? '');
+    const [statusFilters, setStatusFilters] = useState<Set<ProposalStatus>>(() => new Set(persistedFilters?.statusFilters ?? []));
 
 
     // Advanced filter state
-    const [closeDateRange, setCloseDateRange] = useState<DateRange>({ from: '', to: '' });
-    const [billingDateRange, setBillingDateRange] = useState<DateRange>({ from: '', to: '' });
-    const [categoryFilter, setCategoryFilter] = useState<Set<ItemType>>(new Set());
-    const [manufacturerFilter, setManufacturerFilter] = useState('');
-    const [subtotalUsdMin, setSubtotalUsdMin] = useState('');
-    const [subtotalUsdMax, setSubtotalUsdMax] = useState('');
-    const [acquisitionFilter, setAcquisitionFilter] = useState<AcquisitionType | 'ALL'>('ALL');
-    const [userFilter, setUserFilter] = useState<Set<string>>(new Set());
-    const [closeMonthFilter, setCloseMonthFilter] = useState<Set<number>>(new Set());
-    const [billingMonthFilter, setBillingMonthFilter] = useState<Set<number>>(new Set());
+    const [closeDateRange, setCloseDateRange] = useState<DateRange>(persistedFilters?.closeDateRange ?? { from: '', to: '' });
+    const [billingDateRange, setBillingDateRange] = useState<DateRange>(persistedFilters?.billingDateRange ?? { from: '', to: '' });
+    const [categoryFilter, setCategoryFilter] = useState<Set<ItemType>>(() => new Set(persistedFilters?.categoryFilter ?? []));
+    const [manufacturerFilter, setManufacturerFilter] = useState(persistedFilters?.manufacturerFilter ?? '');
+    const [subtotalUsdMin, setSubtotalUsdMin] = useState(persistedFilters?.subtotalUsdMin ?? '');
+    const [subtotalUsdMax, setSubtotalUsdMax] = useState(persistedFilters?.subtotalUsdMax ?? '');
+    const [acquisitionFilter, setAcquisitionFilter] = useState<AcquisitionType | 'ALL'>(persistedFilters?.acquisitionFilter ?? 'ALL');
+    const [userFilter, setUserFilter] = useState<Set<string>>(() => new Set(persistedFilters?.userFilter ?? []));
+    const [closeMonthFilter, setCloseMonthFilter] = useState<Set<number>>(() => new Set(persistedFilters?.closeMonthFilter ?? []));
+    const [billingMonthFilter, setBillingMonthFilter] = useState<Set<number>>(() => new Set(persistedFilters?.billingMonthFilter ?? []));
+
+    // Persiste los filtros en sessionStorage ante cualquier cambio, para que sobrevivan
+    // a la navegación dentro de la app y a un refresco. Mueren al cerrar la pestaña.
+    useEffect(() => {
+        writeDashboardFilters({
+            showFilters,
+            codeFilter,
+            clientFilter,
+            subjectFilter,
+            statusFilters: Array.from(statusFilters),
+            closeDateRange,
+            billingDateRange,
+            categoryFilter: Array.from(categoryFilter),
+            manufacturerFilter,
+            subtotalUsdMin,
+            subtotalUsdMax,
+            acquisitionFilter,
+            userFilter: Array.from(userFilter),
+            closeMonthFilter: Array.from(closeMonthFilter),
+            billingMonthFilter: Array.from(billingMonthFilter),
+        });
+    }, [
+        showFilters, codeFilter, clientFilter, subjectFilter, statusFilters,
+        closeDateRange, billingDateRange, categoryFilter, manufacturerFilter,
+        subtotalUsdMin, subtotalUsdMax, acquisitionFilter, userFilter,
+        closeMonthFilter, billingMonthFilter,
+    ]);
 
     const loadData = async () => {
         try {
