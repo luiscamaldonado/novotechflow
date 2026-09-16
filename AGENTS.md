@@ -139,6 +139,7 @@ Confirma explícitamente:
 - NUNCA pongas todo el estado en un store global. Pregúntate: "¿Quién más necesita esto?"
 - Deriva estado en lugar de duplicarlo. Si puedes calcularlo, no lo almacenes.
 - Los stores deben estar segmentados por dominio/feature, no ser un mega-store monolítico.
+- **Estado de UI persistido entre montajes** (filtros de tablero y equivalentes): va en `sessionStorage`, **nunca** en `localStorage` — sobrevive a la navegación y al refresco, muere al cerrar la pestaña. La clave se declara en `apps/web/src/lib/constants.ts` con sufijo de versión (`..._v1`) para poder invalidar formas anteriores; la lectura valida campo a campo y cae al default por campo, nunca descarta el snapshot entero por una clave corrupta; los `Set` se serializan como arrays. El borrado se invoca en `logout()` del `authStore` —punto único de los cuatro caminos de salida de sesión— para que otro usuario en el mismo equipo no herede estado ajeno (ADR-118).
 
 ---
 

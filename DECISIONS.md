@@ -5235,3 +5235,73 @@ ADR-116 adjudicó el backlog H3 del engine y dejó a la cohorte de UI las decisi
 - Verificación en navegador (Luis): banner con un escenario real 100% diluido; el mismo escenario dispara el modal del DocBuilder; un margen negativo en fila y en global se rechaza sin round-trip; diluir y des-diluir un item con precio fijo lo deja en margen base sin candado.
 - Opcional (decisión de Luis): inventario en producción de filas NO diluidas con marginPctOverride = 0 — residuo del bug de des-diluir previo a esta cohorte, indistinguible del 0% deliberado; solo conteo, sin tocar datos.
 - Primera suite de web (candidato: priceValidation.ts); ramas huérfanas del builder; dedup de ScenarioItem; reorder sin rollback.
+
+## ADR-118 — Filtro de comercial como selección múltiple y persistencia de filtros del tablero en sessionStorage
+
+**Fecha:** 2026-09-16
+**Estado:** Cerrado
+
+### Contexto
+
+El panel de filtros del tablero (`/dashboard`) arrastraba dos fricciones distintas que se resolvieron en la misma sesión.
+
+La primera: el filtro "Usuario Comercial" era un `<input type="text">` de texto libre dentro del panel "Filtros Avanzados", con parseo multi-valor por `;` y match por substring contra `row.user.name`. Exigía recordar y teclear el nombre del comercial, no revelaba qué comerciales existen, y su ubicación al final del grid de filtros avanzados lo escondía del uso frecuente del admin.
+
+La segunda: los quince estados de filtro vivían en `useState` dentro de `useDashboard`. El hook se desmonta al navegar fuera del tablero, así que entrar a ver una propuesta y devolverse implicaba rearmar todos los filtros a mano. El usuario reportó esto como el roce principal de su flujo diario de consulta.
+
+Ninguna de las dos requería tocar backend: `GET /proposals` ya devuelve `user: { name, nomenclature }` en cada fila, y la persistencia es enteramente de cliente.
+
+### Decisión — Filtro de comercial como selección múltiple derivada de las filas
+
+- El control pasa de input de texto a **píldoras toggle de selección múltiple**, mismo patrón visual y de interacción que ESTADO y CATEGORÍA. Se descartó `<select multiple>` (comportamiento pobre en táctil) y un combobox propio (más código y accesibilidad a cargo nuestro) por innecesarios con 10–12 comerciales.
+- El control **sube por encima de la sección ESTADO**. La sección ESTADO no vive en `DashboardFilters.tsx` sino en su propia tarjeta dentro de `Dashboard.tsx`; el filtro de comercial se monta como primer hijo de esa misma tarjeta y sale por completo del grid de Filtros Avanzados, que queda con 6 celdas en grid de 3.
+- `userFilter` pasa de `string` a `Set<string>`, coherente con `statusFilters`, `categoryFilter` y los filtros de mes.
+- **La identidad del comercial es `nomenclature`**, no el nombre ni el id. El backend no expone `id` de usuario en estas filas (`DashboardRow.user` es `{ name: string; nomenclature: string }`), y `nomenclature` ya era la clave de comercial en `buildCommercials` de `lib/projectionReport.ts`. El `name` queda solo como etiqueta visible.
+- **Las opciones se derivan de `allRows`, no de un endpoint.** Mismo patrón que `manufacturerSuggestions`: se recorren las filas y se arma un `Map<nomenclature, name>` con "primera gana", ordenado por nombre con `localeCompare('es')`. Se derivan de `allRows` y no de `filtered` a propósito: las opciones no deben encogerse a medida que el usuario filtra.
+- Se descartó consumir `GET /users`. Ese endpoint es `@Roles(Role.ADMIN)`, lo que obliga a condicionar la llamada por rol para no generar 403 a un comercial, acopla el tablero a un endpoint administrativo y agrega una llamada de red para datos que ya están en memoria. Su única ventaja —listar comerciales sin filas en el tablero— no aporta: filtrar por uno de ellos devuelve cero resultados.
+- **Visible solo para `ADMIN`** (`user?.role === 'ADMIN'` en `Dashboard.tsx`). Para un comercial el tablero solo trae sus propias filas, así que el filtro tendría una sola opción.
+- El componente (`pages/dashboard/components/CommercialUserFilter.tsx`) es presentacional puro (CONVENTIONS §B): no importa `api` ni `useDashboard`, recibe opciones, selección y callback por props, y retorna `null` si no hay opciones. Los botones llevan `aria-pressed`; el ícono lucide no lleva props de accesibilidad propias (ADR-103) y las utilidades de borde llevan color explícito en el estado base (ADR-102).
+
+### Decisión — Persistencia de los filtros en sessionStorage
+
+- Los quince estados de filtro se persisten en un **snapshot único** bajo la clave `DASHBOARD_FILTERS_STORAGE_KEY = 'ntf_dashboard_filters_v1'`, declarada en `lib/constants.ts` junto a `INACTIVITY_TIMEOUT_STORAGE_KEY`. El sufijo de versión permite invalidar snapshots de formas anteriores cambiando la clave.
+- **`sessionStorage`, no `localStorage`.** Alcance deliberado: los filtros sobreviven a la navegación dentro de la app y a un refresco, y mueren al cerrar la pestaña. Se descartó `localStorage` por el riesgo de "tablero filtrado fantasma": volver días después, ver menos propuestas de las esperadas y concluir que faltan datos, sin recordar que hay un filtro puesto desde la semana pasada.
+- **Lectura defensiva campo a campo** en el módulo puro `lib/dashboardFilterStorage.ts`. Cada campo tiene su validador (`asString`, `asDateRange`, `asEnumArray` contra el catálogo permitido, `asMonthArray`, `asAcquisition`); una clave corrupta cae a su default sin descartar el snapshot entero, y un JSON ilegible devuelve `null` completo. Los `Set` viajan serializados como arrays, porque JSON no los soporta.
+- La lectura ocurre **una sola vez por montaje** del hook (`useState(readDashboardFilters)` como inicializador perezoso) y alimenta los inicializadores de los quince `useState`. La escritura ocurre en **un solo `useEffect`** con las quince dependencias explícitas y completas; `react-hooks/exhaustive-deps` queda activa y sin advertencias, no silenciada.
+- **`clearDashboardFilters()` se invoca en `logout()` del `authStore`.** Es el punto único por el que desembocan los cuatro caminos de salida de sesión —botón del sidebar, interceptor 401 de `lib/api.ts`, timeout de inactividad (ADR-026) y token expirado detectado en `checkAuth`—, así que una sola llamada cubre los cuatro. Sin esto, otro usuario que entre en el mismo computador hereda los filtros del anterior, incluido el de comercial.
+- `clearFilters` no se modificó: al vaciar los estados, el efecto de escritura sobrescribe el snapshot con el estado limpio. `showFilters` se persiste (el panel se reabre como se dejó) pero `clearFilters` no lo toca, así que limpiar filtros deja el panel abierto.
+- `ALL_ITEM_TYPES` se movió de constante local en `DashboardFilters.tsx` a `lib/constants.ts`, junto a `ALL_STATUSES`, para que el validador del snapshot tenga catálogo sin importar desde una página.
+
+### Convenio de mes: 1–12, no 0–11
+
+`closeMonthFilter` y `billingMonthFilter` almacenan meses en **1–12**, no el índice 0–11 de `Date`. Consumidor: `Number(dateStr.slice(5, 7))` sobre un ISO `YYYY-MM-DD`. Productor: `const month = i + 1` sobre `MONTH_NAMES_ES.slice(1)`. El guard `isValidMonth` quedó en `>= 1 && <= 12`; escrito en 0–11 habría dejado pasar enero y descartado diciembre en silencio al rehidratar. Queda anotado en el código para que nadie lo "corrija" al convenio de `Date`.
+
+### Consecuencias
+
+- Positivas: cero backend, cero migraciones, cero endpoints nuevos, cero cambios en el pricing-engine. El filtro de comercial deja de exigir memoria del nombre exacto y muestra el universo disponible. Los filtros sobreviven al ciclo consultar-abrir-volver, que era el roce reportado.
+- Un comercial sin ninguna fila en el tablero no aparece como opción seleccionable. Es el comportamiento correcto para un filtro, pero difiere del input de texto anterior, que aceptaba teclear cualquier nombre.
+- Una nomenclatura persistida que deje de estar entre las opciones (por ejemplo, el comercial ya no tiene filas visibles) deja un filtro activo sin píldora visible para desmarcarlo. La salida es el botón "Limpiar filtros", y el punto indigo junto al botón Filtros señala que hay filtros puestos.
+- El rol `REPORTER` también ve el tablero global de todos los comerciales pero no recibe el filtro, que quedó restringido a `ADMIN`. Decisión consciente del dueño del proyecto; se amplía si el uso lo pide.
+- Se pierde el match por substring con separador `;` en el campo de comercial. Los filtros de código, cliente y asunto lo conservan intacto.
+- La persistencia es best-effort: en modo privado o con la cuota llena, `writeDashboardFilters` hace `no-op` silencioso y el tablero se comporta como antes del cambio.
+- Deuda menor: el snapshot vive en una sola clave versionada; agregar o quitar un filtro obliga a actualizar `PersistedDashboardFilters`, su validador y la lista de dependencias del efecto. Un campo nuevo omitido no rompe nada (cae a su default) pero tampoco persiste.
+
+### Archivos
+
+- `apps/web/src/pages/dashboard/components/CommercialUserFilter.tsx` (nuevo: píldoras toggle de comerciales, presentacional puro)
+- `apps/web/src/lib/dashboardFilterStorage.ts` (nuevo: `PersistedDashboardFilters`, `readDashboardFilters`, `writeDashboardFilters`, `clearDashboardFilters` y sus validadores)
+- `apps/web/src/hooks/useDashboard.ts` (`CommercialOption`; `userFilter` a `Set<string>`; `commercialOptions` sobre `allRows`; filtro por `nomenclature`; snapshot en los 15 inicializadores; efecto de escritura)
+- `apps/web/src/lib/constants.ts` (`DASHBOARD_FILTERS_STORAGE_KEY`; `ALL_ITEM_TYPES` movida aquí)
+- `apps/web/src/pages/Dashboard.tsx` (monta `CommercialUserFilter` gated por ADMIN en la tarjeta de ESTADO; props retiradas de `DashboardFilters`)
+- `apps/web/src/pages/dashboard/DashboardFilters.tsx` (subcomponente `UserFilter` eliminado; props fuera de la interfaz; `ALL_ITEM_TYPES` importada)
+- `apps/web/src/store/authStore.ts` (`clearDashboardFilters()` en `logout`)
+- `CONVENTIONS.md` / `AGENTS.md` (regla de estado de UI persistido)
+
+### Commits
+
+- `739fcec` — feat(dashboard): filtro de comercial como seleccion multiple sobre la seccion Estado
+- `3d26390` — feat(dashboard): persistir filtros en sessionStorage durante la sesion de pestana
+
+### Pendientes
+
+- Ninguno. Si `REPORTER` llegara a necesitar el filtro de comercial, es ampliar la condición de rol en `Dashboard.tsx`; no requiere ADR nuevo.
