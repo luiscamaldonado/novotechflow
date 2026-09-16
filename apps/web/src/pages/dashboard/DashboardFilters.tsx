@@ -1,4 +1,4 @@
-import { Calendar, Tag, Factory, DollarSign, ShoppingCart, User, X } from 'lucide-react';
+import { Calendar, Tag, Factory, DollarSign, ShoppingCart, X } from 'lucide-react';
 import { ITEM_TYPE_LABELS, ACQUISITION_CONFIG, MONTH_NAMES_ES } from '../../lib/constants';
 import { formatNumberWithThousands, parseFormattedNumber } from '../../lib/format-utils';
 import type { ItemType, AcquisitionType } from '../../lib/types';
@@ -26,8 +26,6 @@ export interface DashboardFiltersProps {
     onSubtotalUsdMaxChange: (value: string) => void;
     acquisitionFilter: AcquisitionType | 'ALL';
     onAcquisitionFilterChange: (value: AcquisitionType | 'ALL') => void;
-    userFilter: string;
-    onUserFilterChange: (value: string) => void;
     closeMonthFilter: Set<number>;
     onCloseMonthFilterChange: (months: Set<number>) => void;
     billingMonthFilter: Set<number>;
@@ -286,26 +284,6 @@ function AcquisitionFilter({ value, onChange }: {
     );
 }
 
-function UserFilter({ value, onChange }: {
-    value: string;
-    onChange: (value: string) => void;
-}) {
-    return (
-        <div>
-            <label className={LABEL_CLASSES}>
-                <User className="inline h-3 w-3 mr-1 -mt-0.5" />Usuario Comercial
-            </label>
-            <input
-                type="text"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder="Filtrar por nombre (separa con ;)"
-                className={INPUT_CLASSES}
-            />
-        </div>
-    );
-}
-
 // ── Main Component ───────────────────────────────────────────
 
 export default function DashboardFilters(props: DashboardFiltersProps) {
@@ -364,10 +342,6 @@ export default function DashboardFilters(props: DashboardFiltersProps) {
                 <AcquisitionFilter
                     value={props.acquisitionFilter}
                     onChange={props.onAcquisitionFilterChange}
-                />
-                <UserFilter
-                    value={props.userFilter}
-                    onChange={props.onUserFilterChange}
                 />
             </div>
         </div>

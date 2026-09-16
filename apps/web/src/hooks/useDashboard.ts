@@ -42,6 +42,12 @@ export interface DashboardRow {
     originalProjection?: BillingProjection;
 }
 
+/** Comercial disponible como opción de filtro en el tablero. */
+export interface CommercialOption {
+    nomenclature: string;
+    name: string;
+}
+
 export interface BillingCards {
     facturadoMesAnterior: number;
     facturadoMesActual: number;
@@ -181,7 +187,7 @@ export function useDashboard() {
     const [subtotalUsdMin, setSubtotalUsdMin] = useState('');
     const [subtotalUsdMax, setSubtotalUsdMax] = useState('');
     const [acquisitionFilter, setAcquisitionFilter] = useState<AcquisitionType | 'ALL'>('ALL');
-    const [userFilter, setUserFilter] = useState('');
+    const [userFilter, setUserFilter] = useState<Set<string>>(new Set());
     const [closeMonthFilter, setCloseMonthFilter] = useState<Set<number>>(new Set());
     const [billingMonthFilter, setBillingMonthFilter] = useState<Set<number>>(new Set());
 
@@ -316,11 +322,23 @@ export function useDashboard() {
         return Array.from(values).sort();
     }, [proposals]);
 
+    /** Comerciales presentes en el tablero (clave: nomenclature), ordenados por nombre. */
+    const commercialOptions: CommercialOption[] = useMemo(() => {
+        const byNomenclature = new Map<string, string>();
+        for (const row of allRows) {
+            const nomenclature = row.user?.nomenclature;
+            const name = row.user?.name;
+            if (!nomenclature || !name) continue;
+            if (!byNomenclature.has(nomenclature)) byNomenclature.set(nomenclature, name);
+        }
+        return Array.from(byNomenclature, ([nomenclature, name]) => ({ nomenclature, name }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    }, [allRows]);
+
     const filtered = useMemo(() => {
         const codeTerms = parseMultiValueFilter(codeFilter);
         const clientTerms = parseMultiValueFilter(clientFilter);
         const subjectTerms = parseMultiValueFilter(subjectFilter);
-        const userTerms = parseMultiValueFilter(userFilter);
         const currentYear = new Date().getFullYear();
 
         return allRows.filter(row => {
@@ -404,8 +422,8 @@ export function useDashboard() {
             // Acquisition type
             if (acquisitionFilter !== 'ALL' && row.acquisitionType !== acquisitionFilter) return false;
 
-            // User (commercial advisor) - multi-value
-            if (!matchesAnyTerm(row.user?.name ?? '', userTerms)) return false;
+            // Usuario comercial: selección múltiple por nomenclature (vacío = sin filtro)
+            if (userFilter.size > 0 && !userFilter.has(row.user?.nomenclature ?? '')) return false;
 
             return true;
         });
@@ -592,7 +610,7 @@ export function useDashboard() {
         setSubtotalUsdMin('');
         setSubtotalUsdMax('');
         setAcquisitionFilter('ALL');
-        setUserFilter('');
+        setUserFilter(new Set());
         setCloseMonthFilter(new Set());
         setBillingMonthFilter(new Set());
     };
@@ -602,7 +620,7 @@ export function useDashboard() {
         || billingDateRange.from || billingDateRange.to
         || categoryFilter.size > 0 || manufacturerFilter
         || subtotalUsdMin || subtotalUsdMax || acquisitionFilter !== 'ALL'
-        || userFilter
+        || userFilter.size > 0
         || closeMonthFilter.size > 0 || billingMonthFilter.size > 0;
 
     return {
@@ -658,6 +676,7 @@ export function useDashboard() {
         closeMonthFilter, setCloseMonthFilter,
         billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
+        commercialOptions,
 
         // Actions
         handleStatusChange,

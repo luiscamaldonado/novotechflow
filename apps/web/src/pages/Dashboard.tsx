@@ -30,6 +30,7 @@ import MaintenanceBannerControl from './dashboard/components/MaintenanceBannerCo
 import ProposalGroupHeaderRow from './dashboard/components/ProposalGroupHeaderRow';
 import ProposalDatesCell from './dashboard/components/ProposalDatesCell';
 import ProposalValueCell from './dashboard/components/ProposalValueCell';
+import CommercialUserFilter from './dashboard/components/CommercialUserFilter';
 
 
 
@@ -97,6 +98,7 @@ export default function Dashboard() {
         closeMonthFilter, setCloseMonthFilter,
         billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
+        commercialOptions,
         handleStatusChange, handleDateChange, handleDelete, getBoardHygieneIssues, loadProposals,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
         handleProjectionStatusChange, handleProjectionDateChange,
@@ -298,6 +300,13 @@ export default function Dashboard() {
                 <div className="space-y-4">
                     {/* Status filters row */}
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-5 space-y-4 animate-in slide-in-from-top-2">
+                        {user?.role === 'ADMIN' && (
+                            <CommercialUserFilter
+                                options={commercialOptions}
+                                selected={userFilter}
+                                onChange={setUserFilter}
+                            />
+                        )}
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Estado</label>
                             <div className="flex flex-wrap gap-2">
@@ -335,8 +344,6 @@ export default function Dashboard() {
                         onSubtotalUsdMaxChange={setSubtotalUsdMax}
                         acquisitionFilter={acquisitionFilter}
                         onAcquisitionFilterChange={setAcquisitionFilter}
-                        userFilter={userFilter}
-                        onUserFilterChange={setUserFilter}
                         closeMonthFilter={closeMonthFilter}
                         onCloseMonthFilterChange={setCloseMonthFilter}
                         billingMonthFilter={billingMonthFilter}
