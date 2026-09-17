@@ -68,9 +68,9 @@ const FORECAST_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA'];
 
 /**
  * Convert a subtotal to USD.
- * - If already in USD â†’ return as-is.
- * - If COP and trmRate > 0 â†’ divide.
- * - Otherwise â†’ null.
+ * - If already in USD → return as-is.
+ * - If COP and trmRate > 0 → divide.
+ * - Otherwise → null.
  */
 export function getSubtotalUsd(
     subtotal: number | null,
@@ -83,14 +83,14 @@ export function getSubtotalUsd(
     return null;
 }
 
-/** Parse ISO date â†’ { month (0-indexed), year } without timezone shift. */
+/** Parse ISO date → { month (0-indexed), year } without timezone shift. */
 function parseDate(dateStr: string): { month: number; year: number } {
     const [datePart] = dateStr.split('T');
     const [y, m] = datePart.split('-').map(Number);
     return { month: m - 1, year: y };
 }
 
-/** Parse ISO date â†’ { quarter (1-4), year } for pipeline grouping. */
+/** Parse ISO date → { quarter (1-4), year } for pipeline grouping. */
 function getQuarter(dateStr: string): { quarter: number; year: number } {
     const { month, year } = parseDate(dateStr);
     return { quarter: Math.floor(month / 3) + 1, year };
