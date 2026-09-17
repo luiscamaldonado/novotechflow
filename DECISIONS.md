@@ -5305,3 +5305,107 @@ Ninguna de las dos requería tocar backend: `GET /proposals` ya devuelve `user: 
 ### Pendientes
 
 - Ninguno. Si `REPORTER` llegara a necesitar el filtro de comercial, es ampliar la condición de rol en `Dashboard.tsx`; no requiere ADR nuevo.
+
+## ADR-119 — Modal de higiene editable: la compuerta se resuelve sin salir del modal
+
+**Fecha:** 2026-09-17
+**Estado:** Cerrado
+
+### Contexto
+
+ADR-035 creó la compuerta de higiene de datos: si un comercial tiene cualquier propuesta con issues (R1-R5), crear, editar y clonar quedan bloqueados y se abre un modal que nombra la propuesta más vieja con problemas. Ese modal era puramente informativo. El botón "Ir a corregir" solo lo cerraba — no navegaba, no resaltaba la fila —, así que el comercial tenía que localizar la propuesta a mano en el tablero, arreglarla con los controles inline y volver a pulsar el botón original, porque `runWithCleanBoard` recibía la acción bloqueada y nunca la guardaba.
+
+El pendiente que ADR-035 dejó abierto (redirect con scroll y resaltado a la fila) apuntaba a paliar ese rebote llevando al usuario hasta la fila. Se cierra por una vía mejor: resolver dentro del modal y no ir a ninguna parte.
+
+El requerimiento del dueño del proyecto fue que el modal traiga los campos editables de la propuesta, conservando el comportamiento secuencial de ADR-035 (una propuesta a la vez, la siguiente aparece al resolver la anterior).
+
+### Decisión — Alcance de los campos
+
+Se pidieron tres campos: fecha de cierre, estado y fecha de facturación condicional. Se agregó un cuarto, el tipo de adquisición, porque R2 (`ACQUISITION_REQUIRED`) es una de las cinco reglas que bloquean y sin ese control habría quedado sin vía de resolución dentro del modal: una propuesta que falla solo por adquisición dejaría al comercial encerrado. Con los cuatro, las cinco reglas se resuelven ahí mismo — R1 y R5 con fecha de cierre o estado, R2 con adquisición, R3 con fecha de facturación, R4 con estado.
+
+Los cuatro se muestran siempre, no solo los que tienen issue. R5 se resuelve con fecha O con estado y R4 solo con estado, así que un formulario estable es más predecible que huecos que aparecen y desaparecen mientras se edita. La única condicional es la fecha de facturación, gobernada por `PROJECTION_STATUSES` — la misma constante que evalúa R3. `ProposalVersionRow` duplicaba esa condición como literal local (`needsBillingDate`); se unificó contra la constante, que pasa a ser fuente única.
+
+La lista de issues se conserva arriba del formulario: es la guía de qué falta.
+
+### Decisión — Extracción de los controles
+
+Los cuatro controles editables vivían acoplados a la estructura de tabla: dos como JSX inline dentro de sus `<td>`, la fecha de facturación anidada en el `<td>` del estado sin celda propia, y la fecha de cierre dentro de `ProposalDatesCell`, cuyo elemento raíz es un `<td>`. Ninguno era reutilizable fuera de la fila.
+
+Se extrajeron a cuatro componentes presentacionales puros (`ProposalStatusControl`, `ProposalAcquisitionControl`, `ProposalCloseDateControl`, `ProposalBillingDateControl`) con una prop `variant: 'compact' | 'comfortable'`, default `'compact'` como fail-safe. `compact` reproduce verbatim las clases que el control tenía en la fila; `comfortable` es la variante de formulario para el modal (`text-sm font-semibold`, `px-3 py-2`, ancho completo, sin versalitas: en el modal son campos, no badges). Los colores de `STATUS_CONFIG` y `ACQUISITION_CONFIG` se conservan en ambas variantes porque ahí sí son información.
+
+Las gates de rol y de versión (`readOnly={userRole === 'REPORTER'}`, `disabled={!isActiveVersion}`) se quedaron en la fila: son semántica de fila, no del control.
+
+La presentación de la fila quedó intacta, verificado recomponiendo los ocho literales de clase desde las entradas `compact` y comparándolos con igualdad de cadena contra los originales en `git show HEAD:`.
+
+### Decisión — El cómputo de higiene pasa a memo derivado
+
+Revisa una decisión de ADR-035, que expuso `getBoardHygieneIssues` como arrow sin memoizar, evaluada on-demand al intentar la acción, para no recalcular en cada render.
+
+Esa forma impide que el modal observe la lista: una arrow recreada en cada render captura el `allProposalGroups` de ese render, y `Dashboard` copiaba `first.issues` a un `useState` al abrir el modal, congelándolos. Editar adentro no habría actualizado nada.
+
+Ahora es `boardHygieneIssues`, un `useMemo` sobre `[allProposalGroups]`. El cuerpo es el mismo. No se evalúa en cada render — se evalúa cuando cambian las propuestas, que es exactamente lo que el modal necesita observar — y gana identidad estable entre renders.
+
+`ProposalHygieneIssues` expone además el `ProposalHygieneInput` que lo originó, para que el modal pinte los valores actuales sin volver a buscarlos en otra colección y sin abrir una segunda fuente de verdad.
+
+### Decisión — El avance se deriva por render, no se encadena
+
+Restricción central del diseño: `entry` y `view` se calculan desde `boardHygieneIssues` en cada render del hook. Cuando un guardado optimista actualiza `proposals`, la cadena `proposals → proposalsWithSubtotals → allRows → allProposalGroups → boardHygieneIssues` recalcula, la propuesta corregida desaparece de la lista, `entry` pasa a `null` y la vista cambia sola.
+
+NO se puede implementar encadenando `await handler()` seguido de una lectura de `boardHygieneIssues`: dentro de ese mismo tick la lista sigue siendo la foto previa, porque `setProposals` no ha comiteado todavía. Queda registrado porque es el error natural al tocar este código.
+
+### Decisión — Los handlers dejan de tragar el error
+
+`handleStatusChange`, `handleDateChange` y `handleAcquisitionChange` tenían un `catch` que solo hacía `console.error`. En la fila se tolera: el control revierte al valor viejo y el usuario reintenta. En un modal de bloqueo es inaceptable — el comercial guarda, no pasa nada, el modal no avanza y no sabe por qué.
+
+Los tres devuelven ahora `Promise<boolean>`. Booleano y no `throw` porque `ProposalVersionRow` llama a estos handlers y descarta el retorno: un `throw` produciría promesas rechazadas sin catch en la fila.
+
+### Decisión — El estado sale del componente a un hook
+
+ADR-035 puso el estado del modal en `Dashboard.tsx` citando CONVENTIONS §A (los modals son estado de UI del componente). Con cola de propuestas, acción pendiente, guardado y manejo de error, esto ya no es estado de UI sino lógica, y va a un hook: `useHygieneGate`.
+
+El hook no conoce roles — recibe `isExempt` ya calculado —, y devuelve `{ run, modal }`, donde `modal` está tipado como `DataHygieneModalProps`: el compilador garantiza que el objeto del hook y las props del componente calzan, en vez de fallar en runtime. `DataHygieneModal` queda presentacional puro.
+
+### Decisión — La acción bloqueada se retiene
+
+Antes se descartaba: `runWithCleanBoard` recibía `action` y en la rama sucia no la guardaba en ningún lado, así que al terminar de corregir el comercial tenía que acordarse de volver a pulsar el botón. Ahora se retiene y se ejecuta al vaciarse la cola, mediante un botón "Continuar" explícito en la vista final — no con navegación automática, que sorprendería.
+
+El modal tiene tres vistas: `editing` (formulario), `resolved` (la propuesta quedó al día, con el código de la siguiente) y `done` ("Tablero al día" + Continuar). El paso intermedio `resolved` existe a propósito en vez de saltar seco a la siguiente propuesta: el salto cambiaría el contenido bajo el cursor mientras el usuario todavía teclea.
+
+Cerrar el modal en cualquier vista descarta la acción pendiente sin ejecutarla.
+
+### Decisión — REPORTER se suma a la exención
+
+`runWithCleanBoard` eximía solo a ADMIN. REPORTER quedaba gateado pero tiene los cuatro controles en solo lectura, así que alcanzar la compuerta habría sido un encierro sin salida.
+
+Hoy no es alcanzable: los tres call sites están detrás de `userRole !== 'REPORTER'` (los botones de editar y clonar en la fila, y el de "Nueva Propuesta"). La exención cierra un encierro latente, no uno que se estuviera dando.
+
+### Consecuencias
+
+- Positivas: la compuerta deja de ser fricción pura y pasa a ser el lugar donde el tablero se pone al día; el pendiente "Ir a corregir" de ADR-035 queda cerrado por mejor vía; `PROJECTION_STATUSES` pasa a ser fuente única de la condicional de facturación, que estaba duplicada; sin cambios de schema, backend ni migraciones.
+- Negativas / deuda: el modal declara `role="dialog"` pero no tiene foco inicial ni trap de teclado — un usuario de teclado tiene que tabular hasta él. Los cuatro controles se deshabilitan durante el guardado, lo que en un `<input type="date">` puede quitar el foco a mitad de edición según cuándo dispare el `change` el navegador; verificado en producción sin incidencia, pero es un borde real.
+- Las reglas de higiene siguen viviendo solo en el frontend (deuda heredada de ADR-035): un comercial podría saltarlas llamando la API directamente. Esto es higiene de UX, no un constraint de backend.
+- Se probó directamente en PRODUCCIÓN, como ADR-035 y por la misma causa: el 2FA por Resend bloquea el login en entorno local. Agravante nuevo: el dueño del proyecto tiene rol ADMIN, que está exento de la compuerta por diseño, así que tampoco puede verificarla con su propia cuenta. La verificación la hicieron usuarios comerciales al día siguiente del despliegue. A diferencia de ADR-035, que solo mostraba un aviso, este cambio escribe en propuestas reales: el riesgo de no poder probar antes de producción subió de categoría.
+
+### Archivos
+
+- `apps/web/src/pages/dashboard/components/ProposalStatusControl.tsx` (nuevo)
+- `apps/web/src/pages/dashboard/components/ProposalAcquisitionControl.tsx` (nuevo)
+- `apps/web/src/pages/dashboard/components/ProposalCloseDateControl.tsx` (nuevo)
+- `apps/web/src/pages/dashboard/components/ProposalBillingDateControl.tsx` (nuevo; prop `showLabel` para que el caller ponga su propio rótulo)
+- `apps/web/src/hooks/useHygieneGate.ts` (nuevo: cola, acción pendiente, guardado, tres vistas)
+- `apps/web/src/pages/dashboard/DataHygieneModal.tsx` (reescrito: presentacional puro, tres vistas, exporta `DataHygieneModalProps`)
+- `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` (consume los cuatro controles; `needsBillingDate` → `PROJECTION_STATUSES`)
+- `apps/web/src/pages/dashboard/components/ProposalDatesCell.tsx` (consume `ProposalCloseDateControl`)
+- `apps/web/src/lib/dashboardValidation.ts` (`ProposalHygieneIssues` expone `input`)
+- `apps/web/src/hooks/useDashboard.ts` (`boardHygieneIssues` memoizado; los tres handlers devuelven `Promise<boolean>`)
+- `apps/web/src/pages/Dashboard.tsx` (monta `useHygieneGate`; REPORTER exento junto con ADMIN)
+
+### Commits
+
+- `b4a2fa7` — feat(dashboard): el modal de higiene edita los campos y conduce la cola de propuestas
+
+### Pendientes
+
+- **Modo dev para el código OTP sin Resend**, heredado de ADR-035 y ahora más caro: dos features seguidas del tablero se estrenaron en producción, y la segunda escribe datos. Requiere blindar que jamás se ejecute en producción.
+- **Foco inicial y trap de teclado** en `DataHygieneModal`: hoy el `role="dialog"` está incompleto.
+- **Encoding de `useDashboard.ts`**: siete comentarios de sección con doble codificación preexistente (líneas 13, 67, 160, 292, 300, 508 y 556). Van en su propio commit, sin mezclar con cambios funcionales.
