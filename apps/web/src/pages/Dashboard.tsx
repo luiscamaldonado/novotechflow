@@ -13,13 +13,13 @@ import { STATUS_CONFIG, ALL_STATUSES, PROJECTION_STATUSES, ACQUISITION_CONFIG } 
 import { exportDashboardToExcel } from '../lib/exportDashboard';
 import { buildProjectionReport } from '../lib/projectionReport';
 import { exportProjectionReportToExcel } from '../lib/exportProjectionReport';
+import { useHygieneGate } from '../hooks/useHygieneGate';
 import type { ProposalStatus, AcquisitionType, UserRole } from '../lib/types';
 import BillingCards from './dashboard/BillingCards';
 import PipelineCards from './dashboard/PipelineCards';
 import ProjectionModal from './dashboard/ProjectionModal';
 import DataHygieneModal from './dashboard/DataHygieneModal';
 import CloneVersionModal from './dashboard/CloneVersionModal';
-import type { HygieneIssue } from '../lib/dashboardValidation';
 import TrmCards from './dashboard/TrmCards';
 import DashboardFilters from './dashboard/DashboardFilters';
 import NotificationBells from './dashboard/NotificationBells';
@@ -99,7 +99,7 @@ export default function Dashboard() {
         billingMonthFilter, setBillingMonthFilter,
         manufacturerSuggestions,
         commercialOptions,
-        handleStatusChange, handleDateChange, handleDelete, getBoardHygieneIssues, loadProposals,
+        handleStatusChange, handleDateChange, handleDelete, boardHygieneIssues, loadProposals,
         handleAcquisitionChange, handleProjectionAcquisitionChange,
         handleProjectionStatusChange, handleProjectionDateChange,
         toggleStatusFilter, clearFilters,
@@ -127,27 +127,13 @@ export default function Dashboard() {
 
     const [showAllNotifications, setShowAllNotifications] = useState(false);
 
-    const [hygieneModalOpen, setHygieneModalOpen] = useState(false);
-    const [hygieneProposalCode, setHygieneProposalCode] = useState<string | null>(null);
-    const [hygieneIssues, setHygieneIssues] = useState<HygieneIssue[]>([]);
-    const [hygieneRemainingCount, setHygieneRemainingCount] = useState(0);
-
-    const runWithCleanBoard = (action: () => void) => {
-        if (user?.role === 'ADMIN') {
-            action();
-            return;
-        }
-        const dirty = getBoardHygieneIssues();
-        if (dirty.length === 0) {
-            action();
-            return;
-        }
-        const first = dirty[0];
-        setHygieneProposalCode(first.proposalCode);
-        setHygieneIssues(first.issues);
-        setHygieneRemainingCount(dirty.length);
-        setHygieneModalOpen(true);
-    };
+    const { run: runWithCleanBoard, modal: hygieneModalProps } = useHygieneGate({
+        boardHygieneIssues,
+        isExempt: user?.role === 'ADMIN' || user?.role === 'REPORTER',
+        onStatusChange: handleStatusChange,
+        onDateChange: handleDateChange,
+        onAcquisitionChange: handleAcquisitionChange,
+    });
 
     const handleEdit = (id: string) =>
         runWithCleanBoard(() => navigate(`/proposals/${id}/builder`));
@@ -582,14 +568,7 @@ export default function Dashboard() {
                 />
             )}
 
-            <DataHygieneModal
-                isOpen={hygieneModalOpen}
-                proposalCode={hygieneProposalCode}
-                issues={hygieneIssues}
-                remainingCount={hygieneRemainingCount}
-                onClose={() => setHygieneModalOpen(false)}
-                onGoToFix={() => setHygieneModalOpen(false)}
-            />
+            <DataHygieneModal {...hygieneModalProps} />
 
             {showCloneVersionModal && (
                 <CloneVersionModal

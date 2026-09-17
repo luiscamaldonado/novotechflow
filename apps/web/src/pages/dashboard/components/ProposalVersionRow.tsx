@@ -2,12 +2,13 @@ import {
     Trash2, Edit2, Copy, PlusCircle,
 } from 'lucide-react';
 import { getSubtotalUsd } from '../../../hooks/useDashboard';
-import {
-    STATUS_CONFIG, ALL_STATUSES, ACQUISITION_CONFIG,
-} from '../../../lib/constants';
+import { PROJECTION_STATUSES } from '../../../lib/constants';
 import type { ProposalStatus, AcquisitionType, UserRole } from '../../../lib/types';
 import type { DashboardRow } from '../../../hooks/useDashboard';
+import ProposalAcquisitionControl from './ProposalAcquisitionControl';
+import ProposalBillingDateControl from './ProposalBillingDateControl';
 import ProposalDatesCell from './ProposalDatesCell';
+import ProposalStatusControl from './ProposalStatusControl';
 import ProposalValueCell from './ProposalValueCell';
 
 
@@ -42,8 +43,7 @@ export default function ProposalVersionRow({
     onEdit,
 }: ProposalVersionRowProps) {
     const p = row.originalProposal!;
-    const cfg = STATUS_CONFIG[p.status];
-    const needsBillingDate = p.status === 'PENDIENTE_FACTURAR' || p.status === 'FACTURADA';
+    const needsBillingDate = PROJECTION_STATUSES.includes(p.status);
     const usdEst = getSubtotalUsd(row.minSubtotal, row.minSubtotalCurrency, trmRate);
 
     return (
@@ -114,51 +114,26 @@ export default function ProposalVersionRow({
                 usdEstimate={usdEst}
             />
             <td className="px-4 py-4 text-center">
-                {userRole !== 'REPORTER' ? (
-                    <select
-                        value={p.acquisitionType || ''}
-                        onChange={(e) => onAcquisitionChange(p.id, e.target.value as AcquisitionType)}
-                        disabled={!isActiveVersion}
-                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-sky-600/20 disabled:opacity-50 disabled:cursor-not-allowed ${
-                            p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType]
-                                ? `${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`
-                                : 'bg-gray-50 text-gray-400 border-gray-200'
-                        }`}
-                    >
-                        <option value="">— Seleccionar —</option>
-                        <option value="VENTA">Venta</option>
-                        <option value="DAAS">DaaS</option>
-                    </select>
-                ) : p.acquisitionType && ACQUISITION_CONFIG[p.acquisitionType] ? (
-                    <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${ACQUISITION_CONFIG[p.acquisitionType].bg} ${ACQUISITION_CONFIG[p.acquisitionType].text} ${ACQUISITION_CONFIG[p.acquisitionType].border}`}>{ACQUISITION_CONFIG[p.acquisitionType].label}</span>
-                ) : (
-                    <span className="text-[10px] text-gray-300">—</span>
-                )}
+                <ProposalAcquisitionControl
+                    value={p.acquisitionType ?? null}
+                    onChange={(value) => onAcquisitionChange(p.id, value)}
+                    disabled={!isActiveVersion}
+                    readOnly={userRole === 'REPORTER'}
+                />
             </td>
             <td className="px-4 py-4 text-center">
-                {userRole !== 'REPORTER' ? (
-                    <select
-                        value={p.status}
-                        onChange={(e) => onStatusChange(p.id, e.target.value as ProposalStatus)}
-                        disabled={!isActiveVersion}
-                        className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border} cursor-pointer focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                        {ALL_STATUSES.map(s => (
-                            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                        ))}
-                    </select>
-                ) : (
-                    <span className={`text-[10px] font-bold uppercase px-2 py-1.5 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border}`}>{cfg.label}</span>
-                )}
+                <ProposalStatusControl
+                    value={p.status}
+                    onChange={(status) => onStatusChange(p.id, status)}
+                    disabled={!isActiveVersion}
+                    readOnly={userRole === 'REPORTER'}
+                />
                 {userRole !== 'REPORTER' && needsBillingDate && (
                     <div className="mt-2">
-                        <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider block mb-0.5">Fecha de facturación</span>
-                        <input
-                            type="date"
-                            value={p.billingDate ? new Date(p.billingDate).toISOString().split('T')[0] : ''}
-                            onChange={(e) => onDateChange(p.id, 'billingDate', e.target.value)}
+                        <ProposalBillingDateControl
+                            value={p.billingDate ?? null}
+                            onChange={(value) => onDateChange(p.id, 'billingDate', value)}
                             disabled={!isActiveVersion}
-                            className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1 w-[130px] disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                     </div>
                 )}

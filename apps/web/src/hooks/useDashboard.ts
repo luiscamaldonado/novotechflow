@@ -536,26 +536,7 @@ export function useDashboard() {
         };
     }, [activeRows, trmRate]);
 
-    // â”€â”€ Actions â”€â”€
-    const handleStatusChange = async (id: string, newStatus: ProposalStatus) => {
-        try {
-            await api.patch(`/proposals/${id}`, { status: newStatus });
-            setProposals(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const handleDateChange = async (id: string, field: 'closeDate' | 'billingDate', value: string) => {
-        try {
-            await api.patch(`/proposals/${id}`, { [field]: value || null });
-            setProposals(prev => prev.map(p => p.id === id ? { ...p, [field]: value || null } : p));
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const getBoardHygieneIssues = (): ProposalHygieneIssues[] => {
+    const boardHygieneIssues: ProposalHygieneIssues[] = useMemo(() => {
         const activeProposals: ProposalHygieneInput[] = allProposalGroups
             .map(group => group.activeVersion.originalProposal)
             .filter((proposal): proposal is ProposalWithSubtotal => Boolean(proposal))
@@ -570,6 +551,29 @@ export function useDashboard() {
                 createdAt: proposal.createdAt,
             }));
         return findBoardHygieneIssues(activeProposals);
+    }, [allProposalGroups]);
+
+    // â”€â”€ Actions â”€â”€
+    const handleStatusChange = async (id: string, newStatus: ProposalStatus): Promise<boolean> => {
+        try {
+            await api.patch(`/proposals/${id}`, { status: newStatus });
+            setProposals(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
+            return true;
+        } catch (error) {
+            console.error(error);
+            return false;
+        }
+    };
+
+    const handleDateChange = async (id: string, field: 'closeDate' | 'billingDate', value: string): Promise<boolean> => {
+        try {
+            await api.patch(`/proposals/${id}`, { [field]: value || null });
+            setProposals(prev => prev.map(p => p.id === id ? { ...p, [field]: value || null } : p));
+            return true;
+        } catch (error) {
+            console.error(error);
+            return false;
+        }
     };
 
     const handleDelete = async (id: string, code: string) => {
@@ -584,12 +588,14 @@ export function useDashboard() {
         }
     };
 
-    const handleAcquisitionChange = async (id: string, value: AcquisitionType) => {
+    const handleAcquisitionChange = async (id: string, value: AcquisitionType): Promise<boolean> => {
         try {
             await api.patch(`/proposals/${id}`, { acquisitionType: value });
             setProposals(prev => prev.map(p => p.id === id ? { ...p, acquisitionType: value } : p));
+            return true;
         } catch (error) {
             console.error(error);
+            return false;
         }
     };
 
@@ -662,6 +668,7 @@ export function useDashboard() {
         proposalGroups,
         filteredProjectionRows,
         activeRowsUnfiltered,
+        boardHygieneIssues,
         billingCardsVenta,
         billingCardsDaas,
         pipelineCards,
@@ -713,7 +720,6 @@ export function useDashboard() {
         handleStatusChange,
         handleDateChange,
         loadProposals,
-        getBoardHygieneIssues,
         handleDelete,
         handleAcquisitionChange,
         handleProjectionAcquisitionChange,

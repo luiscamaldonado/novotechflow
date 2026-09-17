@@ -1,4 +1,5 @@
 import { formatDashboardDate, isValidityExpired } from '../../../lib/dashboardDates';
+import ProposalCloseDateControl from './ProposalCloseDateControl';
 
 interface ProposalDatesCellProps {
     closeDate?: string | null;
@@ -25,12 +26,10 @@ export default function ProposalDatesCell({
                 <div className="flex flex-col">
                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Cierre</span>
                     {onCloseDateChange ? (
-                        <input
-                            type="date"
-                            value={closeDate ? new Date(closeDate).toISOString().split('T')[0] : ''}
-                            onChange={(e) => onCloseDateChange(e.target.value)}
+                        <ProposalCloseDateControl
+                            value={closeDate ?? null}
+                            onChange={onCloseDateChange}
                             disabled={closeDateDisabled}
-                            className="text-[11px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 w-full disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                     ) : closeDate ? (
                         <span className="text-[10px] text-gray-400 font-semibold">{formatDashboardDate(closeDate)}</span>

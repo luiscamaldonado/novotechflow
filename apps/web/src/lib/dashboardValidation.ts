@@ -37,6 +37,7 @@ export interface ProposalHygieneIssues {
     id: string;
     proposalCode: string | null;
     issues: HygieneIssue[];
+    input: ProposalHygieneInput;
 }
 
 /**
@@ -86,6 +87,7 @@ export function findBoardHygieneIssues(proposals: ProposalHygieneInput[]): Propo
             id: proposal.id,
             proposalCode: proposal.proposalCode,
             issues: getProposalHygieneIssues(proposal),
+            input: proposal,
         }))
         .filter((entry) => entry.issues.length > 0);
 }
