@@ -309,8 +309,28 @@ quantity: formValue,
 
 ### G. CREDENCIALES DE PRUEBA
 
-Para pruebas locales y verificación en el navegador:
-- **Admin**: `admin@novotechno.com` / `admin123`
+Describen la base local `novotechflow` tal como está hoy. **No son las que crea `seed.ts`**: si la base se recrea desde cero, esta sección deja de aplicar hasta que se vuelvan a crear estos usuarios.
+
+**El login exige 2FA por correo.** `POST /auth/login` no devuelve JWT: devuelve `requiresVerification` y dispara un código de 6 dígitos con 5 minutos de vida (ADR-013). Usuario y contraseña solos no entran. Los tres usuarios son alias del mismo buzón, así que los tres códigos llegan a la misma bandeja.
+
+| Rol | Correo | Nomenclatura | Contraseña |
+|---|---|---|---|
+| ADMIN | `luiscarlos.maldonado@icloud.com` | `LMA` | la de Luis |
+| REPORTER | `luiscarlos.maldonado+reporter@icloud.com` | `CC` | la de Luis |
+| COMMERCIAL | `luiscarlos.maldonado+comercial@icloud.com` | `LMC` | `admin123` |
+
+**COMMERCIAL es el único rol que ve la compuerta de higiene del tablero**: ADMIN y REPORTER están exentos por diseño (ADR-119). Toda verificación de esa feature va con la cuenta `LMC`.
+
+**Para que el código llegue**, `apps/api/.env` necesita (ADR-120):
+- `RESEND_FROM` con el remitente del dominio verificado en Resend. El default hardcodeado en el código (`onboarding@resend.dev`) solo entrega al dueño de la cuenta de Resend.
+- `RESEND_API_KEY` de la clave local de Resend, acotada a ese dominio. La clave de producción no se usa en local.
+
+**`DATABASE_URL` apunta a `novotechflow` y a ninguna otra base.** Con el remitente verificado, un login contra una base de ensayo que tenga usuarios de producción le manda un código real a una persona real.
+
+**`seed.ts` crea otro usuario a propósito**: `admin@novotechno.com` / `admin123` / `ADM`. Es el arranque en frío de una base vacía, incluida la de producción (ADR-009), no el estado de la base local de desarrollo. No lo alinees con la tabla de arriba.
+
+**Otras advertencias:**
+
 - ⚠️ El dominio `@novotechflow.com` **NO existe**. No usar en pruebas.
 
 **Autocompletado del navegador**: El navegador tiene autocompletado activo, por lo que los campos de email y contraseña pueden prellenarse automáticamente. Al hacer pruebas en el browser:
