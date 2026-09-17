@@ -5409,3 +5409,76 @@ Hoy no es alcanzable: los tres call sites están detrás de `userRole !== 'REPOR
 - **Modo dev para el código OTP sin Resend**, heredado de ADR-035 y ahora más caro: dos features seguidas del tablero se estrenaron en producción, y la segunda escribe datos. Requiere blindar que jamás se ejecute en producción.
 - **Foco inicial y trap de teclado** en `DataHygieneModal`: hoy el `role="dialog"` está incompleto.
 - **Encoding de `useDashboard.ts`**: siete comentarios de sección con doble codificación preexistente (líneas 13, 67, 160, 292, 300, 508 y 556). Van en su propio commit, sin mezclar con cambios funcionales.
+
+## ADR-120 - El bloqueo del entorno local era de configuración, no de código: cierre del pendiente de ADR-035 y hallazgo de un fallo silencioso en el envío de códigos
+
+**Fecha:** 2026-09-17
+**Estado:** Cerrado en su parte de entorno; deja un defecto de producción abierto y diagnosticado
+
+### Contexto
+
+Desde ADR-035 el proyecto arrastraba un pendiente enunciado como "modo dev para el código OTP sin Resend". Su motivo era concreto: el 2FA por correo impedía el login en local, y por eso ADR-035 y ADR-119 se estrenaron los dos directamente en producción. ADR-119 agravó el costo porque escribe en propuestas reales, y porque el dueño del proyecto tiene rol ADMIN, exento de la compuerta por diseño: la verificación la tuvieron que hacer comerciales en producción.
+
+La idea descartada en ADR-035 era loguear el código a consola fuera de producción, con el motivo de descarte explícito de que había que blindar que jamás se ejecutara en producción. El diagnóstico empezó por ahí y encontró tres hechos que desarmaron el planteamiento.
+
+**Primero: la guarda canónica habría sido fail-open, y de forma asimétrica.** `NODE_ENV` no se declara ni se lee en ninguna parte del repo: ni en los Dockerfiles, ni en el CI, ni en turbo.json, ni en el código. Existe solo como variable puesta a mano en Railway, y solo en el servicio `novotechflow`; `api-external` no la tiene. Una guarda `NODE_ENV !== 'production'` habría quedado cerrada en el servicio principal y abierta en el externo. Peor que fallar: una prueba en `novotechflow` habría dado verde y habría certificado un blindaje inexistente en el otro servicio.
+
+**Segundo: el bloqueo local no era el 2FA sino el remitente.** El `.env` local mandaba desde `onboarding@resend.dev`, que solo entrega al dueño de la cuenta de Resend, mientras producción ya mandaba desde `noreply@auth.novotechno.com`, dominio verificado. Además la `RESEND_API_KEY` local pertenecía a una cuenta de Resend distinta de la del proyecto: Resend respondía 403 `validation_error` sobre el remitente, sin llegar a mirar el destinatario.
+
+**Tercero: el pendiente estaba mal enunciado.** Resolver el OTP no habría bastado para verificar ADR-119. La base local tenía un ADMIN y un REPORTER, y cero usuarios COMMERCIAL, que es el único rol sujeto a la compuerta de higiene.
+
+### Decisión
+
+**1. El desbloqueo se hace por configuración, sin una línea de código de producción.** Tres cambios, todos fuera del repo o en la base local: `RESEND_FROM` local apuntando al remitente verificado; una `RESEND_API_KEY` propia de desarrollo, creada en la cuenta correcta y acotada al dominio `auth.novotechno.com`; y un usuario COMMERCIAL de prueba en la base local, con alias del mismo buzón. Se descarta la bandera de entorno: no hay nada que blindar si no existe rama de desarrollo en el artefacto de producción, y ejercitar el camino real -hash, contador atómico, expiración, rate limit y transporte- es una verificación más fuerte que cualquier atajo.
+
+**2. La bandera queda diseñada pero no implementada, por si la fricción del correo lo justifica algún día.** Si se implementa, la guarda es opt-in positivo (`=== 'true'`, precedente de `SWAGGER_ENABLED` en `main.ts`) combinada con la ausencia de `RAILWAY_ENVIRONMENT_NAME`, que Railway inyecta en los dos servicios y es imposible en una máquina local. Nunca `NODE_ENV`.
+
+**3. La sección G de CONVENTIONS.md se reescribe.** Documentaba `admin@novotechno.com` / `admin123`, usuario que no existe en la base local, y callaba que el login exige 2FA. Ahora lista los tres usuarios reales con sus roles, advierte que COMMERCIAL es el único rol que ve la compuerta, exige que `DATABASE_URL` apunte solo a `novotechflow`, y explica que el usuario de `seed.ts` es el arranque en frío de una base vacía -incluida la de producción, ADR-009- y no el estado del entorno de desarrollo. `seed.ts` no se modifica: su admin es correcto para lo que hace.
+
+**4. Las dos bases copia del Postgres local se eliminan.** `novotechflow_prod_copy` (43 MB, 11 usuarios del dominio corporativo, 379 propuestas) era el riesgo real: con el remitente verificado activo en local, un `DATABASE_URL` mal apuntado le manda un código de verificación a una persona real. Se borra sin respaldo propio porque es reconstruible desde `prod_post_wysiwyg_2026-08-16.dump`, verificado antes de destruir. `novotechflow_jun_copy` (108 MB, cero usuarios) no tenía riesgo de correo, pero cargaba `recovered_page_blocks` y cinco tablas `july_*` de un trabajo forense que ningún ADR documenta: se respaldó primero a `D:\novotechflow-backups\jun_copy_2026-09-17.dump` (70,72 MB, listado verificado) y luego se borró.
+
+**5. La purga de `verification_codes` no se hace, y se registra por qué.** La tabla acumulaba 64 filas en 97 días en local: irrelevante para Postgres, y sin ganancia de seguridad -quien pueda leerla ya tiene la base entera con los hashes de contraseñas, razonamiento de ADR-108. Lo que importa registrar es que **el arreglo barato está vetado**: un `deleteMany` de códigos vencidos dentro de `sendVerificationCode` rompe el login de `api-external`, porque el rol `novotech_external_ro` tiene INSERT y UPDATE sobre `verification_codes` pero no DELETE (ADR-081), y el camino es compartido.
+
+### El defecto de producción que el diagnóstico destapó
+
+No se corrige en este ADR. Se registra completo porque el diagnóstico ya está hecho y medido.
+
+`resend@6.20.0` **no lanza** cuando la API rechaza un envío: devuelve una unión discriminada `{ data, error }` (`dist/index.d.cts`, tipo `Response<T>`), y su capa de red convierte incluso los fallos de conexión en un valor de retorno en vez de re-lanzarlos. `email-verification.service.ts:63` hace `await this.resend.emails.send({...})` en posición de sentencia y **descarta el retorno**. El único rastro que deja un rechazo es un `console.error` interno del SDK, compuerteado en `NODE_ENV !== "production"`.
+
+Cruzando eso con la asimetría del contexto: en `novotechflow`, que tiene `NODE_ENV=production`, ese log no se imprime. En `api-external`, que no la tiene, sí. Y `auth` es el único módulo del api sin `Logger` de Nest, frente a diez servicios que sí lo tienen.
+
+Consecuencia medida en local con una clave rechazada: **200 OK con "Código reenviado exitosamente", fila escrita en `verification_codes`, y cero rastro** -ni excepción, ni log de Nest. En producción no habría ni siquiera el stderr del SDK.
+
+Agravante: cada envío fallido crea igual su fila, y `canResendCode` topa en 3 códigos por 15 minutos. El usuario que insiste se autobloquea y recibe "Has solicitado demasiados códigos. Espera 15 minutos", que le atribuye a él un fallo del servidor.
+
+Disparadores realistas: agotar el cupo de 100 correos diarios del plan gratuito (ADR-013), caída de un registro DNS, rotación de la clave, incidente de Resend. Cualquiera deja la aplicación sin logins, en su única puerta de autenticación, sin telemetría. El mismo camino sirve a `api-external`.
+
+Forma del arreglo, para cuando se aborde: leer el retorno de `emails.send`, loguear con `Logger` de Nest nombrado -patrón de `LenovoPsrefService`, que ya se ve en los logs de producción- y fallar ruidosamente con un mensaje genérico al cliente. Hoy el usuario queda igual de bloqueado pero creyendo que el código viene en camino; fallar fuerte le da un mensaje accionable y deja rastro. El `Logger` propio elimina además la dependencia del `console.error` del SDK, que es lo que hacía relevante la asimetría de `NODE_ENV`.
+
+### Consecuencias
+
+- El entorno local queda desbloqueado y verificado empíricamente: tres envíos aceptados por Resend, tres correos recibidos, y una propuesta creada desde la cuenta COMMERCIAL que dispara la compuerta de higiene. El peaje que ADR-035 y ADR-119 pagaron en producción deja de correr.
+- Los alias con `+` del buzón de iCloud entregan correctamente. Medido, no supuesto.
+- La asimetría de `NODE_ENV` entre los dos servicios queda registrada como deuda: hoy ninguna línea del repo la lee, pero una dependencia sí -el SDK de Resend-, y nada en el repo la declara. O se pone en los dos y se documenta, o se quita de los dos.
+- Ningún cambio de código, de esquema ni de despliegue. El commit de este ADR toca solo documentación.
+- Quinto cierre consecutivo cuyo respaldo es empírico y no de suite. `email-verification.service.ts` suma con este ADR una quinta decisión documentada -F1, F10, el orden atómico, bcrypt de ADR-108 y ahora el retorno descartado del envío- y sigue sin un solo test.
+
+### Archivos
+
+- `CONVENTIONS.md` y `AGENTS.md` - sección G reescrita (commit `de6f9aa`)
+- `DECISIONS.md` - este ADR
+- `apps/api/.env` - no versionado: `RESEND_FROM` y `RESEND_API_KEY`
+- Ningún archivo de código
+
+### Commits
+
+- `de6f9aa` docs(conventions): seccion G refleja los usuarios reales de la base local y el 2FA
+- El commit docs de este ADR
+
+### Pendientes
+
+- **Fallo silencioso en el envío de códigos**, diagnosticado arriba. Toca `auth-core`, o sea los dos servicios desplegados (ADR-108). Prioridad alta: es la única puerta de autenticación de la aplicación.
+- **Asimetría de `NODE_ENV`** entre `novotechflow` y `api-external`, sin declaración en el repo.
+- **Primer spec de `email-verification.service.ts`**, que ahora cubriría cinco decisiones de seguridad acumuladas.
+- **Grants vivos de `novotech_external_ro`** sin verificar contra `information_schema.role_table_grants`: hoy solo documentados en prosa (ADR-081). La decisión 5 de este ADR se apoya en esa prosa.
+- **`.claude/settings.local.json`** contiene en claro un cuerpo de login y un JWT de `/external/login`. No está versionado; limpiar esas entradas de la lista `allow`.
