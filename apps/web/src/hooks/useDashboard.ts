@@ -10,7 +10,7 @@ import type { ProposalSummary, ProposalStatus, BillingProjection, AcquisitionTyp
 import { readDashboardFilters, writeDashboardFilters } from '../lib/dashboardFilterStorage';
 import type { DateRange } from '../pages/dashboard/DashboardFilters';
 
-// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Types ────────────────────────────────────────────────────
 
 type CurrencyCode = 'COP' | 'USD';
 
@@ -64,7 +64,7 @@ const PIPELINE_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA', 'GANADA
 /** Statuses that count towards the active forecast (not yet won/lost). */
 const FORECAST_STATUSES: ProposalStatus[] = ['ELABORACION', 'PROPUESTA'];
 
-// â”€â”€ Pure helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Pure helpers ─────────────────────────────────────────────
 
 /**
  * Convert a subtotal to USD.
@@ -157,7 +157,7 @@ export function computeBillingCards(
     return { facturadoMesAnterior, facturadoMesActual, facturadoTrimestreActual, proyeccionTrimestreSiguiente, pendFactMesActual, pendFactMesSiguiente };
 }
 
-// â”€â”€ Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Hook ─────────────────────────────────────────────────────
 
 export function useDashboard() {
     const [proposals, setProposals] = useState<ProposalSummary[]>([]);
@@ -289,7 +289,7 @@ export function useDashboard() {
         }
     };
 
-    // â”€â”€ Computed values â”€â”€
+    // ── Computed values ──
     const proposalsWithSubtotals = useMemo(() => {
         return proposals.map(p => {
             const { subtotal, currency, isManual } = getDashboardAmount(p);
@@ -297,7 +297,7 @@ export function useDashboard() {
         });
     }, [proposals]);
 
-    // â”€â”€ Unified rows (proposals + projections) â”€â”€
+    // ── Unified rows (proposals + projections) ──
     const allRows: DashboardRow[] = useMemo(() => {
         const proposalRows: DashboardRow[] = proposalsWithSubtotals.map(p => ({
             id: p.id,
@@ -505,7 +505,7 @@ export function useDashboard() {
         [activeRows, trmRate],
     );
 
-    // â”€â”€ Pipeline cards per status + forecast (from active rows, in USD) â”€â”€
+    // ── Pipeline cards per status + forecast (from active rows, in USD) ──
     const { pipelineCards, forecastCurrentQuarter, forecastNextQuarter } = useMemo(() => {
         const { currentQ, currentQYear, nextQ, nextQYear } = resolveCurrentAndNextQuarter();
 
@@ -553,7 +553,7 @@ export function useDashboard() {
         return findBoardHygieneIssues(activeProposals);
     }, [allProposalGroups]);
 
-    // â”€â”€ Actions â”€â”€
+    // ── Actions ──
     const handleStatusChange = async (id: string, newStatus: ProposalStatus): Promise<boolean> => {
         try {
             await api.patch(`/proposals/${id}`, { status: newStatus });
