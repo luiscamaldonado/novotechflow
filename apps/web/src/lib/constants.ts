@@ -157,6 +157,9 @@ export const PAGE_TYPE_STYLES: Record<string, { bg: string; text: string; border
 export const VIRTUAL_TECH_SPEC_ID = '__virtual_tech_spec__';
 export const VIRTUAL_ECONOMIC_ID = '__virtual_economic__';
 
+/** Habilita el boton "Descargar Excel" dentro del visor de PDF lanzado fuera del constructor. Apagado por decision de producto; encender aqui basta. */
+export const PDF_PREVIEW_EXCEL_EXPORT: boolean = false;
+
 // ── Dashboard constants ──────────────────────────────────────
 
 /** Separador para inputs de filtro multivalor del dashboard (ej: "SURA; ARGOS"). */
