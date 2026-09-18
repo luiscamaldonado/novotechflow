@@ -160,6 +160,9 @@ export const VIRTUAL_ECONOMIC_ID = '__virtual_economic__';
 /** Habilita el boton "Descargar Excel" dentro del visor de PDF lanzado fuera del constructor. Apagado por decision de producto; encender aqui basta. */
 export const PDF_PREVIEW_EXCEL_EXPORT: boolean = false;
 
+/** Habilita el boton de vista previa de PDF del tablero para el rol REPORTER. Apagado por decision de producto; encender aqui basta. Antes de encenderlo, verificar que REPORTER supere el ownership check de GET /proposals/:id/pages en el backend. */
+export const PDF_PREVIEW_VISIBLE_TO_REPORTER: boolean = false;
+
 // ── Dashboard constants ──────────────────────────────────────
 
 /** Separador para inputs de filtro multivalor del dashboard (ej: "SURA; ARGOS"). */

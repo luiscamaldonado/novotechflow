@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, Fragment, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     PlusCircle, Trash2, Edit2, Loader2,
@@ -32,6 +32,10 @@ import ProposalDatesCell from './dashboard/components/ProposalDatesCell';
 import ProposalValueCell from './dashboard/components/ProposalValueCell';
 import CommercialUserFilter from './dashboard/components/CommercialUserFilter';
 
+// Lazy-loaded: el visor arrastra jspdf y html2canvas, peso que la pantalla
+// de aterrizaje tras el login no debe pagar en su carga inicial.
+const ProposalPdfPreview = lazy(() => import('../components/proposals/ProposalPdfPreview'));
+
 
 
 export default function Dashboard() {
@@ -40,6 +44,7 @@ export default function Dashboard() {
     const [isExporting, setIsExporting] = useState(false);
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+    const [previewProposalId, setPreviewProposalId] = useState<string | null>(null);
 
     const toggleGroup = (baseCode: string) => {
         setExpandedGroups(prev => {
@@ -410,6 +415,7 @@ export default function Dashboard() {
                                                     onClone={handleCloneGated}
                                                     onDelete={handleDelete}
                                                     onEdit={handleEdit}
+                                                    onPreviewPdf={setPreviewProposalId}
                                                 />
                                             );
                                         }
@@ -438,6 +444,7 @@ export default function Dashboard() {
                                                         onClone={handleCloneGated}
                                                         onDelete={handleDelete}
                                                         onEdit={handleEdit}
+                                                        onPreviewPdf={setPreviewProposalId}
                                                     />
                                                 ))}
                                             </Fragment>
@@ -587,6 +594,17 @@ export default function Dashboard() {
                     onClose={() => setShowAllNotifications(false)}
                     markAsRead={markAsRead}
                 />
+            )}
+
+            {/* Visor de PDF: montaje condicional deliberado -- el componente
+                dispara sus tres fetches al montarse. */}
+            {previewProposalId && (
+                <Suspense fallback={null}>
+                    <ProposalPdfPreview
+                        proposalId={previewProposalId}
+                        onClose={() => setPreviewProposalId(null)}
+                    />
+                </Suspense>
             )}
         </div>
     );

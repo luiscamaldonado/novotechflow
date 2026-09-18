@@ -1,8 +1,8 @@
 import {
-    Trash2, Edit2, Copy, PlusCircle,
+    Trash2, Edit2, Copy, PlusCircle, FileText,
 } from 'lucide-react';
 import { getSubtotalUsd } from '../../../hooks/useDashboard';
-import { PROJECTION_STATUSES } from '../../../lib/constants';
+import { PROJECTION_STATUSES, PDF_PREVIEW_VISIBLE_TO_REPORTER } from '../../../lib/constants';
 import type { ProposalStatus, AcquisitionType, UserRole } from '../../../lib/types';
 import type { DashboardRow } from '../../../hooks/useDashboard';
 import ProposalAcquisitionControl from './ProposalAcquisitionControl';
@@ -27,6 +27,7 @@ interface ProposalVersionRowProps {
     onClone: (id: string, cloneType: 'NEW_VERSION' | 'NEW_PROPOSAL') => void;
     onDelete: (id: string, code: string) => void;
     onEdit: (id: string) => void;
+    onPreviewPdf: (proposalId: string) => void;
 }
 
 export default function ProposalVersionRow({
@@ -41,6 +42,7 @@ export default function ProposalVersionRow({
     onClone,
     onDelete,
     onEdit,
+    onPreviewPdf,
 }: ProposalVersionRowProps) {
     const p = row.originalProposal!;
     const needsBillingDate = PROJECTION_STATUSES.includes(p.status);
@@ -49,38 +51,50 @@ export default function ProposalVersionRow({
     return (
         <tr className={`hover:bg-gray-50/50 transition-colors group ${isChild ? 'bg-indigo-50/20' : ''}`}>
             <td className="px-4 py-4 text-center">
-                {userRole !== 'REPORTER' && (
-                    <div className="flex items-center justify-center space-x-1">
+                <div className="flex items-center justify-center space-x-1">
+                    {(userRole !== 'REPORTER' || PDF_PREVIEW_VISIBLE_TO_REPORTER) && (
                         <button
-                            onClick={() => onEdit(p.id)}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                            title="Editar"
+                            onClick={() => onPreviewPdf(p.id)}
+                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                            aria-label="Ver PDF de la propuesta"
+                            title="Ver PDF"
                         >
-                            <Edit2 className="h-3.5 w-3.5" />
+                            <FileText className="h-3.5 w-3.5" />
                         </button>
-                        <button
-                            onClick={() => onClone(p.id, 'NEW_VERSION')}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                            title="Clonar versión"
-                        >
-                            <Copy className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                            onClick={() => onClone(p.id, 'NEW_PROPOSAL')}
-                            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
-                            title="Clonar como nueva propuesta"
-                        >
-                            <PlusCircle className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                            onClick={() => onDelete(p.id, p.proposalCode || '')}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            title="Eliminar"
-                        >
-                            <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-                )}
+                    )}
+                    {userRole !== 'REPORTER' && (
+                        <>
+                            <button
+                                onClick={() => onEdit(p.id)}
+                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                title="Editar"
+                            >
+                                <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                onClick={() => onClone(p.id, 'NEW_VERSION')}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                title="Clonar versión"
+                            >
+                                <Copy className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                onClick={() => onClone(p.id, 'NEW_PROPOSAL')}
+                                className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                                title="Clonar como nueva propuesta"
+                            >
+                                <PlusCircle className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                onClick={() => onDelete(p.id, p.proposalCode || '')}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                title="Eliminar"
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                        </>
+                    )}
+                </div>
             </td>
             <td className="px-5 py-4" style={isChild ? { paddingLeft: '2.5rem' } : undefined}>
                 <div className="flex items-center gap-1.5">
