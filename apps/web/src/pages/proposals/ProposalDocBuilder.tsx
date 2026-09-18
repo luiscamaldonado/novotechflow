@@ -23,7 +23,7 @@ import { resolveSheetHeading } from '../../lib/resolveSheetHeading';
 import { api } from '../../lib/api';
 import { validateImageFile, ACCEPT_IMAGES } from '../../lib/file-validation';
 import type { ProposalDetail } from '../../lib/types';
-import { type ProposalVariables, formatDateSpanish, buildGarantiaLines } from '../../lib/proposalVariables';
+import { formatDateSpanish, buildProposalVariables } from '../../lib/proposalVariables';
 import { PAGE_TYPE_LABELS, VIRTUAL_TECH_SPEC_ID, VIRTUAL_ECONOMIC_ID } from '../../lib/constants';
 import CityCombobox from './components/CityCombobox';
 import LockedPageView from './components/LockedPageView';
@@ -171,31 +171,7 @@ export default function ProposalDocBuilder() {
     }, [id]);
 
     /** Variables de propuesta para reemplazo de marcadores µ */
-    const proposalVars = useMemo<ProposalVariables>(() => {
-        // Construir texto de validez: "15 de abril de 2026 (15 días)"
-        let validezText = '';
-        if (proposal?.validityDate) {
-            validezText = formatDateSpanish(proposal.validityDate);
-            if (proposal.validityDays) {
-                validezText += ` (${proposal.validityDays} días)`;
-            }
-        }
-
-        // Construir líneas de garantía basadas en marcas de los ítems
-        const garantiaLines = proposal?.proposalItems
-            ? buildGarantiaLines(proposal.proposalItems)
-            : [];
-
-        return {
-            ciudad: selectedCity,
-            fechaEmision: proposal?.issueDate ? formatDateSpanish(proposal.issueDate) : '',
-            cliente: proposal?.clientName || '',
-            cotizacion: proposal?.proposalCode || '',
-            asunto: proposal?.subject || '',
-            validez: validezText,
-            garantiaLines,
-        };
-    }, [selectedCity, proposal]);
+    const proposalVars = useMemo(() => buildProposalVariables(proposal, selectedCity), [proposal, selectedCity]);
 
     useEffect(() => {
         loadPages();

@@ -6,6 +6,8 @@
  * Unicode escapes (\uXXXX) to prevent UTF-16 LE corruption when
  * compiled inside Docker/Alpine (which assumes UTF-8).
  */
+import type { ProposalDetail } from './types';
+
 export interface ProposalVariables {
     ciudad: string;
     fechaEmision: string;
@@ -199,4 +201,42 @@ export function buildGarantiaLines(
     lines.push(GENERAL_LINE);
 
     return lines;
+}
+
+// ── Proposal variables builder ──────────────────────────
+
+/**
+ * Construye el contexto de variables de propuesta a partir del detalle
+ * cargado y la ciudad seleccionada. Funcion pura y sin estado: pensada
+ * para compartirse entre el constructor del documento y el visor de PDF.
+ *
+ * Sin propuesta cargada devuelve el contexto vacio con la ciudad recibida.
+ */
+export function buildProposalVariables(
+    proposal: ProposalDetail | null | undefined,
+    ciudad: string,
+): ProposalVariables {
+    // Texto de validez: fecha formateada mas el sufijo de dias si lo hay
+    let validezText = '';
+    if (proposal?.validityDate) {
+        validezText = formatDateSpanish(proposal.validityDate);
+        if (proposal.validityDays) {
+            validezText += ` (${proposal.validityDays} d\u00edas)`;
+        }
+    }
+
+    // Lineas de garantia segun las marcas de los items
+    const garantiaLines = proposal?.proposalItems
+        ? buildGarantiaLines(proposal.proposalItems)
+        : [];
+
+    return {
+        ciudad,
+        fechaEmision: proposal?.issueDate ? formatDateSpanish(proposal.issueDate) : '',
+        cliente: proposal?.clientName || '',
+        cotizacion: proposal?.proposalCode || '',
+        asunto: proposal?.subject || '',
+        validez: validezText,
+        garantiaLines,
+    };
 }
