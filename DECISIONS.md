@@ -5482,3 +5482,65 @@ Forma del arreglo, para cuando se aborde: leer el retorno de `emails.send`, logu
 - **Primer spec de `email-verification.service.ts`**, que ahora cubriría cinco decisiones de seguridad acumuladas.
 - **Grants vivos de `novotech_external_ro`** sin verificar contra `information_schema.role_table_grants`: hoy solo documentados en prosa (ADR-081). La decisión 5 de este ADR se apoya en esa prosa.
 - **`.claude/settings.local.json`** contiene en claro un cuerpo de login y un JWT de `/external/login`. No está versionado; limpiar esas entradas de la lista `allow`.
+
+## ADR-121 — Vista previa del PDF de la propuesta desde el tablero
+
+**Fecha:** 2026-09-18
+**Estado:** Aceptado
+
+### Contexto
+
+El visor de PDF (`PdfPreviewModal`) solo era alcanzable desde la ventana Construcción del Documento. Para revisar cómo quedó una cotización había que abrir la propuesta y atravesar el constructor, aunque la intención fuera únicamente mirar el documento.
+
+El visor no es autónomo: se alimenta de tres cargas que hasta ahora hacía el constructor —el detalle de la propuesta, las páginas del documento y los escenarios procesados— más las variables de marcadores µ, que se armaban dentro del propio `ProposalDocBuilder` como un `useMemo` embebido. La fila del tablero solo dispone de `DashboardRow`, un resumen que no incluye nada de eso. Abrir el visor desde el tablero exigía, por tanto, resolver de dónde salen esos datos, no solo agregar un botón.
+
+### Decisión
+
+**1. Componente autónomo `ProposalPdfPreview`.** Recibe el id de la propuesta y `onClose`, carga por su cuenta detalle, páginas y escenarios, arma las variables µ y monta `PdfPreviewModal`. El tablero solo guarda qué propuesta está previsualizando. Queda reutilizable desde cualquier pantalla que disponga del id.
+
+**2. Las páginas se leen con el GET puro, nunca con el POST de inicialización.** `useProposalPages` expone dos vías: `loadPages`, que hace `POST /proposals/:id/pages/initialize` y CREA las páginas por defecto si no existen, y `fetchPages`, que hace el GET. Abrir una vista previa es una lectura y no puede escribir en la base: una propuesta sin documento construido debe seguir sin documento después de cerrar el aviso. Se optó por `api.get` directo en lugar del hook, por tres razones: la garantía anti-escritura queda demostrable en el propio archivo con un grep local, no se trae al ámbito la superficie de mutación del hook (quince métodos, entre ellos `deletePage` y `createSection`), y `fetchPages` cambia de identidad al resolver —hace `setActivePageId` en su primera carga—, lo que con `useEffect([fetchPages])` dispararía dos peticiones y obligaría a un `eslint-disable`.
+
+**3. `buildProposalVariables` extraída a `lib/proposalVariables.ts`.** La construcción de las variables µ pasa de `useMemo` embebido en `ProposalDocBuilder` a función pura exportada, sin cambio de comportamiento. Es la única fuente de esas variables para sus dos consumidores; duplicarla habría dejado dos documentos con la misma propuesta y distinta garantía o validez. La función tolera `proposal` nulo y no depende de React.
+
+**4. Cinco estados de pantalla, en orden fijo:** cargando, error de carga, sin ciudad de emisión, sin documento construido, visor. Dos decisiones dentro de ese orden. La espera abarca las tres cargas: montar el visor antes de tener los escenarios pinta la propuesta económica vacía. Y el bloqueo por falta de ciudad replica lo que ADR-059 hace en el constructor deshabilitando el botón de vista previa: sin ciudad el PDF sale con el marcador µCiudad sin reemplazar. Un fallo de red al traer las páginas levanta el estado de error y no el de "sin documento construido", que mandaría al usuario a construir un documento que sí existe.
+
+**5. Import diferido en el tablero.** El visor arrastra `jspdf` y `html2canvas`. El tablero es la pantalla de aterrizaje tras el login y no puede pagar ese peso a diario, así que `ProposalPdfPreview` entra por `lazy` + `Suspense`, y su montaje es condicional al id seleccionado porque el componente dispara sus tres peticiones al montarse. Medición sobre los bundles emitidos, no inferida de los nombres de chunk: el chunk del tablero sube 1,02 kB y contiene cero coincidencias de `jsPDF` y de `html2canvas`; el 1,06 MB del visor solo se descarga al pulsar el botón. La única mención de `PdfPreviewModal` dentro del chunk del tablero vive en el manifiesto de preload de `__vitePreload`, no en un import estático.
+
+**6. El botón va únicamente en la fila de versión (`ProposalVersionRow`).** No en la cabecera de grupo colapsada, cuyo PDF sería el de la versión activa —que ya tiene su propia fila—, ni en la fila de proyección, que no es una propuesta. Va primero en la celda de acciones, antes de Editar: es la acción de solo lectura y los destructivos quedan al final. Lleva `aria-label` en el control y `title` como refuerzo visual (ADR-103).
+
+**7. La vista previa NO pasa por la compuerta de higiene de datos (ADR-035).** Esa compuerta bloquea crear, editar y clonar. Ver un PDF es lectura y no ensucia el tablero.
+
+**8. Dos capacidades quedan implementadas y deliberadamente apagadas**, por decisión de producto y no por incompletitud. Ambas compilan, están cableadas de punta a punta y encenderlas es cambiar un booleano:
+
+- `PDF_PREVIEW_EXCEL_EXPORT` alimenta la prop `enableExcelExport` del visor. Desde el tablero el objetivo es ver y descargar el PDF; el Excel pertenece al flujo de construcción.
+- `PDF_PREVIEW_VISIBLE_TO_REPORTER` controla la visibilidad del botón para el rol REPORTER. El botón vive FUERA del bloque condicional que oculta la celda de acciones completa a ese rol, con su propia condición. Con el interruptor apagado la celda queda con un `div` vacío y la fila se ve idéntica a antes.
+
+Los dos se declaran con anotación explícita `: boolean`. Sin ella TypeScript estrecha el tipo al literal `false` y el lint marca como código muerto la rama que los consume, de modo que la funcionalidad apagada no compilaría.
+
+### Consecuencias
+
+- Revisar el PDF de una cotización pasa de atravesar el constructor a un clic desde el tablero, sin salir de la pantalla.
+- Las variables µ tienen una sola fuente para los dos consumidores. Un tercero futuro las obtiene sin duplicar nada.
+- Queda establecido que una vista previa no escribe: cualquier consumidor nuevo del documento lee con el GET y jamás con `initialize`.
+- Queda establecido el idioma de los interruptores de funcionalidad apagada: constante en `lib/constants.ts` con anotación `: boolean` explícita y JSDoc que diga que está apagada por decisión y qué verificar antes de encenderla.
+- Antes de encender `PDF_PREVIEW_VISIBLE_TO_REPORTER` hay que verificar que el rol REPORTER supere el ownership check de `GET /proposals/:id/pages` en el backend. No está comprobado y el frontend no es la autoridad.
+- Deuda no tocada: los cuatro botones preexistentes de la celda de acciones siguen sin `aria-label` (deuda de ADR-103, tienen `title`), y `ProposalDocBuilder` sigue llamando `formatDateSpanish` por su cuenta para el panel de metadatos en lugar de leer `proposalVars.fechaEmision`.
+
+### Archivos
+
+- `apps/web/src/lib/proposalVariables.ts` — nueva `buildProposalVariables`.
+- `apps/web/src/pages/proposals/ProposalDocBuilder.tsx` — consume la función; `useMemo` colapsado.
+- `apps/web/src/components/proposals/ProposalPdfPreview.tsx` — nuevo; visor autónomo por id.
+- `apps/web/src/lib/constants.ts` — `PDF_PREVIEW_EXCEL_EXPORT` y `PDF_PREVIEW_VISIBLE_TO_REPORTER`.
+- `apps/web/src/pages/dashboard/components/ProposalVersionRow.tsx` — botón y prop `onPreviewPdf`.
+- `apps/web/src/pages/Dashboard.tsx` — estado, import diferido y montaje condicional.
+
+### Commits
+
+- `5bb6bf5` — refactor(proposals): extraer buildProposalVariables a lib/proposalVariables
+- `81bdfeb` — feat(proposals): componente autonomo de vista previa de PDF por id de propuesta
+- `eadc302` — feat(dashboard): boton de vista previa de PDF en la fila de version
+
+### Pendientes
+
+Ninguno. Los dos interruptores no son deuda: son funcionalidad completa apagada por decisión.
