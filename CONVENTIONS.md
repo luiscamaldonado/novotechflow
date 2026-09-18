@@ -265,6 +265,7 @@ Magic numbers y strings centralizados en `lib/constants.ts`:
 - `MAYORISTA_FLETE_PCT`, `PROVEEDOR_MAYORISTA` — las tasas financieras como `IVA_RATE` viven en el engine (`@repo/pricing-engine`, §J y ADR-112), no en `lib/constants.ts`
 - `ITEM_TYPE_LABELS`, `SPEC_FIELDS_BY_ITEM_TYPE`
 - Constantes locales a un módulo se definen al inicio del archivo con JSDoc.
+- Toda funcionalidad implementada pero apagada a propósito se controla con una constante booleana en `lib/constants.ts`, declarada con anotación explícita `: boolean` — sin ella TypeScript estrecha al literal y el lint marca la rama consumidora como código muerto — y con JSDoc que indique que está apagada por decisión y qué verificar antes de encenderla (ADR-121).
 
 Constantes ya establecidas en `lib/constants.ts`:
 - `ITEM_TYPE_LABELS`, `SPEC_FIELDS_BY_ITEM_TYPE`
